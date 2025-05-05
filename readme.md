@@ -78,11 +78,3 @@ The application comes with a simple dark theme applied via stylesheets.
 ## Contributing
 
 Contributions are welcome! If you find a bug or have a feature request, please open an issue on the GitHub repository. If you want to contribute code, please fork the repository and create a pull request.
-
-## License
-
-[Specify your license here. E.g., MIT License]
-
----
-
-**Disclaimer:** This tool interacts with kemono.su. Use it responsibly and in accordance with the website's terms of service. The author is not responsible for any misuse.
