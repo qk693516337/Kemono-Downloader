@@ -66,6 +66,10 @@ except Exception as e:
     sys.exit(1)
 # --- End Import ---
 
+# --- Constants for Thread Limits ---
+MAX_THREADS = 200 # Absolute maximum allowed by the input validator
+RECOMMENDED_MAX_THREADS = 50 # Threshold for showing the informational warning
+# --- END ---
 
 class DownloaderApp(QWidget):
     character_prompt_response_signal = pyqtSignal(bool)
@@ -104,10 +108,10 @@ class DownloaderApp(QWidget):
         self._is_processing_external_link_queue = False
         # --- END ---
         
-        # --- ADDED: For Log Verbosity ---
-        self.basic_log_mode = False # Start with full log
+        # --- For Log Verbosity ---
+        self.basic_log_mode = False # Start with full log (basic_log_mode is False)
         self.log_verbosity_button = None
-        # --- END ADDED ---
+        # --- END ---
 
         self.main_log_output = None
         self.external_log_output = None
@@ -118,7 +122,7 @@ class DownloaderApp(QWidget):
         self.manga_mode_checkbox = None
 
         self.load_known_names_from_util()
-        self.setWindowTitle("Kemono Downloader v3.0.0")
+        self.setWindowTitle("Kemono Downloader v2.9 (Manga Mode - No Skip Button)")
         self.setGeometry(150, 150, 1050, 820) # Initial size
         self.setStyleSheet(self.get_dark_theme())
         self.init_ui()
@@ -153,6 +157,10 @@ class DownloaderApp(QWidget):
         self.external_links_checkbox.toggled.connect(self.update_external_links_setting)
         self.thread_count_input.textChanged.connect(self.update_multithreading_label)
         self.use_subfolder_per_post_checkbox.toggled.connect(self.update_ui_for_subfolders)
+
+        # --- MODIFIED: Connect multithreading checkbox toggle ---
+        self.use_multithreading_checkbox.toggled.connect(self._handle_multithreading_toggle)
+        # --- END MODIFIED ---
 
         if self.reset_button:
             self.reset_button.clicked.connect(self.reset_application_state)
@@ -414,8 +422,10 @@ class DownloaderApp(QWidget):
         self.thread_count_input = QLineEdit()
         self.thread_count_input.setFixedWidth(40)
         self.thread_count_input.setText("4")
-        self.thread_count_input.setToolTip("Number of threads (recommended: 4-10, max: 200).")
-        self.thread_count_input.setValidator(QIntValidator(1,200)) # Min 1, Max 200
+        # --- MODIFIED: Updated tooltip to remove recommendation ---
+        self.thread_count_input.setToolTip(f"Number of threads (max: {MAX_THREADS}).")
+        # --- END MODIFIED ---
+        self.thread_count_input.setValidator(QIntValidator(1, MAX_THREADS)) # Use constant
         multithreading_layout.addWidget(self.thread_count_input)
         advanced_row2_layout.addLayout(multithreading_layout)
 
@@ -481,7 +491,7 @@ class DownloaderApp(QWidget):
         log_title_layout.addStretch(1)
         
         # --- ADDED: Log Verbosity Button ---
-        self.log_verbosity_button = QPushButton("Show Basic Log")
+        self.log_verbosity_button = QPushButton("Show Basic Log") # Default text
         self.log_verbosity_button.setToolTip("Toggle between full and basic log details.")
         self.log_verbosity_button.setFixedWidth(110) # Adjust width as needed
         self.log_verbosity_button.setStyleSheet("padding: 4px 8px;")
@@ -534,9 +544,9 @@ class DownloaderApp(QWidget):
         self.main_splitter.addWidget(right_panel_widget)
 
         # --- Set initial sizes for the splitter ---
-        # Calculate initial sizes (e.g., left 35%, right 65%)
+        # Calculate initial sizes (e.g., left 30%, right 70%)
         initial_width = self.width() # Use the initial window width
-        left_width = int(initial_width * 0.35) 
+        left_width = int(initial_width * 0.30) 
         right_width = initial_width - left_width
         self.main_splitter.setSizes([left_width, right_width])
         
@@ -559,6 +569,7 @@ class DownloaderApp(QWidget):
             self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
         self.link_input.textChanged.connect(self.update_page_range_enabled_state) # Connect after init
         self.load_known_names_from_util() # Load names into the list widget
+        self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked()) # Set initial state
 
 
     def get_dark_theme(self):
@@ -591,15 +602,25 @@ class DownloaderApp(QWidget):
         # --- ADDED: Log Verbosity Filtering ---
         if self.basic_log_mode:
             # Define keywords/prefixes for messages to ALWAYS show in basic mode
+            # Make these lowercase for case-insensitive matching
             basic_keywords = [
-                '🚀 Starting Download', '🏁 Download Finished', '🏁 Download Cancelled',
-                '❌', '⚠️', '✅ All posts processed', '✅ Reached end of posts',
-                'Summary:', 'Progress:', '[Fetcher]', # Show fetcher logs for context
-                'CRITICAL ERROR', 'IMPORT ERROR' 
+                '🚀 starting download', '🏁 download finished', '🏁 download cancelled',
+                '❌', '⚠️', '✅ all posts processed', '✅ reached end of posts',
+                'summary:', 'progress:', '[fetcher]', # Show fetcher logs for context
+                'critical error', 'import error', 'error', 'fail', 'timeout',
+                'unsupported url', 'invalid url', 'no posts found', 'could not create directory',
+                'missing dependency', 'high thread count', 'manga mode filter warning',
+                'duplicate name', 'potential name conflict', 'invalid filter name',
+                'no valid character filters'
             ]
-            # Check if the message contains any of the basic keywords/prefixes
-            if not any(keyword in message for keyword in basic_keywords):
-                return # Skip appending this message in basic mode
+            # Check if the lowercase message contains any of the basic keywords/prefixes
+            message_lower = message.lower()
+            if not any(keyword in message_lower for keyword in basic_keywords):
+                 # Allow specific positive confirmations even in basic mode
+                 if not message.strip().startswith("✅ Saved:") and \
+                    not message.strip().startswith("✅ Added") and \
+                    not message.strip().startswith("✅ Application reset complete"):
+                    return # Skip appending less important messages in basic mode
         # --- END ADDED ---
                 
         try:
@@ -909,14 +930,35 @@ class DownloaderApp(QWidget):
             item.setHidden(search_text_lower not in item.text().lower())
 
     def update_multithreading_label(self, text):
-        try:
-            num_threads = int(text)
-            if num_threads > 0 :
-                self.use_multithreading_checkbox.setText(f"Use Multithreading ({num_threads} Threads)")
-            else: # Should be caught by validator, but defensive
-                self.use_multithreading_checkbox.setText("Use Multithreading (Invalid: >0)")
-        except ValueError: # If text is not a valid integer
-            self.use_multithreading_checkbox.setText("Use Multithreading (Invalid Input)")
+        # This method only updates the checkbox label text
+        # The actual enabling/disabling is handled by _handle_multithreading_toggle
+        if self.use_multithreading_checkbox.isChecked():
+            try:
+                num_threads = int(text)
+                if num_threads > 0 :
+                    self.use_multithreading_checkbox.setText(f"Use Multithreading ({num_threads} Threads)")
+                else: 
+                    self.use_multithreading_checkbox.setText("Use Multithreading (Invalid: >0)")
+            except ValueError: 
+                self.use_multithreading_checkbox.setText("Use Multithreading (Invalid Input)")
+        else:
+             self.use_multithreading_checkbox.setText("Use Multithreading (1 Thread)") # Show 1 thread when disabled
+
+    # --- ADDED: Handler for multithreading checkbox toggle ---
+    def _handle_multithreading_toggle(self, checked):
+        """Handles enabling/disabling the thread count input."""
+        if not checked:
+            # Unchecked: Set to 1 and disable
+            self.thread_count_input.setText("1")
+            self.thread_count_input.setEnabled(False)
+            self.thread_count_label.setEnabled(False)
+            self.use_multithreading_checkbox.setText("Use Multithreading (1 Thread)")
+        else:
+            # Checked: Enable and update label based on current value
+            self.thread_count_input.setEnabled(True)
+            self.thread_count_label.setEnabled(True)
+            self.update_multithreading_label(self.thread_count_input.text())
+    # --- END ADDED ---
 
 
     def update_progress_display(self, total_posts, processed_posts):
@@ -982,20 +1024,42 @@ class DownloaderApp(QWidget):
         manga_mode = manga_mode_is_checked and not post_id_from_url # Manga mode only for creator feeds
 
         num_threads_str = self.thread_count_input.text().strip()
-        MAX_ALLOWED_THREADS = 200 
-        MODERATE_THREAD_WARNING_THRESHOLD = 50
-        try:
-            num_threads = int(num_threads_str)
-            if not (1 <= num_threads <= MAX_ALLOWED_THREADS): # Validate thread count
-                 QMessageBox.critical(self, "Thread Count Error", f"Number of threads must be between 1 and {MAX_ALLOWED_THREADS}.")
-                 self.thread_count_input.setText(str(min(max(1, num_threads), MAX_ALLOWED_THREADS))) # Correct to valid range
-                 return
-            if num_threads > MODERATE_THREAD_WARNING_THRESHOLD: # Warn for very high thread counts
-                 QMessageBox.information(self, "High Thread Count Note",
-                                        f"Using {num_threads} threads (above {MODERATE_THREAD_WARNING_THRESHOLD}) may increase resource usage and risk rate-limiting from the site.\n\nProceeding with caution.")
-                 self.log_signal.emit(f"ℹ️ Using high thread count: {num_threads}.")
-        except ValueError:
-            QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a numeric value."); return
+        num_threads = 1 # Default to 1 if multithreading is off or input is invalid
+        if use_multithreading: # Only parse if multithreading is enabled
+            try:
+                num_threads_requested = int(num_threads_str)
+                
+                # --- MODIFIED: Tiered Thread Count Warning/Cap ---
+                if num_threads_requested > MAX_THREADS:
+                    # Hard cap warning (above 200)
+                    warning_message = (
+                        f"You have requested {num_threads_requested} threads, which is above the maximum limit of {MAX_THREADS}.\n\n"
+                        f"High thread counts can lead to instability or rate-limiting.\n\n"
+                        f"The thread count will be automatically capped at {MAX_THREADS} for this download."
+                    )
+                    QMessageBox.warning(self, "High Thread Count Warning", warning_message)
+                    self.log_signal.emit(f"⚠️ High thread count requested ({num_threads_requested}). Capping at {MAX_THREADS}.")
+                    num_threads = MAX_THREADS # Apply the cap
+                    self.thread_count_input.setText(str(num_threads)) # Update UI to show capped value
+                elif num_threads_requested > RECOMMENDED_MAX_THREADS:
+                     # Informational warning (above 50 but <= 200)
+                     QMessageBox.information(self, "High Thread Count Note",
+                                            f"Using {num_threads_requested} threads (above {RECOMMENDED_MAX_THREADS}) may increase resource usage and risk rate-limiting from the site.\n\nProceeding with caution.")
+                     self.log_signal.emit(f"ℹ️ Using high thread count: {num_threads_requested}.")
+                     num_threads = num_threads_requested # Use the requested value
+                elif num_threads_requested < 1: # Should be caught by validator, but safety check
+                    self.log_signal.emit(f"⚠️ Invalid thread count ({num_threads_requested}). Using 1 thread.")
+                    num_threads = 1
+                    self.thread_count_input.setText(str(num_threads))
+                else:
+                    num_threads = num_threads_requested # Use the requested value if within limits
+                # --- END MODIFIED ---
+
+            except ValueError:
+                QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a numeric value."); return
+        else:
+            num_threads = 1 # Explicitly set to 1 if multithreading checkbox is off
+
 
         start_page_str, end_page_str = self.start_page_input.text().strip(), self.end_page_input.text().strip()
         start_page, end_page = None, None
@@ -1148,7 +1212,7 @@ class DownloaderApp(QWidget):
 
         should_use_multithreading = use_multithreading and not post_id_from_url # Multi-threading for creator feeds
         log_messages.append(f"   Threading: {'Multi-threaded (posts)' if should_use_multithreading else 'Single-threaded (posts)'}")
-        if should_use_multithreading: log_messages.append(f"   Number of Post Worker Threads: {num_threads}")
+        if should_use_multithreading: log_messages.append(f"   Number of Post Worker Threads: {num_threads}") # Use potentially capped value
         log_messages.append("="*40)
         for msg in log_messages: self.log_signal.emit(msg)
 
@@ -1187,8 +1251,8 @@ class DownloaderApp(QWidget):
 
         try:
             if should_use_multithreading:
-                self.log_signal.emit(f"   Initializing multi-threaded download with {num_threads} post workers...")
-                self.start_multi_threaded_download(num_post_workers=num_threads, **args_template)
+                self.log_signal.emit(f"   Initializing multi-threaded download with {num_threads} post workers...") # Use potentially capped value
+                self.start_multi_threaded_download(num_post_workers=num_threads, **args_template) # Pass capped value
             else: # Single post URL or multithreading disabled
                 self.log_signal.emit("   Initializing single-threaded download...")
                 # Keys expected by DownloadThread constructor
@@ -1451,31 +1515,33 @@ class DownloaderApp(QWidget):
             self.download_thumbnails_checkbox, self.use_multithreading_checkbox,
             self.skip_words_input, self.character_search_input, self.new_char_input,
             self.add_char_button, self.delete_char_button, 
-            # self.external_links_checkbox, # MODIFIED: Keep this enabled
+            # self.external_links_checkbox, # Keep this enabled
             self.start_page_input, self.end_page_input, self.page_range_label, self.to_label,
             self.character_input, self.custom_folder_input, self.custom_folder_label,
             self.reset_button, 
-            # self.log_verbosity_button, # MODIFIED: Keep this enabled
+            # self.log_verbosity_button, # Keep this enabled
             self.manga_mode_checkbox
         ]
         for widget in widgets_to_toggle:
             if widget: # Check if widget exists 
                 widget.setEnabled(enabled)
         
-        # --- ADDED: Explicitly keep these enabled ---
+        # --- Explicitly keep these enabled ---
         if self.external_links_checkbox:
             self.external_links_checkbox.setEnabled(True)
         if self.log_verbosity_button:
              self.log_verbosity_button.setEnabled(True)
-        # --- END ADDED ---
+        # --- END ---
 
-        # Handle dependent widgets
-        subfolders_currently_on = self.use_subfolders_checkbox.isChecked()
-        self.use_subfolder_per_post_checkbox.setEnabled(enabled and subfolders_currently_on)
-
+        # --- MODIFIED: Handle thread count input based on checkbox state ---
         multithreading_currently_on = self.use_multithreading_checkbox.isChecked()
         self.thread_count_input.setEnabled(enabled and multithreading_currently_on)
         self.thread_count_label.setEnabled(enabled and multithreading_currently_on)
+        # --- END MODIFIED ---
+
+        # Handle other dependent widgets
+        subfolders_currently_on = self.use_subfolders_checkbox.isChecked()
+        self.use_subfolder_per_post_checkbox.setEnabled(enabled and subfolders_currently_on)
 
         self.cancel_btn.setEnabled(not enabled) # Cancel is enabled when download is running
 
@@ -1485,6 +1551,7 @@ class DownloaderApp(QWidget):
             self.update_page_range_enabled_state()
             if self.manga_mode_checkbox:
                 self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
+            self._handle_multithreading_toggle(multithreading_currently_on) # Refresh thread count state
 
 
     def cancel_download(self):
@@ -1656,6 +1723,10 @@ class DownloaderApp(QWidget):
         if self.manga_mode_checkbox:
              self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
         self.filter_character_list("") # Clear character list filter
+        
+        # --- MODIFIED: Reset thread count state based on checkbox ---
+        self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+        # --- END MODIFIED ---
 
         # Reset button states
         self.download_btn.setEnabled(True)
