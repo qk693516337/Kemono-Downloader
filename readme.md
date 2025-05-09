@@ -147,3 +147,4 @@ Contributions are welcome! Open an issue or submit a pull request if you have im
 ---
 
 
+Jett, Neon, Reyna, Clove, Viper, Sage

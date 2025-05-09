@@ -20,10 +20,10 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget,
-    QRadioButton, QButtonGroup, QCheckBox, QSplitter, QSizePolicy
+    QRadioButton, QButtonGroup, QCheckBox, QSplitter, QSizePolicy, QDialog
 )
 # Ensure QTimer is imported
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QObject, QTimer 
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QObject, QTimer
 from urllib.parse import urlparse
 
 try:
@@ -37,9 +37,9 @@ from io import BytesIO
 try:
     print("Attempting to import from downloader_utils...")
     # Assuming downloader_utils_link_text is the correct version
-    from downloader_utils import ( 
+    from downloader_utils import (
         KNOWN_NAMES,
-        clean_folder_name, 
+        clean_folder_name,
         extract_post_info,
         download_from_api,
         PostProcessorSignals,
@@ -66,10 +66,31 @@ except Exception as e:
     sys.exit(1)
 # --- End Import ---
 
+# --- Import Tour Dialog ---
+try:
+    from tour import TourDialog
+    print("Successfully imported TourDialog from tour.py.")
+except ImportError as e:
+    print(f"--- TOUR IMPORT ERROR ---")
+    print(f"Failed to import TourDialog from 'tour.py': {e}")
+    print("Tour functionality will be unavailable.")
+    TourDialog = None # Fallback if tour.py is missing
+except Exception as e:
+    print(f"--- UNEXPECTED TOUR IMPORT ERROR ---")
+    print(f"An unexpected error occurred during tour import: {e}")
+    traceback.print_exc()
+    TourDialog = None
+# --- End Tour Import ---
+
+
 # --- Constants for Thread Limits ---
 MAX_THREADS = 200 # Absolute maximum allowed by the input validator
 RECOMMENDED_MAX_THREADS = 50 # Threshold for showing the informational warning
 # --- END ---
+
+# --- ADDED: Prefix for HTML messages in main log ---
+HTML_PREFIX = "<!HTML!>" # Used to identify HTML lines for insertHtml
+# --- END ADDED ---
 
 class DownloaderApp(QWidget):
     character_prompt_response_signal = pyqtSignal(bool)
@@ -106,8 +127,10 @@ class DownloaderApp(QWidget):
         # --- For sequential delayed link display ---
         self.external_link_queue = deque()
         self._is_processing_external_link_queue = False
+        self._current_link_post_title = None # Track title for grouping
+        self.extracted_links_cache = [] # Store all links when in "Only Links" mode
         # --- END ---
-        
+
         # --- For Log Verbosity ---
         self.basic_log_mode = False # Start with full log (basic_log_mode is False)
         self.log_verbosity_button = None
@@ -118,8 +141,19 @@ class DownloaderApp(QWidget):
         self.log_splitter = None # This is the VERTICAL splitter for logs
         self.main_splitter = None # This will be the main HORIZONTAL splitter
         self.reset_button = None
+        self.progress_log_label = None # To change title
+
+        # --- For Link Search ---
+        self.link_search_input = None
+        self.link_search_button = None
+        # --- END ---
+
+        # --- For Export Links ---
+        self.export_links_button = None
+        # --- END ---
 
         self.manga_mode_checkbox = None
+        self.radio_only_links = None # Define radio button attribute
 
         self.load_known_names_from_util()
         self.setWindowTitle("Kemono Downloader v2.9 (Manga Mode - No Skip Button)")
@@ -140,7 +174,7 @@ class DownloaderApp(QWidget):
             self.worker_signals.file_progress_signal.connect(self.update_file_progress_display)
         # Connect the external_link_signal from worker_signals to the queue handler
         if hasattr(self.worker_signals, 'external_link_signal'):
-            self.worker_signals.external_link_signal.connect(self.handle_external_link_signal) 
+            self.worker_signals.external_link_signal.connect(self.handle_external_link_signal)
 
         # App's own signals (some of which might be emitted by DownloadThread which then connects to these handlers)
         self.log_signal.connect(self.handle_main_log)
@@ -149,7 +183,7 @@ class DownloaderApp(QWidget):
         self.overall_progress_signal.connect(self.update_progress_display)
         self.finished_signal.connect(self.download_finished)
         # Connect the app's external_link_signal also to the queue handler
-        self.external_link_signal.connect(self.handle_external_link_signal) 
+        self.external_link_signal.connect(self.handle_external_link_signal)
         self.file_progress_signal.connect(self.update_file_progress_display)
 
 
@@ -162,12 +196,30 @@ class DownloaderApp(QWidget):
         self.use_multithreading_checkbox.toggled.connect(self._handle_multithreading_toggle)
         # --- END MODIFIED ---
 
+        # --- MODIFIED: Connect radio group toggle ---
+        if self.radio_group:
+            self.radio_group.buttonToggled.connect(self._handle_filter_mode_change) # Use buttonToggled for group signal
+        # --- END MODIFIED ---
+
         if self.reset_button:
             self.reset_button.clicked.connect(self.reset_application_state)
-            
+
         # Connect log verbosity button if it exists
         if self.log_verbosity_button:
             self.log_verbosity_button.clicked.connect(self.toggle_log_verbosity)
+
+        # --- ADDED: Connect link search elements ---
+        if self.link_search_button:
+            self.link_search_button.clicked.connect(self._filter_links_log)
+        if self.link_search_input:
+            self.link_search_input.returnPressed.connect(self._filter_links_log)
+            self.link_search_input.textChanged.connect(self._filter_links_log) # Real-time filtering
+        # --- END ADDED ---
+
+        # --- ADDED: Connect export links button ---
+        if self.export_links_button:
+            self.export_links_button.clicked.connect(self._export_links_to_file)
+        # --- END ADDED ---
 
         if self.manga_mode_checkbox:
             self.manga_mode_checkbox.toggled.connect(self.update_ui_for_manga_mode)
@@ -328,14 +380,14 @@ class DownloaderApp(QWidget):
         custom_folder_layout.addWidget(self.custom_folder_input)
         self.custom_folder_widget.setVisible(False) # Initially hidden
         left_layout.addWidget(self.custom_folder_widget)
-        
+
         # Character Filter Input
         self.character_filter_widget = QWidget()
         character_filter_layout = QVBoxLayout(self.character_filter_widget)
         character_filter_layout.setContentsMargins(0,5,0,0)
         self.character_label = QLabel("🎯 Filter by Character(s) (comma-separated):")
         self.character_input = QLineEdit()
-        self.character_input.setPlaceholderText("e.g., yor, makima, anya forger")
+        self.character_input.setPlaceholderText("e.g., yor, Tifa, Reyna")
         character_filter_layout.addWidget(self.character_label)
         character_filter_layout.addWidget(self.character_input)
         self.character_filter_widget.setVisible(True) # Visible by default
@@ -347,7 +399,7 @@ class DownloaderApp(QWidget):
         self.skip_words_input.setPlaceholderText("e.g., WM, WIP, sketch, preview")
         left_layout.addWidget(self.skip_words_input)
 
-        # File Type Filter Radio Buttons
+        # --- MODIFIED: File Type Filter Radio Buttons ---
         file_filter_layout = QVBoxLayout() # Group label and radio buttons
         file_filter_layout.setContentsMargins(0,0,0,0) # Compact
         file_filter_layout.addWidget(QLabel("Filter Files:"))
@@ -357,16 +409,20 @@ class DownloaderApp(QWidget):
         self.radio_all = QRadioButton("All")
         self.radio_images = QRadioButton("Images/GIFs")
         self.radio_videos = QRadioButton("Videos")
+        self.radio_only_links = QRadioButton("🔗 Only Links") # New button
         self.radio_all.setChecked(True)
         self.radio_group.addButton(self.radio_all)
         self.radio_group.addButton(self.radio_images)
         self.radio_group.addButton(self.radio_videos)
+        self.radio_group.addButton(self.radio_only_links) # Add to group
         radio_button_layout.addWidget(self.radio_all)
         radio_button_layout.addWidget(self.radio_images)
         radio_button_layout.addWidget(self.radio_videos)
+        radio_button_layout.addWidget(self.radio_only_links) # Add to layout
         radio_button_layout.addStretch(1) # Pushes buttons to left
         file_filter_layout.addLayout(radio_button_layout)
         left_layout.addLayout(file_filter_layout)
+        # --- END MODIFIED ---
 
         # Checkboxes Group
         checkboxes_group_layout = QVBoxLayout()
@@ -390,7 +446,7 @@ class DownloaderApp(QWidget):
         row1_layout.addWidget(self.compress_images_checkbox)
         row1_layout.addStretch(1) # Pushes checkboxes to left
         checkboxes_group_layout.addLayout(row1_layout)
-        
+
         # Advanced Settings Section
         advanced_settings_label = QLabel("⚙️ Advanced Settings:")
         checkboxes_group_layout.addWidget(advanced_settings_label)
@@ -432,14 +488,14 @@ class DownloaderApp(QWidget):
         self.external_links_checkbox = QCheckBox("Show External Links in Log")
         self.external_links_checkbox.setChecked(False)
         advanced_row2_layout.addWidget(self.external_links_checkbox)
-        
-        self.manga_mode_checkbox = QCheckBox("Manga Mode")
+
+        self.manga_mode_checkbox = QCheckBox("Manga/Comic Mode")
         self.manga_mode_checkbox.setToolTip("Process newest posts first, rename files based on post title (for creator feeds only).")
         self.manga_mode_checkbox.setChecked(False)
         advanced_row2_layout.addWidget(self.manga_mode_checkbox)
         advanced_row2_layout.addStretch(1)
         checkboxes_group_layout.addLayout(advanced_row2_layout)
-        
+
         left_layout.addLayout(checkboxes_group_layout)
 
         # Download and Cancel Buttons
@@ -465,7 +521,7 @@ class DownloaderApp(QWidget):
         known_chars_label_layout.addWidget(self.known_chars_label, 1) # Label takes more space
         known_chars_label_layout.addWidget(self.character_search_input)
         left_layout.addLayout(known_chars_label_layout)
-        
+
         self.character_list = QListWidget()
         self.character_list.setSelectionMode(QListWidget.ExtendedSelection) # Allow multi-select for delete
         left_layout.addWidget(self.character_list, 1) # Takes remaining vertical space
@@ -487,9 +543,25 @@ class DownloaderApp(QWidget):
 
         # --- Populate Right Panel (Logs) ---
         log_title_layout = QHBoxLayout()
-        log_title_layout.addWidget(QLabel("📜 Progress Log:"))
+        self.progress_log_label = QLabel("📜 Progress Log:") # Store label reference
+        log_title_layout.addWidget(self.progress_log_label)
         log_title_layout.addStretch(1)
-        
+
+        # --- ADDED: Link Search Bar ---
+        self.link_search_input = QLineEdit()
+        self.link_search_input.setPlaceholderText("Search Links...")
+        self.link_search_input.setVisible(False) # Initially hidden
+        self.link_search_input.setFixedWidth(150) # Adjust width
+        log_title_layout.addWidget(self.link_search_input)
+
+        self.link_search_button = QPushButton("🔍")
+        self.link_search_button.setToolTip("Filter displayed links")
+        self.link_search_button.setVisible(False) # Initially hidden
+        self.link_search_button.setFixedWidth(30)
+        self.link_search_button.setStyleSheet("padding: 4px 4px;")
+        log_title_layout.addWidget(self.link_search_button)
+        # --- END ADDED ---
+
         # --- ADDED: Log Verbosity Button ---
         self.log_verbosity_button = QPushButton("Show Basic Log") # Default text
         self.log_verbosity_button.setToolTip("Toggle between full and basic log details.")
@@ -497,7 +569,7 @@ class DownloaderApp(QWidget):
         self.log_verbosity_button.setStyleSheet("padding: 4px 8px;")
         log_title_layout.addWidget(self.log_verbosity_button)
         # --- END ADDED ---
-        
+
         self.reset_button = QPushButton("🔄 Reset")
         self.reset_button.setToolTip("Reset all inputs and logs to default state (only when idle).")
         self.reset_button.setFixedWidth(80)
@@ -511,8 +583,8 @@ class DownloaderApp(QWidget):
         # self.main_log_output.setMinimumWidth(450) # Remove minimum width
         self.main_log_output.setLineWrapMode(QTextEdit.NoWrap) # Disable line wrapping
         self.main_log_output.setStyleSheet("""
-            QTextEdit { 
-                 background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px; 
+            QTextEdit {
+                 background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
                  color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt;
             }""")
         self.external_log_output = QTextEdit()
@@ -520,8 +592,8 @@ class DownloaderApp(QWidget):
         # self.external_log_output.setMinimumWidth(450) # Remove minimum width
         self.external_log_output.setLineWrapMode(QTextEdit.NoWrap) # Disable line wrapping
         self.external_log_output.setStyleSheet("""
-            QTextEdit { 
-                 background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px; 
+            QTextEdit {
+                 background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
                  color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt;
             }""")
         self.external_log_output.hide() # Initially hidden
@@ -529,6 +601,19 @@ class DownloaderApp(QWidget):
         self.log_splitter.addWidget(self.external_log_output)
         self.log_splitter.setSizes([self.height(), 0]) # Main log takes all space initially
         right_layout.addWidget(self.log_splitter, 1) # Log splitter takes available vertical space
+
+        # --- ADDED: Export Links Button ---
+        export_button_layout = QHBoxLayout()
+        export_button_layout.addStretch(1) # Push button to the right
+        self.export_links_button = QPushButton("Export Links")
+        self.export_links_button.setToolTip("Export all extracted links to a .txt file.")
+        self.export_links_button.setFixedWidth(100)
+        self.export_links_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
+        self.export_links_button.setEnabled(False) # Initially disabled
+        self.export_links_button.setVisible(False) # Initially hidden
+        export_button_layout.addWidget(self.export_links_button)
+        right_layout.addLayout(export_button_layout) # Add to bottom of right panel
+        # --- END ADDED ---
 
         self.progress_label = QLabel("Progress: Idle")
         self.progress_label.setStyleSheet("padding-top: 5px; font-style: italic;")
@@ -546,10 +631,10 @@ class DownloaderApp(QWidget):
         # --- Set initial sizes for the splitter ---
         # Calculate initial sizes (e.g., left 30%, right 70%)
         initial_width = self.width() # Use the initial window width
-        left_width = int(initial_width * 0.30) 
+        left_width = int(initial_width * 0.30)
         right_width = initial_width - left_width
         self.main_splitter.setSizes([left_width, right_width])
-        
+
         # --- Set the main splitter as the central layout ---
         # Need a top-level layout to hold the splitter
         top_level_layout = QHBoxLayout(self) # Apply layout directly to the main widget (self)
@@ -570,6 +655,7 @@ class DownloaderApp(QWidget):
         self.link_input.textChanged.connect(self.update_page_range_enabled_state) # Connect after init
         self.load_known_names_from_util() # Load names into the list widget
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked()) # Set initial state
+        self._handle_filter_mode_change(self.radio_group.checkedButton(), True) # Set initial filter mode UI state
 
 
     def get_dark_theme(self):
@@ -587,7 +673,7 @@ class DownloaderApp(QWidget):
         QListWidget { alternate-background-color: #353535; border: 1px solid #5A5A5A; }
         QListWidget::item:selected { background-color: #007ACC; color: #FFFFFF; }
         QToolTip { background-color: #4A4A4A; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 4px; border-radius: 3px; }
-        QSplitter::handle { background-color: #5A5A5A; width: 5px; /* Make handle slightly wider */ } 
+        QSplitter::handle { background-color: #5A5A5A; width: 5px; /* Make handle slightly wider */ }
         QSplitter::handle:horizontal { width: 5px; }
         QSplitter::handle:vertical { height: 5px; }
         """ # Added styling for splitter handle
@@ -599,10 +685,15 @@ class DownloaderApp(QWidget):
             self.dir_input.setText(folder)
 
     def handle_main_log(self, message):
-        # --- ADDED: Log Verbosity Filtering ---
-        if self.basic_log_mode:
+        # --- MODIFIED: Check for HTML_PREFIX ---
+        is_html_message = message.startswith(HTML_PREFIX)
+
+        if is_html_message:
+             # If it's HTML, strip the prefix and use insertHtml
+             display_message = message[len(HTML_PREFIX):]
+             use_html = True
+        elif self.basic_log_mode: # Apply basic filtering only if NOT HTML
             # Define keywords/prefixes for messages to ALWAYS show in basic mode
-            # Make these lowercase for case-insensitive matching
             basic_keywords = [
                 '🚀 starting download', '🏁 download finished', '🏁 download cancelled',
                 '❌', '⚠️', '✅ all posts processed', '✅ reached end of posts',
@@ -613,20 +704,26 @@ class DownloaderApp(QWidget):
                 'duplicate name', 'potential name conflict', 'invalid filter name',
                 'no valid character filters'
             ]
-            # Check if the lowercase message contains any of the basic keywords/prefixes
             message_lower = message.lower()
             if not any(keyword in message_lower for keyword in basic_keywords):
-                 # Allow specific positive confirmations even in basic mode
                  if not message.strip().startswith("✅ Saved:") and \
                     not message.strip().startswith("✅ Added") and \
                     not message.strip().startswith("✅ Application reset complete"):
                     return # Skip appending less important messages in basic mode
-        # --- END ADDED ---
-                
+            display_message = message # Use original message if it passes basic filter
+            use_html = False
+        else: # Full log mode and not HTML
+             display_message = message
+             use_html = False
+        # --- END MODIFIED ---
+
         try:
              # Ensure message is a string and replace null characters that can crash QTextEdit
-             safe_message = str(message).replace('\x00', '[NULL]')
-             self.main_log_output.append(safe_message)
+             safe_message = str(display_message).replace('\x00', '[NULL]')
+             if use_html:
+                 self.main_log_output.insertHtml(safe_message) # Use insertHtml for formatted titles
+             else:
+                 self.main_log_output.append(safe_message) # Use append for plain text
              # Auto-scroll if near the bottom
              scrollbar = self.main_log_output.verticalScrollBar()
              if scrollbar.value() >= scrollbar.maximum() - 30: # Threshold for auto-scroll
@@ -648,54 +745,92 @@ class DownloaderApp(QWidget):
     # MODIFIED: Slot now takes link_text as the second argument
     def handle_external_link_signal(self, post_title, link_text, link_url, platform):
         """Receives link signals, adds them to a queue, and triggers processing."""
-        # We still receive post_title for potential future use, but use link_text for display
-        self.external_link_queue.append((link_text, link_url, platform)) 
+        link_data = (post_title, link_text, link_url, platform)
+        self.external_link_queue.append(link_data)
+        # --- ADDED: Cache link if in "Only Links" mode ---
+        if self.radio_only_links and self.radio_only_links.isChecked():
+            self.extracted_links_cache.append(link_data)
+        # --- END ADDED ---
         self._try_process_next_external_link()
 
     def _try_process_next_external_link(self):
         """Processes the next link from the queue if not already processing."""
-        if self._is_processing_external_link_queue or \
-           not self.external_link_queue or \
-           not (self.show_external_links and self.external_log_output and self.external_log_output.isVisible()):
-            return 
+        if self._is_processing_external_link_queue or not self.external_link_queue:
+             return # Don't process if busy or queue empty
+
+        # Determine if we should display based on mode and checkbox state
+        is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
+        should_display_in_external = self.show_external_links and not is_only_links_mode
+
+        # Only proceed if displaying in *either* log is currently possible/enabled
+        if not (is_only_links_mode or should_display_in_external):
+             # If neither log is active/visible for this link, still need to allow queue processing
+             self._is_processing_external_link_queue = False
+             if self.external_link_queue:
+                 QTimer.singleShot(0, self._try_process_next_external_link)
+             return
 
         self._is_processing_external_link_queue = True
-        
-        # MODIFIED: Get link_text from queue
-        link_text, link_url, platform = self.external_link_queue.popleft()
-        self._append_link_to_external_log(link_text, link_url, platform) # Display this link now
-        
-        # --- MODIFIED: Conditional delay ---
-        if self._is_download_active():
-            # Schedule the end of this link's "display period" with delay
-            delay_ms = random.randint(4000, 8000) # Random delay of 4-8 seconds
-            QTimer.singleShot(delay_ms, self._finish_current_link_processing)
+
+        link_data = self.external_link_queue.popleft()
+
+        # --- MODIFIED: Schedule the display AND the next step based on mode ---
+        if is_only_links_mode:
+            # Schedule with fixed 0.4s delay for "Only Links" mode
+            delay_ms = 80 # 0.08 seconds
+            QTimer.singleShot(delay_ms, lambda data=link_data: self._display_and_schedule_next(data))
+        elif self._is_download_active():
+            # Schedule with random delay for other modes during download
+            delay_ms = random.randint(4000, 8000)
+            QTimer.singleShot(delay_ms, lambda data=link_data: self._display_and_schedule_next(data))
         else:
-            # No download active, process next link almost immediately
-            QTimer.singleShot(0, self._finish_current_link_processing) 
+            # No download active in other modes, process immediately
+            QTimer.singleShot(0, lambda data=link_data: self._display_and_schedule_next(data))
         # --- END MODIFIED ---
 
-    def _finish_current_link_processing(self):
-        """Called after a delay (or immediately if download finished); allows the next link in the queue to be processed."""
-        self._is_processing_external_link_queue = False
-        self._try_process_next_external_link() # Attempt to process the next link
+    # --- NEW Method ---
+    def _display_and_schedule_next(self, link_data):
+        """Displays the link in the correct log and schedules the check for the next link."""
+        post_title, link_text, link_url, platform = link_data # Unpack all data
+        is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
 
-    # MODIFIED: Method now takes link_text instead of title for display
-    def _append_link_to_external_log(self, link_text, link_url, platform):
+        # Format the link text part
+        max_link_text_len = 35
+        display_text = link_text[:max_link_text_len].strip() + "..." if len(link_text) > max_link_text_len else link_text
+        formatted_link_info = f"{display_text} - {link_url} - {platform}"
+        separator = "-" * 45
+
+        if is_only_links_mode:
+            # Check if the post title has changed
+            if post_title != self._current_link_post_title:
+                # Emit separator and new title (formatted as HTML)
+                self.log_signal.emit(HTML_PREFIX + "<br>" + separator + "<br>")
+                # Use HTML for bold blue title
+                title_html = f'<b style="color: #87CEEB;">{post_title}</b><br>'
+                self.log_signal.emit(HTML_PREFIX + title_html)
+                self._current_link_post_title = post_title # Update current title
+
+            # Emit the link info as plain text (handle_main_log will append it)
+            self.log_signal.emit(formatted_link_info)
+
+        elif self.show_external_links:
+             # Append directly to external log (plain text)
+             self._append_to_external_log(formatted_link_info, separator)
+
+        # Allow the next link to be processed
+        self._is_processing_external_link_queue = False
+        self._try_process_next_external_link() # Check queue again
+    # --- END NEW Method ---
+
+    # --- RENAMED and MODIFIED: Appends ONLY to external log ---
+    def _append_to_external_log(self, formatted_link_text, separator):
         """Appends a single formatted link to the external_log_output widget."""
-        if not (self.show_external_links and self.external_log_output and self.external_log_output.isVisible()):
+        # Visibility check is done before calling this now
+        if not (self.external_log_output and self.external_log_output.isVisible()):
             return
 
-        # Use link_text for display, truncate if necessary
-        max_link_text_len = 35 # Adjust as needed
-        display_text = link_text[:max_link_text_len].strip() + "..." if len(link_text) > max_link_text_len else link_text
-        
-        # Format the string as requested: text - url - platform
-        formatted_link_text = f"{display_text} - {link_url} - {platform}"
-        separator = "-" * 45 # Adjust length as needed
-
         try:
-            self.external_log_output.append(separator) 
+            self.external_log_output.append(separator)
             self.external_log_output.append(formatted_link_text)
             self.external_log_output.append("") # Add a blank line for spacing
 
@@ -704,9 +839,10 @@ class DownloaderApp(QWidget):
             if scrollbar.value() >= scrollbar.maximum() - 50: # Adjust threshold if needed
                 scrollbar.setValue(scrollbar.maximum())
         except Exception as e:
+             # Log errors related to external log to the main log
              self.log_signal.emit(f"GUI External Log Append Error: {e}\nOriginal Message: {formatted_link_text}")
              print(f"GUI External Log Error (Append): {e}\nOriginal Message: {formatted_link_text}")
-    # --- END ADDED ---
+    # --- END MODIFIED ---
 
 
     def update_file_progress_display(self, filename, downloaded_bytes, total_bytes):
@@ -715,8 +851,8 @@ class DownloaderApp(QWidget):
             return
 
         # MODIFIED: Truncate filename more aggressively (e.g., max 25 chars)
-        max_filename_len = 25 
-        display_filename = filename[:max_filename_len-3].strip() + "..." if len(filename) > max_filename_len else filename 
+        max_filename_len = 25
+        display_filename = filename[:max_filename_len-3].strip() + "..." if len(filename) > max_filename_len else filename
 
         if total_bytes > 0:
             downloaded_mb = downloaded_bytes / (1024 * 1024)
@@ -725,7 +861,7 @@ class DownloaderApp(QWidget):
         else: # If total size is unknown
              downloaded_mb = downloaded_bytes / (1024 * 1024)
              progress_text = f"Downloading '{display_filename}' ({downloaded_mb:.1f}MB)"
-        
+
         # Check if the resulting text might still be too long (heuristic)
         # This is a basic check, might need refinement based on typical log width
         if len(progress_text) > 75: # Example threshold, adjust as needed
@@ -740,36 +876,190 @@ class DownloaderApp(QWidget):
 
 
     def update_external_links_setting(self, checked):
+        # This function is now primarily controlled by _handle_filter_mode_change
+        # when the "Only Links" mode is NOT selected.
+        is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
+        if is_only_links_mode:
+            # In "Only Links" mode, the external log is always hidden.
+             if self.external_log_output: self.external_log_output.hide()
+             if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
+             return
+
+        # Proceed only if NOT in "Only Links" mode
         self.show_external_links = checked
         if checked:
-            self.external_log_output.show()
+            if self.external_log_output: self.external_log_output.show()
             # Adjust splitter, give both logs some space
-            # Use the VERTICAL splitter for logs here
-            self.log_splitter.setSizes([self.height() // 2, self.height() // 2]) 
-            self.main_log_output.setMinimumHeight(50) # Ensure it doesn't disappear
-            self.external_log_output.setMinimumHeight(50)
+            if self.log_splitter: self.log_splitter.setSizes([self.height() // 2, self.height() // 2])
+            if self.main_log_output: self.main_log_output.setMinimumHeight(50) # Ensure it doesn't disappear
+            if self.external_log_output: self.external_log_output.setMinimumHeight(50)
             self.log_signal.emit("\n" + "="*40 + "\n🔗 External Links Log Enabled\n" + "="*40)
-            self.external_log_output.clear() # Clear previous content
-            self.external_log_output.append("🔗 External Links Found:") # Header
-            # --- ADDED: Try processing queue if log becomes visible ---
+            if self.external_log_output:
+                self.external_log_output.clear() # Clear previous content
+                self.external_log_output.append("🔗 External Links Found:") # Header
+            # Try processing queue if log becomes visible
             self._try_process_next_external_link()
-            # --- END ADDED ---
         else:
-            self.external_log_output.hide()
-            # Use the VERTICAL splitter for logs here
-            self.log_splitter.setSizes([self.height(), 0]) # Main log takes all space
-            self.main_log_output.setMinimumHeight(0) # Reset min height
-            self.external_log_output.setMinimumHeight(0)
-            self.external_log_output.clear() # Clear content when hidden
+            if self.external_log_output: self.external_log_output.hide()
+            # Adjust splitter
+            if self.log_splitter: self.log_splitter.setSizes([self.height(), 0]) # Main log takes all space
+            if self.main_log_output: self.main_log_output.setMinimumHeight(0) # Reset min height
+            if self.external_log_output: self.external_log_output.setMinimumHeight(0)
+            if self.external_log_output: self.external_log_output.clear() # Clear content when hidden
             self.log_signal.emit("\n" + "="*40 + "\n🔗 External Links Log Disabled\n" + "="*40)
-            # Optional: Clear queue when log is hidden?
-            # self.external_link_queue.clear()
-            # self._is_processing_external_link_queue = False
+
+    # --- ADDED: Handler for filter mode radio buttons ---
+    def _handle_filter_mode_change(self, button, checked):
+        # button can be None during initial setup sometimes
+        if not button or not checked:
+            return
+
+        filter_mode_text = button.text()
+        is_only_links = (filter_mode_text == "🔗 Only Links")
+
+        # --- MODIFIED: Enable/disable widgets based on mode ---
+        file_options_enabled = not is_only_links
+        widgets_to_disable_in_links_mode = [
+            self.dir_input, self.dir_button, # Download Location
+            self.skip_zip_checkbox, self.skip_rar_checkbox,
+            self.download_thumbnails_checkbox, self.compress_images_checkbox,
+            self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
+            self.character_filter_widget, # Includes label and input
+            self.skip_words_input,
+            self.custom_folder_widget # Includes label and input
+        ]
+        # --- END MODIFIED ---
+        for widget in widgets_to_disable_in_links_mode:
+            if widget: widget.setEnabled(file_options_enabled)
+
+        # --- ADDED: Show/hide link search bar and export button ---
+        if self.link_search_input: self.link_search_input.setVisible(is_only_links)
+        if self.link_search_button: self.link_search_button.setVisible(is_only_links)
+        if self.export_links_button:
+            self.export_links_button.setVisible(is_only_links)
+            self.export_links_button.setEnabled(is_only_links and bool(self.extracted_links_cache)) # Enable if cache has items
+        if not is_only_links and self.link_search_input: self.link_search_input.clear() # Clear search when hiding
+        # --- END ADDED ---
+
+        # Specific handling for "Only Links" mode vs others
+        if is_only_links:
+            self.progress_log_label.setText("📜 Extracted Links Log:") # Change title
+            # Ensure external log is hidden and main log takes full vertical space
+            if self.external_log_output: self.external_log_output.hide()
+            if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
+            if self.main_log_output: self.main_log_output.setMinimumHeight(0)
+            if self.external_log_output: self.external_log_output.setMinimumHeight(0)
+            # Clear logs for the new mode
+            if self.main_log_output: self.main_log_output.clear()
+            if self.external_log_output: self.external_log_output.clear()
+            # External links checkbox is irrelevant in this mode, keep it enabled but ignored
+            if self.external_links_checkbox: self.external_links_checkbox.setEnabled(True)
+            self.log_signal.emit("="*20 + " Mode changed to: Only Links " + "="*20)
+            # Start processing links immediately for the main log display
+            self._filter_links_log() # Display initially filtered (all) links
+            self._try_process_next_external_link() # Start paced display
+
+        else: # Other modes (All, Images, Videos)
+            self.progress_log_label.setText("📜 Progress Log:") # Restore title
+            if self.external_links_checkbox:
+                self.external_links_checkbox.setEnabled(True) # Ensure checkbox is enabled
+            # Restore log visibility based on checkbox state
+            self.update_external_links_setting(self.external_links_checkbox.isChecked())
+            # Re-enable potentially disabled subfolder options if needed
+            self.update_ui_for_subfolders(self.use_subfolders_checkbox.isChecked())
+            self.log_signal.emit(f"="*20 + f" Mode changed to: {filter_mode_text} " + "="*20)
+
+    # --- END ADDED ---
+
+    # --- ADDED: Method to filter links in "Only Links" mode ---
+    def _filter_links_log(self):
+        """Filters and displays links from the cache in the main log."""
+        if not (self.radio_only_links and self.radio_only_links.isChecked()):
+            return # Only filter when in "Only Links" mode
+
+        search_term = self.link_search_input.text().lower().strip()
+        self.main_log_output.clear() # Clear current display
+
+        current_title_for_display = None # Track title for grouping in this filtered view
+        separator = "-" * 45
+
+        for post_title, link_text, link_url, platform in self.extracted_links_cache:
+            # Check if the search term matches any part of the link info
+            matches_search = (
+                not search_term or
+                search_term in link_text.lower() or
+                search_term in link_url.lower() or
+                search_term in platform.lower()
+            )
+
+            if matches_search:
+                # Check if the post title has changed
+                if post_title != current_title_for_display:
+                    # Append separator and new title (formatted as HTML)
+                    self.main_log_output.insertHtml("<br>" + separator + "<br>")
+                    title_html = f'<b style="color: #87CEEB;">{post_title}</b><br>'
+                    self.main_log_output.insertHtml(title_html)
+                    current_title_for_display = post_title # Update current title
+
+                # Format and append the link info as plain text
+                max_link_text_len = 35
+                display_text = link_text[:max_link_text_len].strip() + "..." if len(link_text) > max_link_text_len else link_text
+                formatted_link_info = f"{display_text} - {link_url} - {platform}"
+                self.main_log_output.append(formatted_link_info)
+
+        # Add a final blank line if any links were displayed
+        if self.main_log_output.toPlainText().strip():
+             self.main_log_output.append("")
+
+        # Scroll to top after filtering
+        self.main_log_output.verticalScrollBar().setValue(0)
+    # --- END ADDED ---
+
+    # --- ADDED: Method to export links ---
+    def _export_links_to_file(self):
+        if not (self.radio_only_links and self.radio_only_links.isChecked()):
+            QMessageBox.information(self, "Export Links", "Link export is only available in 'Only Links' mode.")
+            return
+        if not self.extracted_links_cache:
+            QMessageBox.information(self, "Export Links", "No links have been extracted yet.")
+            return
+
+        default_filename = "extracted_links.txt"
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Links", default_filename, "Text Files (*.txt);;All Files (*)")
+
+        if filepath:
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    current_title_for_export = None
+                    separator = "-" * 60 + "\n" # For file output
+
+                    for post_title, link_text, link_url, platform in self.extracted_links_cache:
+                        if post_title != current_title_for_export:
+                            if current_title_for_export is not None: # Add separator before new title, except for the first one
+                                f.write("\n" + separator + "\n")
+                            f.write(f"Post Title: {post_title}\n\n")
+                            current_title_for_export = post_title
+
+                        f.write(f"  {link_text} - {link_url} - {platform}\n")
+
+                self.log_signal.emit(f"✅ Links successfully exported to: {filepath}")
+                QMessageBox.information(self, "Export Successful", f"Links exported to:\n{filepath}")
+            except Exception as e:
+                self.log_signal.emit(f"❌ Error exporting links: {e}")
+                QMessageBox.critical(self, "Export Error", f"Could not export links: {e}")
+    # --- END ADDED ---
+
 
     def get_filter_mode(self):
-        if self.radio_images.isChecked(): return 'image'
-        if self.radio_videos.isChecked(): return 'video'
-        return 'all' # Default
+        # This method returns the simplified filter mode string for the backend
+        if self.radio_only_links and self.radio_only_links.isChecked():
+             # When "Only Links" is checked, the backend doesn't filter by file type,
+             # but it does need a 'filter_mode'. 'all' is a safe default.
+             # The actual link extraction is controlled by the 'extract_links_only' flag.
+             return 'all'
+        elif self.radio_images.isChecked(): return 'image'
+        elif self.radio_videos.isChecked(): return 'video'
+        return 'all' # Default for "All" radio or if somehow no radio is checked.
 
     def add_new_character(self):
         global KNOWN_NAMES, clean_folder_name # Ensure clean_folder_name is accessible
@@ -797,7 +1087,7 @@ class DownloaderApp(QWidget):
 
         if similar_names_details:
             first_similar_new, first_similar_existing = similar_names_details[0]
-            
+
             # Determine shorter and longer for the example message
             shorter_name_for_msg, longer_name_for_msg = sorted(
                 [first_similar_new, first_similar_existing], key=len
@@ -873,26 +1163,30 @@ class DownloaderApp(QWidget):
         _, _, post_id = extract_post_info(url_text.strip())
         # Show if it's a post URL AND subfolders are generally enabled
         should_show = bool(post_id) and self.use_subfolders_checkbox.isChecked()
-        self.custom_folder_widget.setVisible(should_show)
-        if not should_show: self.custom_folder_input.clear() # Clear if hidden
+        # --- MODIFIED: Also hide if in "Only Links" mode ---
+        is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
+        self.custom_folder_widget.setVisible(should_show and not is_only_links)
+        # --- END MODIFIED ---
+        if not self.custom_folder_widget.isVisible(): self.custom_folder_input.clear() # Clear if hidden
 
     def update_ui_for_subfolders(self, checked):
         # Character filter input visibility depends on subfolder usage
-        self.character_filter_widget.setVisible(checked) 
+        is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
+        self.character_filter_widget.setVisible(checked and not is_only_links) # Hide if only links
         if not checked: self.character_input.clear() # Clear filter if hiding
 
         self.update_custom_folder_visibility() # Custom folder also depends on this
 
         # "Subfolder per Post" is only enabled if "Separate Folders" is also checked
-        self.use_subfolder_per_post_checkbox.setEnabled(checked)
-        if not checked: self.use_subfolder_per_post_checkbox.setChecked(False) # Uncheck if parent is disabled
+        self.use_subfolder_per_post_checkbox.setEnabled(checked and not is_only_links) # Disable if only links
+        if not checked or is_only_links: self.use_subfolder_per_post_checkbox.setChecked(False) # Uncheck if parent is disabled or only links
 
     def update_page_range_enabled_state(self):
         url_text = self.link_input.text().strip()
         service, user_id, post_id = extract_post_info(url_text)
         # Page range is for creator feeds (no post_id)
         is_creator_feed = service is not None and user_id is not None and post_id is None
-        
+
         manga_mode_active = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
         # Enable page range if it's a creator feed AND manga mode is NOT active
         enable_page_range = is_creator_feed and not manga_mode_active
@@ -937,9 +1231,9 @@ class DownloaderApp(QWidget):
                 num_threads = int(text)
                 if num_threads > 0 :
                     self.use_multithreading_checkbox.setText(f"Use Multithreading ({num_threads} Threads)")
-                else: 
+                else:
                     self.use_multithreading_checkbox.setText("Use Multithreading (Invalid: >0)")
-            except ValueError: 
+            except ValueError:
                 self.use_multithreading_checkbox.setText("Use Multithreading (Invalid Input)")
         else:
              self.use_multithreading_checkbox.setText("Use Multithreading (1 Thread)") # Show 1 thread when disabled
@@ -982,7 +1276,6 @@ class DownloaderApp(QWidget):
 
         api_url = self.link_input.text().strip()
         output_dir = self.dir_input.text().strip()
-        filter_mode = self.get_filter_mode()
         skip_zip = self.skip_zip_checkbox.isChecked()
         skip_rar = self.skip_rar_checkbox.isChecked()
         use_subfolders = self.use_subfolders_checkbox.isChecked()
@@ -995,20 +1288,32 @@ class DownloaderApp(QWidget):
 
         manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
 
+        extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
 
-        if not api_url or not output_dir:
-            QMessageBox.critical(self, "Input Error", "URL and Download Directory are required."); return
+        # --- MODIFICATION FOR FILTER MODE ---
+        # Get the simplified filter mode for the backend (e.g., 'image', 'video', 'all')
+        backend_filter_mode = self.get_filter_mode()
+        # Get the user-facing text of the selected radio button for logging purposes
+        user_selected_filter_text = self.radio_group.checkedButton().text() if self.radio_group.checkedButton() else "All"
+        # --- END MODIFICATION FOR FILTER MODE ---
+
+
+        if not api_url:
+            QMessageBox.critical(self, "Input Error", "URL is required."); return
+        if not extract_links_only and not output_dir:
+             QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode."); return
+
         service, user_id, post_id_from_url = extract_post_info(api_url)
-        if not service or not user_id: # Basic validation of extracted info
+        if not service or not user_id:
             QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format."); return
 
-        if not os.path.isdir(output_dir):
+        if not extract_links_only and not os.path.isdir(output_dir):
             reply = QMessageBox.question(self, "Create Directory?",
                                          f"The directory '{output_dir}' does not exist.\nCreate it now?",
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
             if reply == QMessageBox.Yes:
                 try:
-                    os.makedirs(output_dir, exist_ok=True) # exist_ok=True is safer
+                    os.makedirs(output_dir, exist_ok=True)
                     self.log_signal.emit(f"ℹ️ Created directory: {output_dir}")
                 except Exception as e:
                     QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}"); return
@@ -1016,22 +1321,19 @@ class DownloaderApp(QWidget):
                 self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
                 return
 
-        if compress_images and Image is None: # Check for Pillow if compression is enabled
+        if compress_images and Image is None:
             QMessageBox.warning(self, "Missing Dependency", "Pillow library (for image compression) not found. Compression will be disabled.")
-            compress_images = False # Disable it for this run
-            self.compress_images_checkbox.setChecked(False) # Update UI
+            compress_images = False
+            self.compress_images_checkbox.setChecked(False)
 
-        manga_mode = manga_mode_is_checked and not post_id_from_url # Manga mode only for creator feeds
+        manga_mode = manga_mode_is_checked and not post_id_from_url
 
         num_threads_str = self.thread_count_input.text().strip()
-        num_threads = 1 # Default to 1 if multithreading is off or input is invalid
-        if use_multithreading: # Only parse if multithreading is enabled
+        num_threads = 1
+        if use_multithreading:
             try:
                 num_threads_requested = int(num_threads_str)
-                
-                # --- MODIFIED: Tiered Thread Count Warning/Cap ---
                 if num_threads_requested > MAX_THREADS:
-                    # Hard cap warning (above 200)
                     warning_message = (
                         f"You have requested {num_threads_requested} threads, which is above the maximum limit of {MAX_THREADS}.\n\n"
                         f"High thread counts can lead to instability or rate-limiting.\n\n"
@@ -1039,33 +1341,30 @@ class DownloaderApp(QWidget):
                     )
                     QMessageBox.warning(self, "High Thread Count Warning", warning_message)
                     self.log_signal.emit(f"⚠️ High thread count requested ({num_threads_requested}). Capping at {MAX_THREADS}.")
-                    num_threads = MAX_THREADS # Apply the cap
-                    self.thread_count_input.setText(str(num_threads)) # Update UI to show capped value
+                    num_threads = MAX_THREADS
+                    self.thread_count_input.setText(str(num_threads))
                 elif num_threads_requested > RECOMMENDED_MAX_THREADS:
-                     # Informational warning (above 50 but <= 200)
                      QMessageBox.information(self, "High Thread Count Note",
                                             f"Using {num_threads_requested} threads (above {RECOMMENDED_MAX_THREADS}) may increase resource usage and risk rate-limiting from the site.\n\nProceeding with caution.")
                      self.log_signal.emit(f"ℹ️ Using high thread count: {num_threads_requested}.")
-                     num_threads = num_threads_requested # Use the requested value
-                elif num_threads_requested < 1: # Should be caught by validator, but safety check
+                     num_threads = num_threads_requested
+                elif num_threads_requested < 1:
                     self.log_signal.emit(f"⚠️ Invalid thread count ({num_threads_requested}). Using 1 thread.")
                     num_threads = 1
                     self.thread_count_input.setText(str(num_threads))
                 else:
-                    num_threads = num_threads_requested # Use the requested value if within limits
-                # --- END MODIFIED ---
-
+                    num_threads = num_threads_requested
             except ValueError:
                 QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a numeric value."); return
         else:
-            num_threads = 1 # Explicitly set to 1 if multithreading checkbox is off
+            num_threads = 1
 
 
         start_page_str, end_page_str = self.start_page_input.text().strip(), self.end_page_input.text().strip()
         start_page, end_page = None, None
         is_creator_feed = bool(not post_id_from_url)
 
-        if is_creator_feed and not manga_mode: # Page range only for non-manga creator feeds
+        if is_creator_feed and not manga_mode:
             try:
                 if start_page_str: start_page = int(start_page_str)
                 if end_page_str: end_page = int(end_page_str)
@@ -1075,13 +1374,13 @@ class DownloaderApp(QWidget):
                     raise ValueError("Start page cannot be greater than end page.")
             except ValueError as e:
                 QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}"); return
-        elif manga_mode: # Manga mode processes all pages (reversed in downloader_utils)
-            start_page, end_page = None, None 
-        
-        # --- ADDED: Clear link queue before starting new download ---
+        elif manga_mode:
+            start_page, end_page = None, None
+
         self.external_link_queue.clear()
+        self.extracted_links_cache = []
         self._is_processing_external_link_queue = False
-        # --- END ADDED ---
+        self._current_link_post_title = None
 
 
         raw_character_filters_text = self.character_input.text().strip()
@@ -1090,54 +1389,51 @@ class DownloaderApp(QWidget):
             temp_list = [name.strip() for name in raw_character_filters_text.split(',') if name.strip()]
             if temp_list: parsed_character_list = temp_list
 
-        filter_character_list_to_pass = None # This will be passed to backend
-        if use_subfolders and parsed_character_list and not post_id_from_url: # Validate filters if used for subfolders
+        filter_character_list_to_pass = None
+        if use_subfolders and parsed_character_list and not post_id_from_url and not extract_links_only:
             self.log_signal.emit(f"ℹ️ Validating character filters for subfolder naming: {', '.join(parsed_character_list)}")
             valid_filters_for_backend = []
             user_cancelled_validation = False
             for char_name in parsed_character_list:
-                cleaned_name_test = clean_folder_name(char_name) # Test if name is valid for folder
+                cleaned_name_test = clean_folder_name(char_name)
                 if not cleaned_name_test:
                     QMessageBox.warning(self, "Invalid Filter Name", f"Filter name '{char_name}' is invalid for a folder and will be skipped.")
                     self.log_signal.emit(f"⚠️ Skipping invalid filter for folder: '{char_name}'")
                     continue
 
-                # Prompt to add to known_names if not already there
                 if char_name.lower() not in {kn.lower() for kn in KNOWN_NAMES}:
                     reply = QMessageBox.question(self, "Add Filter Name to Known List?",
                                                  f"The character filter '{char_name}' is not in your known names list (used for folder suggestions).\nAdd it now?",
                                                  QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Yes)
                     if reply == QMessageBox.Yes:
-                        self.new_char_input.setText(char_name) # Use existing add mechanism
-                        if self.add_new_character(): # This now handles similarity checks too
+                        self.new_char_input.setText(char_name)
+                        if self.add_new_character():
                             self.log_signal.emit(f"✅ Added '{char_name}' to known names via filter prompt.")
                             valid_filters_for_backend.append(char_name)
-                        else: # add_new_character returned False (e.g., user chose "Change Name" or it failed)
+                        else:
                              self.log_signal.emit(f"⚠️ Failed to add '{char_name}' via filter prompt (or user opted out). It will still be used for filtering this session if valid.")
-                             # Still add to backend list for current session if it's a valid folder name
                              if cleaned_name_test: valid_filters_for_backend.append(char_name)
                     elif reply == QMessageBox.Cancel:
                         self.log_signal.emit(f"❌ Download cancelled by user during filter validation for '{char_name}'.")
                         user_cancelled_validation = True; break
-                    else: # User chose No
+                    else:
                         self.log_signal.emit(f"ℹ️ Proceeding with filter '{char_name}' for matching without adding to known list.")
                         if cleaned_name_test: valid_filters_for_backend.append(char_name)
-                else: # Already in known names
+                else:
                     if cleaned_name_test: valid_filters_for_backend.append(char_name)
-            
-            if user_cancelled_validation: return # Stop download if user cancelled
+
+            if user_cancelled_validation: return
 
             if valid_filters_for_backend:
                 filter_character_list_to_pass = valid_filters_for_backend
                 self.log_signal.emit(f"   Using validated character filters for subfolders: {', '.join(filter_character_list_to_pass)}")
             else:
                 self.log_signal.emit("⚠️ No valid character filters remaining after validation for subfolder naming.")
-        elif parsed_character_list : # Filters provided, but not for subfolders (e.g. subfolders disabled)
+        elif parsed_character_list :
             filter_character_list_to_pass = parsed_character_list
             self.log_signal.emit(f"ℹ️ Character filters provided: {', '.join(filter_character_list_to_pass)} (Subfolder creation rules may differ).")
-        
-        # --- ADDED: Manga Mode Filter Warning ---
-        if manga_mode and not filter_character_list_to_pass:
+
+        if manga_mode and not filter_character_list_to_pass and not extract_links_only:
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Manga Mode Filter Warning")
@@ -1147,115 +1443,128 @@ class DownloaderApp(QWidget):
                 "(as used by the creator on the site) into the filter field.\n\n"
                 "Do you want to proceed without a filter (file names might be generic) or cancel?"
             )
-            proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole) # YesRole/AcceptRole makes it default
-            cancel_button = msg_box.addButton("Cancel Download", QMessageBox.RejectRole) # NoRole/RejectRole for cancel
-            
+            proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+            cancel_button = msg_box.addButton("Cancel Download", QMessageBox.RejectRole)
+
             msg_box.exec_()
 
             if msg_box.clickedButton() == cancel_button:
                 self.log_signal.emit("❌ Download cancelled by user due to Manga Mode filter warning.")
-                return # Stop the download process here
+                return
             else:
                 self.log_signal.emit("⚠️ Proceeding with Manga Mode without a specific title filter.")
-        # --- END ADDED ---
 
 
         custom_folder_name_cleaned = None
-        if use_subfolders and post_id_from_url and self.custom_folder_widget.isVisible():
+        if use_subfolders and post_id_from_url and self.custom_folder_widget.isVisible() and not extract_links_only:
             raw_custom_name = self.custom_folder_input.text().strip()
             if raw_custom_name:
                  cleaned_custom = clean_folder_name(raw_custom_name)
                  if cleaned_custom: custom_folder_name_cleaned = cleaned_custom
                  else: self.log_signal.emit(f"⚠️ Invalid custom folder name ignored: '{raw_custom_name}'")
 
-        # Reset UI elements for new download
         self.main_log_output.clear()
-        if self.show_external_links: self.external_log_output.clear(); self.external_log_output.append("🔗 External Links Found:") # Changed title slightly
+        if extract_links_only:
+            self.main_log_output.append("🔗 Extracting Links...")
+            if self.external_log_output: self.external_log_output.clear()
+        elif self.show_external_links:
+            self.external_log_output.clear()
+            self.external_log_output.append("🔗 External Links Found:")
         self.file_progress_label.setText("")
-        self.cancellation_event.clear() # IMPORTANT: Clear cancellation from previous run
+        self.cancellation_event.clear()
         self.active_futures = []
         self.total_posts_to_process = self.processed_posts_count = self.download_counter = self.skip_counter = 0
         self.progress_label.setText("Progress: Initializing...")
 
-        # Log download parameters
         log_messages = [
-            "="*40, f"🚀 Starting Download @ {time.strftime('%Y-%m-%d %H:%M:%S')}",
-            f"   URL: {api_url}", f"   Save Location: {output_dir}",
-            f"   Mode: {'Single Post' if post_id_from_url else 'Creator Feed'}",
+            "="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else 'Download'} @ {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"   URL: {api_url}",
         ]
+        if not extract_links_only:
+            log_messages.append(f"   Save Location: {output_dir}")
+
+        log_messages.append(f"   Mode: {'Single Post' if post_id_from_url else 'Creator Feed'}")
+
         if is_creator_feed:
             if manga_mode:
                 log_messages.append("   Page Range: All (Manga Mode - Oldest Posts Processed First)")
             else:
                 pr_log = "All"
-                if start_page or end_page: # Construct page range log string
+                if start_page or end_page:
                     pr_log = f"{f'From {start_page} ' if start_page else ''}{'to ' if start_page and end_page else ''}{f'{end_page}' if end_page else (f'Up to {end_page}' if end_page else (f'From {start_page}' if start_page else 'Specific Range'))}".strip()
                 log_messages.append(f"   Page Range: {pr_log if pr_log else 'All'}")
 
+        if not extract_links_only:
+            log_messages.append(f"   Subfolders: {'Enabled' if use_subfolders else 'Disabled'}")
+            if use_subfolders:
+                 if custom_folder_name_cleaned: log_messages.append(f"   Custom Folder (Post): '{custom_folder_name_cleaned}'")
+                 elif filter_character_list_to_pass and not post_id_from_url: log_messages.append(f"   Character Filters for Folders: {', '.join(filter_character_list_to_pass)}")
+                 else: log_messages.append(f"   Folder Naming: Automatic (based on title/known names)")
+                 log_messages.append(f"   Subfolder per Post: {'Enabled' if use_post_subfolders else 'Disabled'}")
 
-        log_messages.append(f"   Subfolders: {'Enabled' if use_subfolders else 'Disabled'}")
-        if use_subfolders:
-             if custom_folder_name_cleaned: log_messages.append(f"   Custom Folder (Post): '{custom_folder_name_cleaned}'")
-             elif filter_character_list_to_pass and not post_id_from_url: log_messages.append(f"   Character Filters for Folders: {', '.join(filter_character_list_to_pass)}")
-             else: log_messages.append(f"   Folder Naming: Automatic (based on title/known names)")
-             log_messages.append(f"   Subfolder per Post: {'Enabled' if use_post_subfolders else 'Disabled'}")
+            log_messages.extend([
+                # --- MODIFIED LOGGING FOR FILTER MODE ---
+                f"   File Type Filter: {user_selected_filter_text} (Backend processing as: {backend_filter_mode})",
+                # --- END MODIFIED LOGGING ---
+                f"   Skip Archives: {'.zip' if skip_zip else ''}{', ' if skip_zip and skip_rar else ''}{'.rar' if skip_rar else ''}{'None' if not (skip_zip or skip_rar) else ''}",
+                f"   Skip Words (posts/files): {', '.join(skip_words_list) if skip_words_list else 'None'}",
+                f"   Compress Images: {'Enabled' if compress_images else 'Disabled'}",
+                f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}",
+            ])
+        else:
+             log_messages.append(f"   Mode: Extracting Links Only") # This handles the "Only Links" case
 
-        log_messages.extend([
-            f"   File Type Filter: {filter_mode}",
-            f"   Skip Archives: {'.zip' if skip_zip else ''}{', ' if skip_zip and skip_rar else ''}{'.rar' if skip_rar else ''}{'None' if not (skip_zip or skip_rar) else ''}",
-            f"   Skip Words (posts/files): {', '.join(skip_words_list) if skip_words_list else 'None'}",
-            f"   Compress Images: {'Enabled' if compress_images else 'Disabled'}",
-            f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}",
-            f"   Show External Links: {'Enabled' if self.show_external_links else 'Disabled'}"
-        ])
+        log_messages.append(f"   Show External Links: {'Enabled' if self.show_external_links else 'Disabled'}")
         if manga_mode: log_messages.append(f"   Manga Mode (File Renaming by Post Title): Enabled")
 
-        should_use_multithreading = use_multithreading and not post_id_from_url # Multi-threading for creator feeds
+        should_use_multithreading = use_multithreading and not post_id_from_url
         log_messages.append(f"   Threading: {'Multi-threaded (posts)' if should_use_multithreading else 'Single-threaded (posts)'}")
-        if should_use_multithreading: log_messages.append(f"   Number of Post Worker Threads: {num_threads}") # Use potentially capped value
+        if should_use_multithreading: log_messages.append(f"   Number of Post Worker Threads: {num_threads}")
         log_messages.append("="*40)
         for msg in log_messages: self.log_signal.emit(msg)
 
-        self.set_ui_enabled(False) # Disable UI during download
+        self.set_ui_enabled(False)
 
         unwanted_keywords_for_folders = {'spicy', 'hd', 'nsfw', '4k', 'preview', 'teaser', 'clip'}
 
-        # Prepare arguments for worker threads/classes
         args_template = {
             'api_url_input': api_url,
-            'download_root': output_dir, # For PostProcessorWorker
-            'output_dir': output_dir,    # For DownloadThread __init__
-            'known_names': list(KNOWN_NAMES), # Pass a copy
-            'known_names_copy': list(KNOWN_NAMES), # For DownloadThread __init__
+            'download_root': output_dir,
+            'output_dir': output_dir,
+            'known_names': list(KNOWN_NAMES),
+            'known_names_copy': list(KNOWN_NAMES),
             'filter_character_list': filter_character_list_to_pass,
-            'filter_mode': filter_mode, 'skip_zip': skip_zip, 'skip_rar': skip_rar,
+            # --- MODIFIED: Pass the correct backend_filter_mode ---
+            'filter_mode': backend_filter_mode,
+            # --- END MODIFICATION ---
+            'skip_zip': skip_zip, 'skip_rar': skip_rar,
             'use_subfolders': use_subfolders, 'use_post_subfolders': use_post_subfolders,
             'compress_images': compress_images, 'download_thumbnails': download_thumbnails,
             'service': service, 'user_id': user_id,
-            'downloaded_files': self.downloaded_files, # Shared set
-            'downloaded_files_lock': self.downloaded_files_lock, # Shared lock
-            'downloaded_file_hashes': self.downloaded_file_hashes, # Shared set
-            'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock, # Shared lock
+            'downloaded_files': self.downloaded_files,
+            'downloaded_files_lock': self.downloaded_files_lock,
+            'downloaded_file_hashes': self.downloaded_file_hashes,
+            'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
             'skip_words_list': skip_words_list,
             'show_external_links': self.show_external_links,
-            'start_page': start_page, 
-            'end_page': end_page,     
+            'extract_links_only': extract_links_only,
+            'start_page': start_page,
+            'end_page': end_page,
             'target_post_id_from_initial_url': post_id_from_url,
             'custom_folder_name': custom_folder_name_cleaned,
             'manga_mode_active': manga_mode,
             'unwanted_keywords': unwanted_keywords_for_folders,
-            'cancellation_event': self.cancellation_event, # Crucial for stopping threads
-            'signals': self.worker_signals, # For multi-threaded PostProcessorWorker
+            'cancellation_event': self.cancellation_event,
+            'signals': self.worker_signals,
         }
 
 
         try:
             if should_use_multithreading:
-                self.log_signal.emit(f"   Initializing multi-threaded download with {num_threads} post workers...") # Use potentially capped value
-                self.start_multi_threaded_download(num_post_workers=num_threads, **args_template) # Pass capped value
-            else: # Single post URL or multithreading disabled
-                self.log_signal.emit("   Initializing single-threaded download...")
-                # Keys expected by DownloadThread constructor
+                self.log_signal.emit(f"   Initializing multi-threaded {'link extraction' if extract_links_only else 'download'} with {num_threads} post workers...")
+                self.start_multi_threaded_download(num_post_workers=num_threads, **args_template)
+            else:
+                self.log_signal.emit(f"   Initializing single-threaded {'link extraction' if extract_links_only else 'download'}...")
                 dt_expected_keys = [
                     'api_url_input', 'output_dir', 'known_names_copy', 'cancellation_event',
                     'filter_character_list', 'filter_mode', 'skip_zip', 'skip_rar',
@@ -1263,44 +1572,42 @@ class DownloaderApp(QWidget):
                     'compress_images', 'download_thumbnails', 'service', 'user_id',
                     'downloaded_files', 'downloaded_file_hashes', 'downloaded_files_lock',
                     'downloaded_file_hashes_lock', 'skip_words_list', 'show_external_links',
+                    'extract_links_only',
                     'num_file_threads_for_worker', 'skip_current_file_flag',
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
                     'manga_mode_active', 'unwanted_keywords'
                 ]
-                args_template['num_file_threads_for_worker'] = 1 # Single thread mode, worker uses 1 file thread
-                args_template['skip_current_file_flag'] = None # No skip flag initially
+                args_template['num_file_threads_for_worker'] = 1
+                args_template['skip_current_file_flag'] = None
 
                 single_thread_args = {}
                 for key in dt_expected_keys:
                      if key in args_template:
                          single_thread_args[key] = args_template[key]
-                     # Missing optional keys will use defaults in DownloadThread's __init__
 
                 self.start_single_threaded_download(**single_thread_args)
 
         except Exception as e:
-            self.log_signal.emit(f"❌ CRITICAL ERROR preparing download: {e}\n{traceback.format_exc()}")
-            QMessageBox.critical(self, "Start Error", f"Failed to start download:\n{e}")
-            self.download_finished(0,0,False) # Ensure UI is re-enabled
+            self.log_signal.emit(f"❌ CRITICAL ERROR preparing {'link extraction' if extract_links_only else 'download'}: {e}\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "Start Error", f"Failed to start process:\n{e}")
+            self.download_finished(0,0,False)
 
 
     def start_single_threaded_download(self, **kwargs):
         global BackendDownloadThread
         try:
-            self.download_thread = BackendDownloadThread(**kwargs) # Pass all relevant args
+            self.download_thread = BackendDownloadThread(**kwargs)
 
-            # Connect signals from the DownloadThread instance
             if hasattr(self.download_thread, 'progress_signal'):
                 self.download_thread.progress_signal.connect(self.handle_main_log)
-            if hasattr(self.download_thread, 'add_character_prompt_signal'): # Though less used by DownloadThread directly
+            if hasattr(self.download_thread, 'add_character_prompt_signal'):
                 self.download_thread.add_character_prompt_signal.connect(self.add_character_prompt_signal)
             if hasattr(self.download_thread, 'finished_signal'):
-                self.download_thread.finished_signal.connect(self.finished_signal) # Connect to app's finished handler
-            if hasattr(self.download_thread, 'receive_add_character_result'): # For two-way prompt communication
+                self.download_thread.finished_signal.connect(self.finished_signal)
+            if hasattr(self.download_thread, 'receive_add_character_result'):
                 self.character_prompt_response_signal.connect(self.download_thread.receive_add_character_result)
-            # MODIFIED: Connect external_link_signal to the new handler
-            if hasattr(self.download_thread, 'external_link_signal'): 
-                self.download_thread.external_link_signal.connect(self.handle_external_link_signal) # Connect to queue handler
+            if hasattr(self.download_thread, 'external_link_signal'):
+                self.download_thread.external_link_signal.connect(self.handle_external_link_signal)
             if hasattr(self.download_thread, 'file_progress_signal'):
                 self.download_thread.file_progress_signal.connect(self.update_file_progress_display)
 
@@ -1309,81 +1616,78 @@ class DownloaderApp(QWidget):
         except Exception as e:
             self.log_signal.emit(f"❌ CRITICAL ERROR starting single-thread: {e}\n{traceback.format_exc()}")
             QMessageBox.critical(self, "Thread Start Error", f"Failed to start download process: {e}")
-            self.download_finished(0,0,False) # Cleanup
+            self.download_finished(0,0,False)
 
 
     def start_multi_threaded_download(self, num_post_workers, **kwargs):
-        global PostProcessorWorker # Ensure it's the correct worker class
+        global PostProcessorWorker
         self.thread_pool = ThreadPoolExecutor(max_workers=num_post_workers, thread_name_prefix='PostWorker_')
-        self.active_futures = [] # Reset list of active futures
+        self.active_futures = []
         self.processed_posts_count = 0
-        self.total_posts_to_process = 0 # Will be updated by _fetch_and_queue_posts
+        self.total_posts_to_process = 0
         self.download_counter = 0
         self.skip_counter = 0
 
-        # Start a separate thread to fetch post data and submit tasks to the pool
-        # This prevents the GUI from freezing during the initial API calls for post lists
         fetcher_thread = threading.Thread(
             target=self._fetch_and_queue_posts,
-            args=(kwargs['api_url_input'], kwargs, num_post_workers), 
-            daemon=True, name="PostFetcher" # Daemon thread will exit when app exits
+            args=(kwargs['api_url_input'], kwargs, num_post_workers),
+            daemon=True, name="PostFetcher"
         )
         fetcher_thread.start()
         self.log_signal.emit(f"✅ Post fetcher thread started. {num_post_workers} post worker threads initializing...")
 
 
     def _fetch_and_queue_posts(self, api_url_input_for_fetcher, worker_args_template, num_post_workers):
-        global PostProcessorWorker, download_from_api # Ensure correct references
+        global PostProcessorWorker, download_from_api
         all_posts_data = []
         fetch_error_occurred = False
 
         manga_mode_active_for_fetch = worker_args_template.get('manga_mode_active', False)
-        signals_for_worker = worker_args_template.get('signals') # This is self.worker_signals
-        if not signals_for_worker: # Should always be present
+        signals_for_worker = worker_args_template.get('signals')
+        if not signals_for_worker:
              self.log_signal.emit("❌ CRITICAL ERROR: Signals object missing for worker in _fetch_and_queue_posts.")
-             self.finished_signal.emit(0,0,True) # Signal failure
+             self.finished_signal.emit(0,0,True)
              return
 
         try:
             self.log_signal.emit("   Fetching post data from API...")
             post_generator = download_from_api(
                 api_url_input_for_fetcher,
-                logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"), # Prefix fetcher logs
-                start_page=worker_args_template.get('start_page'), 
+                logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"),
+                start_page=worker_args_template.get('start_page'),
                 end_page=worker_args_template.get('end_page'),
                 manga_mode=manga_mode_active_for_fetch,
-                cancellation_event=self.cancellation_event # Pass cancellation event
+                cancellation_event=self.cancellation_event
             )
             for posts_batch in post_generator:
-                if self.cancellation_event.is_set(): # Check cancellation frequently
+                if self.cancellation_event.is_set():
                     fetch_error_occurred = True; self.log_signal.emit("   Post fetching cancelled by user."); break
                 if isinstance(posts_batch, list):
                     all_posts_data.extend(posts_batch)
-                    self.total_posts_to_process = len(all_posts_data) # Update total
-                    # Log progress periodically for large feeds
+                    self.total_posts_to_process = len(all_posts_data)
                     if self.total_posts_to_process > 0 and self.total_posts_to_process % 100 == 0 :
                         self.log_signal.emit(f"   Fetched {self.total_posts_to_process} posts so far...")
-                else: # Should not happen if download_from_api is correct
+                else:
                     fetch_error_occurred = True
                     self.log_signal.emit(f"❌ API fetcher returned non-list type: {type(posts_batch)}"); break
 
             if not fetch_error_occurred and not self.cancellation_event.is_set():
                 self.log_signal.emit(f"✅ Post fetching complete. Total posts to process: {self.total_posts_to_process}")
-        except TypeError as te: # Catch common error if downloader_utils is outdated
+        except TypeError as te:
             self.log_signal.emit(f"❌ TypeError calling download_from_api: {te}")
             self.log_signal.emit("   Check if 'downloader_utils.py' has the correct 'download_from_api' signature (including 'manga_mode' and 'cancellation_event').")
             self.log_signal.emit(traceback.format_exc(limit=2))
             fetch_error_occurred = True
-        except RuntimeError as re: # Catch cancellation from fetch_posts_paginated
+        except RuntimeError as re:
             self.log_signal.emit(f"ℹ️ Post fetching runtime error (likely cancellation): {re}")
-            fetch_error_occurred = True # Treat as an error for cleanup
+            fetch_error_occurred = True
         except Exception as e:
             self.log_signal.emit(f"❌ Error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
             fetch_error_occurred = True
 
         if self.cancellation_event.is_set() or fetch_error_occurred:
             self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set())
-            if self.thread_pool: # Ensure pool is shutdown if fetch fails or is cancelled
+            if self.thread_pool:
                 self.thread_pool.shutdown(wait=False, cancel_futures=True); self.thread_pool = None
             return
 
@@ -1392,12 +1696,11 @@ class DownloaderApp(QWidget):
             self.finished_signal.emit(0,0,False); return
 
         self.log_signal.emit(f"   Submitting {self.total_posts_to_process} post processing tasks to thread pool...")
-        self.processed_posts_count = 0 # Reset for this run
-        self.overall_progress_signal.emit(self.total_posts_to_process, 0) # Initial progress update
+        self.processed_posts_count = 0
+        self.overall_progress_signal.emit(self.total_posts_to_process, 0)
 
-        num_file_dl_threads = 4 # Default for PostProcessorWorker's internal pool
+        num_file_dl_threads = 4
 
-        # Define keys PostProcessorWorker expects (ensure this matches its __init__)
         ppw_expected_keys = [
             'post_data', 'download_root', 'known_names', 'filter_character_list',
             'unwanted_keywords', 'filter_mode', 'skip_zip', 'skip_rar',
@@ -1409,7 +1712,6 @@ class DownloaderApp(QWidget):
             'extract_links_only', 'num_file_threads', 'skip_current_file_flag',
             'manga_mode_active'
         ]
-        # Optional keys with defaults in PostProcessorWorker's __init__
         ppw_optional_keys_with_defaults = {
             'skip_words_list', 'show_external_links', 'extract_links_only',
             'num_file_threads', 'skip_current_file_flag', 'manga_mode_active'
@@ -1417,52 +1719,51 @@ class DownloaderApp(QWidget):
 
 
         for post_data_item in all_posts_data:
-            if self.cancellation_event.is_set(): break # Check before submitting each task
-            if not isinstance(post_data_item, dict): # Basic sanity check
+            if self.cancellation_event.is_set(): break
+            if not isinstance(post_data_item, dict):
                 self.log_signal.emit(f"⚠️ Skipping invalid post data item (not a dict): {type(post_data_item)}")
-                self.processed_posts_count += 1 # Count as processed/skipped
+                self.processed_posts_count += 1
                 continue
 
-            # Build args for PostProcessorWorker instance
             worker_init_args = {}
             missing_keys = []
             for key in ppw_expected_keys:
                 if key == 'post_data': worker_init_args[key] = post_data_item
                 elif key == 'num_file_threads': worker_init_args[key] = num_file_dl_threads
-                elif key == 'signals': worker_init_args[key] = signals_for_worker # Use the app's worker_signals
+                elif key == 'signals': worker_init_args[key] = signals_for_worker
                 elif key in worker_args_template: worker_init_args[key] = worker_args_template[key]
-                elif key in ppw_optional_keys_with_defaults: pass # Let worker use its default
-                else: missing_keys.append(key) # Required key is missing
+                elif key in ppw_optional_keys_with_defaults: pass
+                else: missing_keys.append(key)
 
 
             if missing_keys:
                  self.log_signal.emit(f"❌ CRITICAL ERROR: Missing expected keys for PostProcessorWorker: {', '.join(missing_keys)}")
-                 self.cancellation_event.set() # Stop all processing
+                 self.cancellation_event.set()
                  break
 
             try:
                 worker_instance = PostProcessorWorker(**worker_init_args)
-                if self.thread_pool: # Ensure pool is still active
+                if self.thread_pool:
                     future = self.thread_pool.submit(worker_instance.process)
-                    future.add_done_callback(self._handle_future_result) # Handle result/exception
+                    future.add_done_callback(self._handle_future_result)
                     self.active_futures.append(future)
-                else: # Pool might have been shut down due to earlier error/cancellation
+                else:
                     self.log_signal.emit("⚠️ Thread pool not available. Cannot submit more tasks.")
                     break
-            except TypeError as te: # Error creating worker (e.g. wrong args)
+            except TypeError as te:
                  self.log_signal.emit(f"❌ TypeError creating PostProcessorWorker: {te}")
                  passed_keys_str = ", ".join(sorted(worker_init_args.keys()))
                  self.log_signal.emit(f"   Passed Args: [{passed_keys_str}]")
                  self.log_signal.emit(traceback.format_exc(limit=5))
-                 self.cancellation_event.set(); break # Stop all
-            except RuntimeError: # Pool might be shutting down
+                 self.cancellation_event.set(); break
+            except RuntimeError:
                 self.log_signal.emit("⚠️ Runtime error submitting task (pool likely shutting down)."); break
-            except Exception as e: # Other errors during submission
+            except Exception as e:
                 self.log_signal.emit(f"❌ Error submitting post {post_data_item.get('id','N/A')} to worker: {e}"); break
 
         if not self.cancellation_event.is_set():
             self.log_signal.emit(f"   {len(self.active_futures)} post processing tasks submitted to pool.")
-        else: # If cancelled during submission loop
+        else:
             self.finished_signal.emit(self.download_counter, self.skip_counter, True)
             if self.thread_pool:
                 self.thread_pool.shutdown(wait=False, cancel_futures=True); self.thread_pool = None
@@ -1475,161 +1776,125 @@ class DownloaderApp(QWidget):
         try:
             if future.cancelled():
                 self.log_signal.emit("   A post processing task was cancelled.")
-                # If a task was cancelled, it implies we might want to count its potential files as skipped
-                # This is hard to determine without knowing the post_data it was handling.
-                # For simplicity, we don't add to skip_counter here unless future.result() would have.
             elif future.exception():
                 worker_exception = future.exception()
                 self.log_signal.emit(f"❌ Post processing worker error: {worker_exception}")
-                # Similar to cancelled, hard to know how many files were skipped due to error.
             else: # Success
                 downloaded_files_from_future, skipped_files_from_future = future.result()
 
-            # Lock for updating shared counters
-            with self.downloaded_files_lock: # Using this lock for these counters too
+            with self.downloaded_files_lock:
                  self.download_counter += downloaded_files_from_future
                  self.skip_counter += skipped_files_from_future
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
-        except Exception as e: # Error in this callback itself
+        except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_future_result callback: {e}\n{traceback.format_exc(limit=2)}")
 
-        # Check if all tasks are done
         if self.total_posts_to_process > 0 and self.processed_posts_count >= self.total_posts_to_process:
-            # More robust check: ensure all submitted futures are actually done
             all_done = all(f.done() for f in self.active_futures)
             if all_done:
-                QApplication.processEvents() # Process any pending GUI events
+                QApplication.processEvents()
                 self.log_signal.emit("🏁 All submitted post tasks have completed or failed.")
                 self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set())
 
 
     def set_ui_enabled(self, enabled):
-        # List of widgets to toggle enabled state
         widgets_to_toggle = [
-            self.download_btn, self.link_input, self.dir_input, self.dir_button,
-            self.radio_all, self.radio_images, self.radio_videos,
+            self.download_btn, self.link_input,
+            self.radio_all, self.radio_images, self.radio_videos, self.radio_only_links,
             self.skip_zip_checkbox, self.skip_rar_checkbox,
             self.use_subfolders_checkbox, self.compress_images_checkbox,
             self.download_thumbnails_checkbox, self.use_multithreading_checkbox,
             self.skip_words_input, self.character_search_input, self.new_char_input,
-            self.add_char_button, self.delete_char_button, 
-            # self.external_links_checkbox, # Keep this enabled
+            self.add_char_button, self.delete_char_button,
             self.start_page_input, self.end_page_input, self.page_range_label, self.to_label,
             self.character_input, self.custom_folder_input, self.custom_folder_label,
-            self.reset_button, 
-            # self.log_verbosity_button, # Keep this enabled
+            self.reset_button,
             self.manga_mode_checkbox
         ]
         for widget in widgets_to_toggle:
-            if widget: # Check if widget exists 
+            if widget:
                 widget.setEnabled(enabled)
-        
-        # --- Explicitly keep these enabled ---
+
         if self.external_links_checkbox:
-            self.external_links_checkbox.setEnabled(True)
+            is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
+            self.external_links_checkbox.setEnabled(not is_only_links)
         if self.log_verbosity_button:
              self.log_verbosity_button.setEnabled(True)
-        # --- END ---
 
-        # --- MODIFIED: Handle thread count input based on checkbox state ---
+
         multithreading_currently_on = self.use_multithreading_checkbox.isChecked()
         self.thread_count_input.setEnabled(enabled and multithreading_currently_on)
         self.thread_count_label.setEnabled(enabled and multithreading_currently_on)
-        # --- END MODIFIED ---
 
-        # Handle other dependent widgets
+
         subfolders_currently_on = self.use_subfolders_checkbox.isChecked()
         self.use_subfolder_per_post_checkbox.setEnabled(enabled and subfolders_currently_on)
 
-        self.cancel_btn.setEnabled(not enabled) # Cancel is enabled when download is running
+        self.cancel_btn.setEnabled(not enabled)
 
-        if enabled: # When re-enabling UI, refresh dependent states
-            self.update_ui_for_subfolders(subfolders_currently_on)
-            self.update_custom_folder_visibility()
-            self.update_page_range_enabled_state()
-            if self.manga_mode_checkbox:
-                self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
-            self._handle_multithreading_toggle(multithreading_currently_on) # Refresh thread count state
+        if enabled:
+            self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
+            self._handle_multithreading_toggle(multithreading_currently_on)
 
 
     def cancel_download(self):
-        if not self.cancel_btn.isEnabled() and not self.cancellation_event.is_set(): # Avoid multiple cancel calls
+        if not self.cancel_btn.isEnabled() and not self.cancellation_event.is_set():
             self.log_signal.emit("ℹ️ No active download to cancel or already cancelling.")
             return
 
         self.log_signal.emit("⚠️ Requesting cancellation of download process...")
-        self.cancellation_event.set() # Signal all threads/workers to stop
+        self.cancellation_event.set()
 
         if self.download_thread and self.download_thread.isRunning():
-            # For QThread, requestInterruption() is a polite request.
-            # The thread's run() loop must check isInterruptionRequested() or self.cancellation_event.
-            self.download_thread.requestInterruption() 
+            self.download_thread.requestInterruption()
             self.log_signal.emit("   Signaled single download thread to interrupt.")
 
-        # --- MODIFICATION START: Initiate thread pool shutdown immediately ---
         if self.thread_pool:
             self.log_signal.emit("   Initiating immediate shutdown and cancellation of worker pool tasks...")
-            # Start shutdown non-blockingly, attempting to cancel futures
             self.thread_pool.shutdown(wait=False, cancel_futures=True)
-        # --- MODIFICATION END ---
-        
-        # --- ADDED: Clear link queue on cancel ---
-        self.external_link_queue.clear()
-        self._is_processing_external_link_queue = False 
-        # --- END ADDED ---
 
-        self.cancel_btn.setEnabled(False) # Disable cancel button after initiating cancellation
+        self.external_link_queue.clear()
+        self._is_processing_external_link_queue = False
+        self._current_link_post_title = None
+
+        self.cancel_btn.setEnabled(False)
         self.progress_label.setText("Progress: Cancelling...")
         self.file_progress_label.setText("")
-        # The download_finished method will be called eventually when threads finally exit.
 
 
     def download_finished(self, total_downloaded, total_skipped, cancelled_by_user):
-        # This method is the final cleanup point, called by DownloadThread or _handle_future_result
         status_message = "Cancelled by user" if cancelled_by_user else "Finished"
         self.log_signal.emit("="*40 + f"\n🏁 Download {status_message}!\n   Summary: Downloaded Files={total_downloaded}, Skipped Files={total_skipped}\n" + "="*40)
         self.progress_label.setText(f"{status_message}: {total_downloaded} downloaded, {total_skipped} skipped.")
-        self.file_progress_label.setText("") # Clear file progress
-        
-        # --- ADDED: Attempt to process any remaining links in queue if not cancelled ---
-        # This will now trigger the rapid display because _is_download_active() will be false
+        self.file_progress_label.setText("")
+
         if not cancelled_by_user:
             self._try_process_next_external_link()
-        # --- END ADDED ---
 
-        # Disconnect signals from single download thread if it was used
         if self.download_thread:
-            try: 
+            try:
                 if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
                 if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
                 if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.finished_signal)
                 if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
-                # MODIFIED: Ensure disconnection from the correct handler
                 if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
                 if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
-            except (TypeError, RuntimeError) as e: 
+            except (TypeError, RuntimeError) as e:
                  self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
-            self.download_thread = None # Clear reference
+            self.download_thread = None
 
-        # Shutdown thread pool if it exists and hasn't been cleared yet
-        # Use wait=True here to ensure cleanup before UI re-enables
         if self.thread_pool:
             self.log_signal.emit("   Ensuring worker thread pool is shut down...")
-            # Shutdown might have been initiated by cancel_download, but wait=True ensures completion.
-            self.thread_pool.shutdown(wait=True, cancel_futures=True) 
+            self.thread_pool.shutdown(wait=True, cancel_futures=True)
             self.thread_pool = None
-        self.active_futures = [] # Clear list of futures
+        self.active_futures = []
 
-        # Clear cancellation event here AFTER threads have likely stopped checking it
-        # self.cancellation_event.clear() 
-        # Let's clear it in start_download and reset_application_state instead for safety.
 
-        self.set_ui_enabled(True) # Re-enable UI
-        self.cancel_btn.setEnabled(False) # Disable cancel button
+        self.set_ui_enabled(True)
+        self.cancel_btn.setEnabled(False)
 
-    # --- ADDED: Method to toggle log verbosity ---
     def toggle_log_verbosity(self):
         self.basic_log_mode = not self.basic_log_mode
         if self.basic_log_mode:
@@ -1638,7 +1903,6 @@ class DownloaderApp(QWidget):
         else:
             self.log_verbosity_button.setText("Show Basic Log")
             self.log_signal.emit("="*20 + " Full Log Mode Enabled " + "="*20)
-    # --- END ADDED ---
 
     def reset_application_state(self):
         is_running = (self.download_thread and self.download_thread.isRunning()) or \
@@ -1648,21 +1912,20 @@ class DownloaderApp(QWidget):
             return
 
         self.log_signal.emit("🔄 Resetting application state to defaults...")
-        self._reset_ui_to_defaults() # Reset UI elements to their initial state
+        self._reset_ui_to_defaults()
         self.main_log_output.clear()
         self.external_log_output.clear()
-        if self.show_external_links: # Re-add header if shown
-             self.external_log_output.append("🔗 External Links Found:") 
+        if self.show_external_links:
+             self.external_log_output.append("🔗 External Links Found:")
 
-        # --- ADDED: Clear link queue on reset ---
         self.external_link_queue.clear()
+        self.extracted_links_cache = []
         self._is_processing_external_link_queue = False
-        # --- END ADDED ---
+        self._current_link_post_title = None
 
         self.progress_label.setText("Progress: Idle")
         self.file_progress_label.setText("")
 
-        # Clear session-specific data
         with self.downloaded_files_lock:
             count = len(self.downloaded_files)
             self.downloaded_files.clear()
@@ -1676,21 +1939,17 @@ class DownloaderApp(QWidget):
         self.processed_posts_count = 0
         self.download_counter = 0
         self.skip_counter = 0
-        # self.external_links = [] # This list seems unused, keeping it commented
 
-        self.cancellation_event.clear() # Ensure cancellation event is reset
-        
-        # --- ADDED: Reset log verbosity mode ---
+        self.cancellation_event.clear()
+
         self.basic_log_mode = False
         if self.log_verbosity_button:
             self.log_verbosity_button.setText("Show Basic Log")
-        # --- END ADDED ---
 
         self.log_signal.emit("✅ Application reset complete.")
 
 
     def _reset_ui_to_defaults(self):
-        # Reset all input fields
         self.link_input.clear()
         self.dir_input.clear()
         self.custom_folder_input.clear()
@@ -1702,78 +1961,59 @@ class DownloaderApp(QWidget):
         self.character_search_input.clear()
         self.thread_count_input.setText("4")
 
-        # Reset radio buttons and checkboxes to defaults
         self.radio_all.setChecked(True)
         self.skip_zip_checkbox.setChecked(True)
         self.skip_rar_checkbox.setChecked(True)
         self.download_thumbnails_checkbox.setChecked(False)
         self.compress_images_checkbox.setChecked(False)
-        self.use_subfolders_checkbox.setChecked(True) 
+        self.use_subfolders_checkbox.setChecked(True)
         self.use_subfolder_per_post_checkbox.setChecked(False)
-        self.use_multithreading_checkbox.setChecked(True) 
-        self.external_links_checkbox.setChecked(False) 
+        self.use_multithreading_checkbox.setChecked(True)
+        self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox:
-            self.manga_mode_checkbox.setChecked(False) 
+            self.manga_mode_checkbox.setChecked(False)
 
-        # Explicitly call update methods that control UI element states
-        self.update_ui_for_subfolders(self.use_subfolders_checkbox.isChecked())
-        self.update_custom_folder_visibility()
-        self.update_page_range_enabled_state()
-        self.update_multithreading_label(self.thread_count_input.text())
-        if self.manga_mode_checkbox:
-             self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
-        self.filter_character_list("") # Clear character list filter
-        
-        # --- MODIFIED: Reset thread count state based on checkbox ---
+        self._handle_filter_mode_change(self.radio_all, True)
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
-        # --- END MODIFIED ---
 
-        # Reset button states
+        self.filter_character_list("")
+
         self.download_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         if self.reset_button: self.reset_button.setEnabled(True)
-        # Reset log verbosity button text
         if self.log_verbosity_button: self.log_verbosity_button.setText("Show Basic Log")
 
 
     def prompt_add_character(self, character_name):
-        global KNOWN_NAMES 
-        # This method is called via a signal from a worker thread.
-        # It interacts with the GUI, so it's correctly placed in the GUI class.
+        global KNOWN_NAMES
         reply = QMessageBox.question(self, "Add Filter Name to Known List?",
                                       f"The name '{character_name}' was encountered or used as a filter.\nIt's not in your known names list (used for folder suggestions).\nAdd it now?",
                                       QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         result = (reply == QMessageBox.Yes)
         if result:
-              self.new_char_input.setText(character_name) # Populate input for add_new_character
-              # Call add_new_character, which now includes similarity checks and its own QMessageBox
-              # The result of add_new_character (True/False) reflects if it was actually added.
-              if self.add_new_character(): 
+              self.new_char_input.setText(character_name)
+              if self.add_new_character():
                    self.log_signal.emit(f"✅ Added '{character_name}' to known names via background prompt.")
               else:
-                   # add_new_character handles its own logging and popups if it fails or user cancels similarity warning
-                   result = False # Update result if add_new_character decided not to add
+                   result = False
                    self.log_signal.emit(f"ℹ️ Adding '{character_name}' via background prompt was declined or failed (e.g., similarity warning, duplicate).")
-        # Send the final outcome (whether it was added or user said yes initially but then cancelled)
         self.character_prompt_response_signal.emit(result)
 
     def receive_add_character_result(self, result):
-        # This method receives the result from prompt_add_character (after it has tried to add the name)
-        # and is typically connected to the worker thread's logic to unblock it.
-        with QMutexLocker(self.prompt_mutex): # Ensure thread-safe access if worker modifies shared state based on this
+        with QMutexLocker(self.prompt_mutex):
              self._add_character_response = result
         self.log_signal.emit(f"   Main thread received character prompt response: {'Action resulted in addition/confirmation' if result else 'Action resulted in no addition/declined'}")
 
 
 if __name__ == '__main__':
-    import traceback 
+    import traceback
     try:
         qt_app = QApplication(sys.argv)
-        if getattr(sys, 'frozen', False): 
+        if getattr(sys, 'frozen', False):
             base_dir = sys._MEIPASS
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
-        
+
         icon_path = os.path.join(base_dir, 'Kemono.ico')
         if os.path.exists(icon_path):
             qt_app.setWindowIcon(QIcon(icon_path))
@@ -1782,14 +2022,27 @@ if __name__ == '__main__':
 
         downloader_app_instance = DownloaderApp()
         downloader_app_instance.show()
+
+        # --- ADDED: Show Tour Dialog if needed ---
+        if TourDialog: # Check if TourDialog was imported successfully
+            tour_result = TourDialog.run_tour_if_needed(downloader_app_instance)
+            if tour_result == QDialog.Accepted:
+                print("Tour completed by user.")
+            elif tour_result == QDialog.Rejected:
+                # This means tour was skipped OR already shown.
+                # You can use TourDialog.settings.value(TourDialog.TOUR_SHOWN_KEY)
+                # to differentiate if needed, but run_tour_if_needed handles the "show once" logic.
+                print("Tour skipped or was already shown.")
+        # --- END ADDED ---
+
         exit_code = qt_app.exec_()
-        print(f"Application finished with exit code: {exit_code}") 
+        print(f"Application finished with exit code: {exit_code}")
         sys.exit(exit_code)
     except SystemExit:
         pass # Allow clean exit
     except Exception as e:
         print("--- CRITICAL APPLICATION ERROR ---")
         print(f"An unhandled exception occurred: {e}")
-        traceback.print_exc() 
+        traceback.print_exc()
         print("--- END CRITICAL ERROR ---")
         sys.exit(1)
