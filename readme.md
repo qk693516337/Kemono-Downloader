@@ -13,9 +13,6 @@ A feature-rich GUI application built with PyQt5 to download content from [Kemono
   * Failed files auto-retry up to 3 times.  
   * Clear logging for each retry attempt.
 
-* **Batch URL Import**  
-  * Load multiple creator or post URLs from a `.txt` file.  
-
 * **Improved Manga Mode**  
   * Better post ordering and handling of missing or untitled posts.  
   * Optional numeric-only sorting for consistent naming.
@@ -63,7 +60,7 @@ A feature-rich GUI application built with PyQt5 to download content from [Kemono
   Full threading for creators, single-thread fallback for post mode.
 
 * **Download Controls**  
-  Cancel, pause, or skip files mid-download.  
+  Cancel files mid-download.  
   Visual progress tracking with per-post summaries.
 
 * **Dark Mode**  
@@ -72,10 +69,6 @@ A feature-rich GUI application built with PyQt5 to download content from [Kemono
 ---
 
 ## 🔧 Backend Enhancements
-
-* **Session File Support**  
-  Downloads can be resumed even after a crash or restart.  
-  Session progress is saved automatically.
 
 * **Retry Logic**  
   Auto-retries individual failed files before skipping.  
