@@ -96,3 +96,52 @@ A feature-rich GUI application built with PyQt5 to download content from [Kemono
 
 ```bash
 pip install PyQt5 requests Pillow
+
+```
+
+This How it work
+📥 START DOWNLOAD
+│
+├── 🔍 Check Filter Settings
+│   ├── Character Filter (if any)
+│   └── Skip Words (posts/files)
+│
+├── 📂 Determine Folder Structure
+│   ├── Is "Separate Folders by Name/Title" Enabled?
+│   │   ├── YES:
+│   │   │   ├── Check Known Character List
+│   │   │   │   ├── If match in post title → use as folder name
+│   │   │   │   └── If no match → use post title (cleaned)
+│   │   │   └── Also check for fallback to creator name or "Misc"
+│   │   └── NO:
+│   │       └── Save all files to selected root folder
+│   │
+│   └── Is "Subfolder per Post" Enabled?
+│       └── YES: Append post ID or cleaned post title under base folder
+│
+├── 📑 File Filtering & Pre-Checks
+│   ├── Skip ZIP / RAR
+│   ├── File type check: Image / Video / Link
+│   └── Check for duplicates (hash or name)
+│
+├── 📘 Manga Mode Enabled?
+│   ├── YES:
+│   │   ├── Is Rename-to-Post-Title Toggle ON?
+│   │   │   ├── YES:
+│   │   │   │   ├── One image per post → Rename to: `<PostTitle>_001.jpg`
+│   │   │   │   ├── Multi-image post → Attempt sort by number or keep original
+│   │   │   │   └── Add log entry for files that kept original name
+│   │   │   └── NO:
+│   │   │       └── Keep all original filenames
+│   │   └── Sequence posts by upload date (oldest = page 1)
+│   │
+│   └── NO:
+│       └── Use default or filtered file name, skip renaming logic
+│
+├── ⏬ Download File(s)
+│   ├── Apply multithreading (if enabled)
+│   └── Retry logic for network failures
+│
+└── 📜 Log & Post Processing Summary
+    ├── Save summary per post (Downloaded/Skipped)
+    └── If Manga Mode: show renaming log for clarity
