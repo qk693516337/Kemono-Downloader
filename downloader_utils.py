@@ -46,8 +46,8 @@ DUPLICATE_MODE_MOVE_TO_SUBFOLDER = "move"
 fastapi_app = None
 KNOWN_NAMES = []
 
-MIN_SIZE_FOR_MULTIPART_DOWNLOAD = 10 * 1024 * 1024  # 10 MB
-MAX_PARTS_FOR_MULTIPART_DOWNLOAD = 8 # Max concurrent connections for a single file
+MIN_SIZE_FOR_MULTIPART_DOWNLOAD = 10 * 1024 * 1024  # 10 MB - Stays the same
+MAX_PARTS_FOR_MULTIPART_DOWNLOAD = 15 # Max concurrent connections for a single file
 
 IMAGE_EXTENSIONS = {
     '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
@@ -266,7 +266,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
                     logger("✅ Reached end of posts (Manga Mode fetch all).")
                     break
                 all_posts_for_manga_mode.extend(posts_batch_manga)
-                current_offset_manga += len(posts_batch_manga)
+                current_offset_manga += page_size # Increment by page_size for the next API call's 'o' parameter
                 time.sleep(0.6)
             except RuntimeError as e:
                 if "cancelled by user" in str(e).lower():
@@ -353,7 +353,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
         if processed_target_post_flag:
             break
 
-        current_offset += len(posts_batch)
+        current_offset += page_size # Increment by page_size for the next API call's 'o' parameter
         current_page_num += 1
         time.sleep(0.6)
             
