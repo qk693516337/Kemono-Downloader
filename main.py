@@ -2417,8 +2417,6 @@ if __name__ == '__main__':
         downloader_app_instance._center_on_screen()
 
         if TourDialog:
-            # Temporarily force the tour to be considered as "not shown"
-            # This ensures it appears for this run, especially for a fresh .exe
             tour_settings = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
             tour_settings.setValue(TourDialog.TOUR_SHOWN_KEY, False)
             tour_settings.sync()
