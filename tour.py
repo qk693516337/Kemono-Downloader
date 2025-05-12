@@ -288,13 +288,15 @@ class TourDialog(QDialog):
     def run_tour_if_needed(parent_app_window):
         try:
             settings = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
-            never_show_again = settings.value(TourDialog.TOUR_SHOWN_KEY, False, type=bool)
+            never_show_again_from_settings = settings.value(TourDialog.TOUR_SHOWN_KEY, False, type=bool)
 
-            if never_show_again:
+            if never_show_again_from_settings:
+                print(f"[Tour] Skipped: '{TourDialog.TOUR_SHOWN_KEY}' is True in settings.")
                 return QDialog.Rejected
 
             tour_dialog = TourDialog(parent_app_window)
             result = tour_dialog.exec_()
+
             return result
         except Exception as e:
             print(f"[Tour] CRITICAL ERROR in run_tour_if_needed: {e}")
@@ -305,10 +307,11 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
 
     # --- For testing: force the tour to show by resetting the flag ---
-    # print("[Tour Test] Resetting 'Never show again' flag for testing purposes.")
-    # test_settings = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
-    # test_settings.setValue(TourDialog.TOUR_SHOWN_KEY, False) # Set to False to force tour
-    # test_settings.sync()
+    # This block ensures that if tour.py is run directly, the "Never show again" flag in QSettings is reset.
+    print("[Tour Direct Run] Resetting 'Never show again' flag in QSettings.")
+    test_settings = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
+    test_settings.setValue(TourDialog.TOUR_SHOWN_KEY, False) # Set to False to force tour
+    test_settings.sync()
     # --- End testing block ---
 
     print("[Tour Test] Running tour standalone...")

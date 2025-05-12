@@ -18,6 +18,13 @@ except ImportError:
     print("ERROR: Pillow library not found. Please install it: pip install Pillow")
     Image = None
 
+try:
+    from multipart_downloader import download_file_in_parts
+    MULTIPART_DOWNLOADER_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: multipart_downloader.py not found or import error: {e}. Multi-part downloads will be disabled.")
+    MULTIPART_DOWNLOADER_AVAILABLE = False
+    def download_file_in_parts(*args, **kwargs): return False, 0, None, None # Dummy function
 
 from io import BytesIO
 
@@ -32,8 +39,15 @@ CHAR_SCOPE_TITLE = "title"
 CHAR_SCOPE_FILES = "files"
 CHAR_SCOPE_BOTH = "both"
 
+# DUPLICATE_MODE_RENAME is removed. Renaming only happens within a target folder if needed.
+DUPLICATE_MODE_DELETE = "delete" 
+DUPLICATE_MODE_MOVE_TO_SUBFOLDER = "move"
+
 fastapi_app = None
 KNOWN_NAMES = []
+
+MIN_SIZE_FOR_MULTIPART_DOWNLOAD = 10 * 1024 * 1024  # 10 MB
+MAX_PARTS_FOR_MULTIPART_DOWNLOAD = 8 # Max concurrent connections for a single file
 
 IMAGE_EXTENSIONS = {
     '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
@@ -50,20 +64,31 @@ ARCHIVE_EXTENSIONS = {
 def is_title_match_for_character(post_title, character_name_filter):
     if not post_title or not character_name_filter:
         return False
-    pattern = r"(?i)\b" + re.escape(character_name_filter) + r"\b"
-    return bool(re.search(pattern, post_title))
+    safe_filter = str(character_name_filter).strip()
+    if not safe_filter: 
+        return False
+        
+    pattern = r"(?i)\b" + re.escape(safe_filter) + r"\b"
+    match_result = bool(re.search(pattern, post_title))
+    return match_result
 
 def is_filename_match_for_character(filename, character_name_filter):
     if not filename or not character_name_filter:
         return False
-    return character_name_filter.lower() in filename.lower()
+    
+    safe_filter = str(character_name_filter).strip().lower()
+    if not safe_filter:
+        return False
+        
+    match_result = safe_filter in filename.lower()
+    return match_result
 
 
 def clean_folder_name(name):
     if not isinstance(name, str): name = str(name)
     cleaned = re.sub(r'[^\w\s\-\_\.\(\)]', '', name)
     cleaned = cleaned.strip()
-    cleaned = re.sub(r'\s+', '_', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned)
     return cleaned if cleaned else "untitled_folder"
 
 
@@ -366,7 +391,7 @@ class PostProcessorSignals(QObject):
     progress_signal = pyqtSignal(str)
     file_download_status_signal = pyqtSignal(bool)
     external_link_signal = pyqtSignal(str, str, str, str)
-    file_progress_signal = pyqtSignal(str, int, int)
+    file_progress_signal = pyqtSignal(str, object)
 
 
 class PostProcessorWorker:
@@ -384,12 +409,14 @@ class PostProcessorWorker:
                  num_file_threads=4, skip_current_file_flag=None,
                  manga_mode_active=False,
                  manga_filename_style=STYLE_POST_TITLE,
-                 char_filter_scope=CHAR_SCOPE_FILES
-                 ):
+                 char_filter_scope=CHAR_SCOPE_FILES,
+                 remove_from_filename_words_list=None,
+                 allow_multipart_download=True,
+                 duplicate_file_mode=DUPLICATE_MODE_DELETE):
         self.post = post_data
         self.download_root = download_root
         self.known_names = known_names
-        self.filter_character_list = filter_character_list if filter_character_list else []
+        self.filter_character_list_objects = filter_character_list if filter_character_list else []
         self.unwanted_keywords = unwanted_keywords if unwanted_keywords is not None else set()
         self.filter_mode = filter_mode
         self.skip_zip = skip_zip
@@ -421,7 +448,10 @@ class PostProcessorWorker:
         self.manga_mode_active = manga_mode_active
         self.manga_filename_style = manga_filename_style
         self.char_filter_scope = char_filter_scope
-
+        self.remove_from_filename_words_list = remove_from_filename_words_list if remove_from_filename_words_list is not None else []
+        self.allow_multipart_download = allow_multipart_download
+        self.duplicate_file_mode = duplicate_file_mode # This will be the effective mode (possibly overridden by main.py for manga)
+        
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
@@ -438,15 +468,19 @@ class PostProcessorWorker:
     def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event,
                               post_title="", file_index_in_post=0, num_files_in_this_post=1):
         was_original_name_kept_flag = False 
-        final_filename_saved_for_return = ""
+        final_filename_saved_for_return = "" 
 
+        # current_target_folder_path is the actual folder where the file will be saved.
+        # It starts as the main character/post folder (target_folder_path) by default.
+        current_target_folder_path = target_folder_path 
 
         if self.check_cancel() or (skip_event and skip_event.is_set()): return 0, 1, "", False
 
         file_url = file_info.get('url')
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
         
-        final_filename_saved_for_return = api_original_filename 
+        # This is the ideal name for the file if it were to be saved in the main target_folder_path.
+        filename_to_save_in_main_path = "" 
 
         if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_FILES or self.skip_words_scope == SKIP_SCOPE_BOTH):
             filename_to_check_for_skip_words = api_original_filename.lower()
@@ -458,70 +492,54 @@ class PostProcessorWorker:
         original_filename_cleaned_base, original_ext = os.path.splitext(clean_filename(api_original_filename))
         if not original_ext.startswith('.'): original_ext = '.' + original_ext if original_ext else ''
 
-        filename_to_save = ""
-        if self.manga_mode_active:
+        if self.manga_mode_active: # Note: duplicate_file_mode is overridden to "Delete" in main.py if manga_mode is on
             if self.manga_filename_style == STYLE_ORIGINAL_NAME:
-                filename_to_save = clean_filename(api_original_filename)
+                filename_to_save_in_main_path = clean_filename(api_original_filename)
                 was_original_name_kept_flag = True
             elif self.manga_filename_style == STYLE_POST_TITLE:
                 if post_title and post_title.strip():
                     cleaned_post_title_base = clean_filename(post_title.strip())
                     if num_files_in_this_post > 1:
                         if file_index_in_post == 0:
-                            filename_to_save = f"{cleaned_post_title_base}{original_ext}"
-                            was_original_name_kept_flag = False
+                            filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
                         else:
-                            filename_to_save = clean_filename(api_original_filename)
+                            filename_to_save_in_main_path = clean_filename(api_original_filename)
                             was_original_name_kept_flag = True 
                     else:
-                        filename_to_save = f"{cleaned_post_title_base}{original_ext}"
-                        was_original_name_kept_flag = False
+                        filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
                 else:
-                    filename_to_save = clean_filename(api_original_filename)
-                    was_original_name_kept_flag = False
-                    self.logger(f"⚠️ Manga mode (Post Title Style): Post title missing for post {original_post_id_for_log}. Using cleaned original filename '{filename_to_save}'.")
-            else:
+                    filename_to_save_in_main_path = clean_filename(api_original_filename)
+                    self.logger(f"⚠️ Manga mode (Post Title Style): Post title missing for post {original_post_id_for_log}. Using cleaned original filename '{filename_to_save_in_main_path}'.")
+            else: 
                 self.logger(f"⚠️ Manga mode: Unknown filename style '{self.manga_filename_style}'. Defaulting to original filename for '{api_original_filename}'.")
-                filename_to_save = clean_filename(api_original_filename)
-                was_original_name_kept_flag = False
+                filename_to_save_in_main_path = clean_filename(api_original_filename)
 
-            if filename_to_save:
-                counter = 1
-                base_name_coll, ext_coll = os.path.splitext(filename_to_save)
-                temp_filename_for_collision_check = filename_to_save
-                while os.path.exists(os.path.join(target_folder_path, temp_filename_for_collision_check)):
-                    if self.manga_filename_style == STYLE_POST_TITLE and file_index_in_post == 0 and num_files_in_this_post > 1:
-                         temp_filename_for_collision_check = f"{base_name_coll}_{counter}{ext_coll}"
-                    else:
-                         temp_filename_for_collision_check = f"{base_name_coll}_{counter}{ext_coll}"
-                    counter += 1
-                if temp_filename_for_collision_check != filename_to_save:
-                    filename_to_save = temp_filename_for_collision_check
-            else:
-                filename_to_save = f"manga_file_{original_post_id_for_log}_{file_index_in_post + 1}{original_ext}"
-                self.logger(f"⚠️ Manga mode: Generated filename was empty. Using generic fallback: '{filename_to_save}'.")
+            if not filename_to_save_in_main_path: 
+                filename_to_save_in_main_path = f"manga_file_{original_post_id_for_log}_{file_index_in_post + 1}{original_ext}"
+                self.logger(f"⚠️ Manga mode: Generated filename was empty. Using generic fallback: '{filename_to_save_in_main_path}'.")
                 was_original_name_kept_flag = False
-
-        else:
-            filename_to_save = clean_filename(api_original_filename)
+        else: 
+            filename_to_save_in_main_path = clean_filename(api_original_filename)
             was_original_name_kept_flag = False
-            counter = 1
-            base_name_coll, ext_coll = os.path.splitext(filename_to_save)
-            temp_filename_for_collision_check = filename_to_save
-            while os.path.exists(os.path.join(target_folder_path, temp_filename_for_collision_check)):
-                temp_filename_for_collision_check = f"{base_name_coll}_{counter}{ext_coll}"
-                counter += 1
-            if temp_filename_for_collision_check != filename_to_save:
-                filename_to_save = temp_filename_for_collision_check
-
-        final_filename_for_sets_and_saving = filename_to_save
-        final_filename_saved_for_return = final_filename_for_sets_and_saving 
-
-        if not self.download_thumbnails:
+            
+        if self.remove_from_filename_words_list and filename_to_save_in_main_path:
+            base_name_for_removal, ext_for_removal = os.path.splitext(filename_to_save_in_main_path)
+            modified_base_name = base_name_for_removal
+            for word_to_remove in self.remove_from_filename_words_list:
+                if not word_to_remove: continue
+                pattern = re.compile(re.escape(word_to_remove), re.IGNORECASE)
+                modified_base_name = pattern.sub("", modified_base_name)
+            modified_base_name = re.sub(r'[_.\s-]+', '_', modified_base_name) 
+            modified_base_name = modified_base_name.strip('_') 
+            if modified_base_name and modified_base_name != ext_for_removal.lstrip('.'):
+                filename_to_save_in_main_path = modified_base_name + ext_for_removal
+            else: 
+                filename_to_save_in_main_path = base_name_for_removal + ext_for_removal 
+        
+        if not self.download_thumbnails: 
             is_img_type = is_image(api_original_filename)
             is_vid_type = is_video(api_original_filename)
             is_archive_type = is_archive(api_original_filename)
-
 
             if self.filter_mode == 'archive':
                 if not is_archive_type:
@@ -543,174 +561,265 @@ class PostProcessorWorker:
                 self.logger(f"   -> Pref Skip: '{api_original_filename}' (RAR).")
                 return 0, 1, api_original_filename, False
 
-        target_folder_basename = os.path.basename(target_folder_path)
-        current_save_path = os.path.join(target_folder_path, final_filename_for_sets_and_saving)
+        if not self.manga_mode_active:
+            # --- Pre-Download Duplicate Handling (Standard Mode Only) ---
+            is_duplicate_for_main_folder_by_path = os.path.exists(os.path.join(target_folder_path, filename_to_save_in_main_path)) and \
+                                                   os.path.getsize(os.path.join(target_folder_path, filename_to_save_in_main_path)) > 0
+            
+            is_duplicate_for_main_folder_by_session_name = False
+            with self.downloaded_files_lock:
+                if filename_to_save_in_main_path in self.downloaded_files:
+                    is_duplicate_for_main_folder_by_session_name = True
 
-        if os.path.exists(current_save_path) and os.path.getsize(current_save_path) > 0:
-             self.logger(f"   -> Exists (Path): '{final_filename_for_sets_and_saving}' in '{target_folder_basename}'.")
-             with self.downloaded_files_lock: self.downloaded_files.add(final_filename_for_sets_and_saving)
-             return 0, 1, final_filename_for_sets_and_saving, was_original_name_kept_flag
+            if is_duplicate_for_main_folder_by_path or is_duplicate_for_main_folder_by_session_name:
+                if self.duplicate_file_mode == DUPLICATE_MODE_DELETE:
+                    reason = "Path Exists" if is_duplicate_for_main_folder_by_path else "Session Name"
+                    self.logger(f"   -> Delete Duplicate ({reason}): '{filename_to_save_in_main_path}'. Skipping download.")
+                    with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+                    return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
+                
+                elif self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER:
+                    reason = "Path Exists" if is_duplicate_for_main_folder_by_path else "Session Name"
+                    self.logger(f"   -> Pre-DL Move ({reason}): '{filename_to_save_in_main_path}'. Will target 'Duplicate' subfolder.")
+                    current_target_folder_path = os.path.join(target_folder_path, "Duplicate")
+                    with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) 
         
-        with self.downloaded_files_lock:
-            if final_filename_for_sets_and_saving in self.downloaded_files:
-                self.logger(f"   -> Global Skip (Filename): '{final_filename_for_sets_and_saving}' already recorded this session.")
-                return 0, 1, final_filename_for_sets_and_saving, was_original_name_kept_flag
+        try:
+            os.makedirs(current_target_folder_path, exist_ok=True)
+        except OSError as e:
+            self.logger(f"   ❌ Critical error creating directory '{current_target_folder_path}': {e}. Skipping file '{api_original_filename}'.")
+            return 0, 1, api_original_filename, False
+        
+        # If mode is MOVE (and not manga mode), and current_target_folder_path is now "Duplicate",
+        # check if the file *already* exists by its base name in this "Duplicate" folder. (Standard Mode Only)
+        if not self.manga_mode_active and \
+           self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER and \
+           "Duplicate" in current_target_folder_path.split(os.sep) and \
+           os.path.exists(os.path.join(current_target_folder_path, filename_to_save_in_main_path)):
+            self.logger(f"   -> File '{filename_to_save_in_main_path}' already exists in '{os.path.basename(current_target_folder_path)}' subfolder. Skipping download.")
+            # The name was already added to downloaded_files if it was a pre-DL move.
+            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
 
+        # --- Download Attempt ---
         max_retries = 3
         retry_delay = 5
         downloaded_size_bytes = 0
         calculated_file_hash = None
-        file_content_bytes = None
-        total_size_bytes = 0
-        download_successful_flag = False
-
-        for attempt_num in range(max_retries + 1):
-            if self.check_cancel() or (skip_event and skip_event.is_set()):
-                break
+        file_content_bytes = None 
+        total_size_bytes = 0 
+        download_successful_flag = False 
+        
+        for attempt_num_single_stream in range(max_retries + 1): 
+            if self.check_cancel() or (skip_event and skip_event.is_set()): break
             try:
-                if attempt_num > 0:
-                    self.logger(f"   Retrying '{api_original_filename}' (Attempt {attempt_num}/{max_retries})...")
-                    time.sleep(retry_delay * (2**(attempt_num - 1)))
-
+                if attempt_num_single_stream > 0:
+                    self.logger(f"   Retrying download for '{api_original_filename}' (Overall Attempt {attempt_num_single_stream + 1}/{max_retries + 1})...")
+                    time.sleep(retry_delay * (2**(attempt_num_single_stream - 1)))
+                
                 if self.signals and hasattr(self.signals, 'file_download_status_signal'):
                     self.signals.file_download_status_signal.emit(True)
-
+                
                 response = requests.get(file_url, headers=headers, timeout=(15, 300), stream=True)
                 response.raise_for_status()
+                total_size_bytes = int(response.headers.get('Content-Length', 0))
 
-                current_total_size_bytes_from_headers = int(response.headers.get('Content-Length', 0))
+                num_parts_for_file = min(self.num_file_threads, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
+                attempt_multipart = (self.allow_multipart_download and MULTIPART_DOWNLOADER_AVAILABLE and
+                                     num_parts_for_file > 1 and total_size_bytes > MIN_SIZE_FOR_MULTIPART_DOWNLOAD and
+                                     'bytes' in response.headers.get('Accept-Ranges', '').lower())
 
-                if attempt_num == 0:
-                    total_size_bytes = current_total_size_bytes_from_headers
-                    size_str = f"{total_size_bytes / (1024 * 1024):.2f} MB" if total_size_bytes > 0 else "unknown size"
-                    self.logger(f"⬇️ Downloading: '{api_original_filename}' (Size: {size_str}) [Saving as: '{final_filename_for_sets_and_saving}']")
-
-                current_attempt_total_size = total_size_bytes
+                if attempt_multipart:
+                    response.close() 
+                    if self.signals and hasattr(self.signals, 'file_download_status_signal'):
+                        self.signals.file_download_status_signal.emit(False)
+                    
+                    mp_save_path_base = os.path.join(current_target_folder_path, filename_to_save_in_main_path)
+                    mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
+                        file_url, mp_save_path_base, total_size_bytes, num_parts_for_file, headers,
+                        api_original_filename, self.signals, self.cancellation_event, skip_event, self.logger
+                    )
+                    if mp_success:
+                        download_successful_flag = True
+                        downloaded_size_bytes = mp_bytes
+                        calculated_file_hash = mp_hash
+                        file_content_bytes = mp_file_handle 
+                        break 
+                    else: 
+                        if attempt_num_single_stream < max_retries:
+                            self.logger(f"   Multi-part download attempt failed for '{api_original_filename}'. Retrying with single stream.")
+                        else: 
+                            download_successful_flag = False; break 
                 
+                self.logger(f"⬇️ Downloading (Single Stream): '{api_original_filename}' (Size: {total_size_bytes / (1024*1024):.2f} MB if known) [Base Name: '{filename_to_save_in_main_path}']")
                 file_content_buffer = BytesIO()
                 current_attempt_downloaded_bytes = 0
                 md5_hasher = hashlib.md5()
                 last_progress_time = time.time()
 
                 for chunk in response.iter_content(chunk_size=1 * 1024 * 1024):
-                    if self.check_cancel() or (skip_event and skip_event.is_set()):
-                        break
+                    if self.check_cancel() or (skip_event and skip_event.is_set()): break
                     if chunk:
-                        file_content_buffer.write(chunk)
-                        md5_hasher.update(chunk)
+                        file_content_buffer.write(chunk); md5_hasher.update(chunk)
                         current_attempt_downloaded_bytes += len(chunk)
-                        if time.time() - last_progress_time > 1 and current_attempt_total_size > 0 and \
+                        if time.time() - last_progress_time > 1 and total_size_bytes > 0 and \
                            self.signals and hasattr(self.signals, 'file_progress_signal'):
-                            self.signals.file_progress_signal.emit(
-                                api_original_filename,
-                                current_attempt_downloaded_bytes,
-                                current_attempt_total_size
-                            )
+                            self.signals.file_progress_signal.emit(api_original_filename, (current_attempt_downloaded_bytes, total_size_bytes))
                             last_progress_time = time.time()
                 
                 if self.check_cancel() or (skip_event and skip_event.is_set()):
-                    if file_content_buffer: file_content_buffer.close()
-                    break
+                    if file_content_buffer: file_content_buffer.close(); break
                 
-                if current_attempt_downloaded_bytes > 0 or (current_attempt_total_size == 0 and response.status_code == 200):
+                if current_attempt_downloaded_bytes > 0 or (total_size_bytes == 0 and response.status_code == 200):
                     calculated_file_hash = md5_hasher.hexdigest()
                     downloaded_size_bytes = current_attempt_downloaded_bytes
-                    if file_content_bytes: file_content_bytes.close()
-                    file_content_bytes = file_content_buffer
-                    file_content_bytes.seek(0)
-                    download_successful_flag = True
-                    break
-                else:
+                    if file_content_bytes: file_content_bytes.close() 
+                    file_content_bytes = file_content_buffer; file_content_bytes.seek(0)
+                    download_successful_flag = True; break
+                else: 
                     if file_content_buffer: file_content_buffer.close()
 
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
                 self.logger(f"   ❌ Download Error (Retryable): {api_original_filename}. Error: {e}")
                 if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close()
-            except requests.exceptions.RequestException as e:
+            except requests.exceptions.RequestException as e: 
                 self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
-                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close()
-                break
+                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
             except Exception as e:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
-                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close()
-                break
+                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
             finally:
                 if self.signals and hasattr(self.signals, 'file_download_status_signal'):
                     self.signals.file_download_status_signal.emit(False)
-        
+
         if self.signals and hasattr(self.signals, 'file_progress_signal'):
              final_total_for_progress = total_size_bytes if download_successful_flag and total_size_bytes > 0 else downloaded_size_bytes
-             self.signals.file_progress_signal.emit(api_original_filename, downloaded_size_bytes, final_total_for_progress)
+             self.signals.file_progress_signal.emit(api_original_filename, (downloaded_size_bytes, final_total_for_progress))
 
         if self.check_cancel() or (skip_event and skip_event.is_set()):
-            self.logger(f"   ⚠️ Download interrupted for {api_original_filename}.")
+            self.logger(f"   ⚠️ Download process interrupted for {api_original_filename}.")
             if file_content_bytes: file_content_bytes.close()
-            return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag
+            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
 
         if not download_successful_flag:
             self.logger(f"❌ Download failed for '{api_original_filename}' after {max_retries + 1} attempts.")
             if file_content_bytes: file_content_bytes.close()
-            return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag
+            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
 
-        with self.downloaded_file_hashes_lock:
-             if calculated_file_hash in self.downloaded_file_hashes:
-                self.logger(f"   -> Content Skip (Hash): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...) already downloaded this session.")
-                with self.downloaded_files_lock: self.downloaded_files.add(final_filename_for_sets_and_saving)
-                if file_content_bytes: file_content_bytes.close()
-                return 0, 1, final_filename_for_sets_and_saving, was_original_name_kept_flag
+        if not self.manga_mode_active:
+            # --- Post-Download Hash Check (Standard Mode Only) ---
+            with self.downloaded_file_hashes_lock:
+                 if calculated_file_hash in self.downloaded_file_hashes:
+                    if self.duplicate_file_mode == DUPLICATE_MODE_DELETE:
+                        self.logger(f"   -> Delete Duplicate (Hash): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...). Skipping save.")
+                        with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+                        if file_content_bytes: file_content_bytes.close()
+                        return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
+                    
+                    elif self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER:
+                        self.logger(f"   -> Post-DL Move (Hash): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...). Content already downloaded.")
+                        if "Duplicate" not in current_target_folder_path.split(os.sep): 
+                            current_target_folder_path = os.path.join(target_folder_path, "Duplicate")
+                            self.logger(f"     Redirecting to 'Duplicate' subfolder: '{current_target_folder_path}'")
+                            # Ensure "Duplicate" folder exists if this is a new redirection due to hash
+                            try: os.makedirs(current_target_folder_path, exist_ok=True)
+                            except OSError as e_mkdir_hash: self.logger(f"    Error creating Duplicate folder for hash collision: {e_mkdir_hash}")
+                            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) 
+        
+        # --- Final Filename Determination for Saving ---
+        filename_for_actual_save = filename_to_save_in_main_path 
 
-        bytes_to_write = file_content_bytes
-        final_filename_after_processing = final_filename_for_sets_and_saving
-        current_save_path_final = current_save_path
+        # If mode is MOVE (and not manga mode) and the file is destined for the main folder,
+        # but a file with that name *now* exists (e.g. race condition, or different file with same name not caught by hash),
+        # reroute it to the "Duplicate" folder.
+        if not self.manga_mode_active and \
+           self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER and \
+           current_target_folder_path == target_folder_path and \
+           os.path.exists(os.path.join(current_target_folder_path, filename_for_actual_save)):
+            self.logger(f"   -> Post-DL Move (Late Name Collision in Main): '{filename_for_actual_save}'. Moving to 'Duplicate'.")
+            current_target_folder_path = os.path.join(target_folder_path, "Duplicate")
+            try: # Ensure "Duplicate" folder exists if this is a new redirection
+                os.makedirs(current_target_folder_path, exist_ok=True)
+            except OSError as e_mkdir: self.logger(f"    Error creating Duplicate folder during late move: {e_mkdir}")
+            # The name filename_to_save_in_main_path was already added to downloaded_files if it was a pre-DL name collision.
+            # If it was a hash collision that got rerouted, it was also added.
+            # If this is a new reroute due to late name collision, ensure it's marked.
 
+
+        # Apply numeric suffix renaming (_1, _2) *only if needed within the current_target_folder_path*
+        # This means:
+        # - If current_target_folder_path is the main folder (and not MOVE mode, or MOVE mode but file was unique):
+        #   Renaming happens if a file with filename_for_actual_save exists there.
+        # - If current_target_folder_path is "Duplicate" (because of MOVE mode):
+        #   Renaming happens if filename_for_actual_save exists *within "Duplicate"*.
+        counter = 1
+        base_name_final_coll, ext_final_coll = os.path.splitext(filename_for_actual_save)
+        temp_filename_final_check = filename_for_actual_save
+        while os.path.exists(os.path.join(current_target_folder_path, temp_filename_final_check)):
+            temp_filename_final_check = f"{base_name_final_coll}_{counter}{ext_final_coll}"
+            counter += 1
+        if temp_filename_final_check != filename_for_actual_save:
+            self.logger(f"     Final rename for target folder '{os.path.basename(current_target_folder_path)}': '{temp_filename_final_check}' (was '{filename_for_actual_save}')")
+            filename_for_actual_save = temp_filename_final_check
+        
+        bytes_to_write = file_content_bytes 
+        final_filename_after_processing = filename_for_actual_save 
+        current_save_path_final = os.path.join(current_target_folder_path, final_filename_after_processing)
+        
         is_img_for_compress_check = is_image(api_original_filename)
         if is_img_for_compress_check and self.compress_images and Image and downloaded_size_bytes > (1.5 * 1024 * 1024):
             self.logger(f"   Compressing '{api_original_filename}' ({downloaded_size_bytes / (1024*1024):.2f} MB)...")
             try:
-                bytes_to_write.seek(0)
-                with Image.open(bytes_to_write) as img_obj:
+                bytes_to_write.seek(0) 
+                with Image.open(bytes_to_write) as img_obj: 
                     if img_obj.mode == 'P': img_obj = img_obj.convert('RGBA')
                     elif img_obj.mode not in ['RGB', 'RGBA', 'L']: img_obj = img_obj.convert('RGB')
-
                     compressed_bytes_io = BytesIO()
                     img_obj.save(compressed_bytes_io, format='WebP', quality=80, method=4)
                     compressed_size = compressed_bytes_io.getbuffer().nbytes
 
-                if compressed_size < downloaded_size_bytes * 0.9:
+                if compressed_size < downloaded_size_bytes * 0.9: 
                     self.logger(f"   Compression success: {compressed_size / (1024*1024):.2f} MB.")
-                    bytes_to_write.close()
-                    bytes_to_write = compressed_bytes_io
-                    bytes_to_write.seek(0)
-
-                    base_name_orig, _ = os.path.splitext(final_filename_for_sets_and_saving)
+                    if hasattr(bytes_to_write, 'close'): bytes_to_write.close() 
+                    
+                    original_part_file_path = os.path.join(current_target_folder_path, filename_to_save_in_main_path) + ".part" # Use original base for .part
+                    if os.path.exists(original_part_file_path):
+                        os.remove(original_part_file_path)
+                    
+                    bytes_to_write = compressed_bytes_io; bytes_to_write.seek(0)
+                    base_name_orig, _ = os.path.splitext(filename_for_actual_save) 
                     final_filename_after_processing = base_name_orig + '.webp'
-                    current_save_path_final = os.path.join(target_folder_path, final_filename_after_processing)
+                    current_save_path_final = os.path.join(current_target_folder_path, final_filename_after_processing)
                     self.logger(f"   Updated filename (compressed): {final_filename_after_processing}")
                 else:
                     self.logger(f"   Compression skipped: WebP not significantly smaller."); bytes_to_write.seek(0)
             except Exception as comp_e:
                 self.logger(f"❌ Compression failed for '{api_original_filename}': {comp_e}. Saving original."); bytes_to_write.seek(0)
 
-        final_filename_saved_for_return = final_filename_after_processing
-
-        if final_filename_after_processing != final_filename_for_sets_and_saving and \
+        if final_filename_after_processing != filename_for_actual_save and \
            os.path.exists(current_save_path_final) and os.path.getsize(current_save_path_final) > 0:
-            self.logger(f"   -> Exists (Path - Post-Compress): '{final_filename_after_processing}' in '{target_folder_basename}'.")
-            with self.downloaded_files_lock: self.downloaded_files.add(final_filename_after_processing)
-            bytes_to_write.close()
+            self.logger(f"   -> Exists (Path - Post-Compress): '{final_filename_after_processing}' in '{os.path.basename(current_target_folder_path)}'.")
+            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) 
+            if bytes_to_write and hasattr(bytes_to_write, 'close'): bytes_to_write.close()
             return 0, 1, final_filename_after_processing, was_original_name_kept_flag
 
         try:
-            os.makedirs(os.path.dirname(current_save_path_final), exist_ok=True)
-            with open(current_save_path_final, 'wb') as f_out:
-                f_out.write(bytes_to_write.getvalue())
+            os.makedirs(current_target_folder_path, exist_ok=True)
+            
+            if isinstance(bytes_to_write, BytesIO): 
+                with open(current_save_path_final, 'wb') as f_out:
+                    f_out.write(bytes_to_write.getvalue())
+            else: 
+                if hasattr(bytes_to_write, 'close'): bytes_to_write.close()
+                source_part_file = os.path.join(current_target_folder_path, filename_to_save_in_main_path) + ".part" # Use original base for .part
+                os.rename(source_part_file, current_save_path_final)
 
             with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
-            with self.downloaded_files_lock: self.downloaded_files.add(final_filename_after_processing)
-
-            self.logger(f"✅ Saved: '{final_filename_after_processing}' (from '{api_original_filename}', {downloaded_size_bytes / (1024*1024):.2f} MB) in '{target_folder_basename}'")
+            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+            
+            final_filename_saved_for_return = final_filename_after_processing 
+            self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024*1024):.2f} MB) in '{os.path.basename(current_target_folder_path)}'")
             time.sleep(0.05)
-            return 1, 0, final_filename_after_processing, was_original_name_kept_flag
+            return 1, 0, final_filename_saved_for_return, was_original_name_kept_flag
         except Exception as save_err:
              self.logger(f"❌ Save Fail for '{final_filename_after_processing}': {save_err}")
              if os.path.exists(current_save_path_final):
@@ -718,7 +827,8 @@ class PostProcessorWorker:
                   except OSError: self.logger(f"  -> Failed to remove partially saved file: {current_save_path_final}")
              return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag
         finally:
-            if bytes_to_write: bytes_to_write.close()
+            if bytes_to_write and hasattr(bytes_to_write, 'close'):
+                bytes_to_write.close()
 
 
     def process(self):
@@ -749,16 +859,32 @@ class PostProcessorWorker:
         post_is_candidate_by_title_char_match = False
         char_filter_that_matched_title = None
 
-        if self.filter_character_list and \
+        if self.filter_character_list_objects and \
            (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH):
-            for char_name in self.filter_character_list:
-                if is_title_match_for_character(post_title, char_name):
-                    post_is_candidate_by_title_char_match = True
-                    char_filter_that_matched_title = char_name
-                    self.logger(f"   Post title matches char filter '{char_name}' (Scope: {self.char_filter_scope}). Post is candidate.")
-                    break
+            self.logger(f"   [Debug Title Match] Checking post title '{post_title}' against {len(self.filter_character_list_objects)} filter objects. Scope: {self.char_filter_scope}") 
+            for idx, filter_item_obj in enumerate(self.filter_character_list_objects):
+                self.logger(f"     [Debug Title Match] Filter obj #{idx}: {filter_item_obj}") 
+                terms_to_check_for_title = list(filter_item_obj["aliases"])
+                if filter_item_obj["is_group"]:
+                    if filter_item_obj["name"] not in terms_to_check_for_title:
+                        terms_to_check_for_title.append(filter_item_obj["name"])
+                
+                unique_terms_for_title_check = list(set(terms_to_check_for_title)) 
+                self.logger(f"       [Debug Title Match] Unique terms for this filter obj: {unique_terms_for_title_check}") 
+
+                for term_to_match in unique_terms_for_title_check:
+                    self.logger(f"         [Debug Title Match] Checking term: '{term_to_match}'") 
+                    match_found_for_term = is_title_match_for_character(post_title, term_to_match)
+                    self.logger(f"           [Debug Title Match] Result for '{term_to_match}': {match_found_for_term}") 
+                    if match_found_for_term:
+                        post_is_candidate_by_title_char_match = True
+                        char_filter_that_matched_title = filter_item_obj 
+                        self.logger(f"   Post title matches char filter term '{term_to_match}' (from group/name '{filter_item_obj['name']}', Scope: {self.char_filter_scope}). Post is candidate.")
+                        break
+                if post_is_candidate_by_title_char_match: break
+            self.logger(f"   [Debug Title Match] Final post_is_candidate_by_title_char_match: {post_is_candidate_by_title_char_match}") 
         
-        if self.filter_character_list and self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
+        if self.filter_character_list_objects and self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
             self.logger(f"   -> Skip Post (Scope: Title - No Char Match): Title '{post_title[:50]}' does not match character filters.")
             return 0, num_potential_files_in_post, []
 
@@ -769,7 +895,7 @@ class PostProcessorWorker:
                     self.logger(f"   -> Skip Post (Keyword in Title '{skip_word}'): '{post_title[:50]}...'. Scope: {self.skip_words_scope}")
                     return 0, num_potential_files_in_post, []
 
-        if not self.extract_links_only and self.manga_mode_active and self.filter_character_list and \
+        if not self.extract_links_only and self.manga_mode_active and self.filter_character_list_objects and \
            (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and \
            not post_is_candidate_by_title_char_match:
             self.logger(f"   -> Skip Post (Manga Mode with Title/Both Scope - No Title Char Match): Title '{post_title[:50]}' doesn't match filters.")
@@ -782,8 +908,8 @@ class PostProcessorWorker:
         base_folder_names_for_post_content = []
         if not self.extract_links_only and self.use_subfolders:
             if post_is_candidate_by_title_char_match and char_filter_that_matched_title:
-                base_folder_names_for_post_content = [clean_folder_name(char_filter_that_matched_title)]
-            else:
+                base_folder_names_for_post_content = [clean_folder_name(char_filter_that_matched_title["name"])]
+            elif not self.filter_character_list_objects: 
                 derived_folders = match_folders_from_title(post_title, self.known_names, self.unwanted_keywords)
                 if derived_folders:
                     base_folder_names_for_post_content.extend(derived_folders)
@@ -791,7 +917,10 @@ class PostProcessorWorker:
                     base_folder_names_for_post_content.append(extract_folder_name_from_title(post_title, self.unwanted_keywords))
                 if not base_folder_names_for_post_content or not base_folder_names_for_post_content[0]:
                     base_folder_names_for_post_content = [clean_folder_name(post_title if post_title else "untitled_creator_content")]
-            self.logger(f"   Base folder name(s) for post content (if title matched char or generic): {', '.join(base_folder_names_for_post_content)}")
+            
+            if base_folder_names_for_post_content: 
+                log_reason = "Matched char filter" if (post_is_candidate_by_title_char_match and char_filter_that_matched_title) else "Generic title parsing (no char filters)"
+                self.logger(f"   Base folder name(s) for post content ({log_reason}): {', '.join(base_folder_names_for_post_content)}")
 
         if not self.extract_links_only and self.use_subfolders and self.skip_words_list:
             for folder_name_to_check in base_folder_names_for_post_content:
@@ -907,28 +1036,49 @@ class PostProcessorWorker:
                 current_api_original_filename = file_info_to_dl.get('_original_name_for_log')
                 
                 file_is_candidate_by_char_filter_scope = False
-                char_filter_that_matched_file = None
+                char_filter_info_that_matched_file = None 
 
-                if not self.filter_character_list:
+                if not self.filter_character_list_objects: 
                     file_is_candidate_by_char_filter_scope = True
-                elif self.char_filter_scope == CHAR_SCOPE_FILES:
-                    for char_name in self.filter_character_list:
-                        if is_filename_match_for_character(current_api_original_filename, char_name):
+                else:
+                    if self.char_filter_scope == CHAR_SCOPE_FILES:
+                        for filter_item_obj in self.filter_character_list_objects:
+                            terms_to_check_for_file = list(filter_item_obj["aliases"])
+                            if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check_for_file:
+                                terms_to_check_for_file.append(filter_item_obj["name"])
+                            unique_terms_for_file_check = list(set(terms_to_check_for_file))
+
+                            for term_to_match in unique_terms_for_file_check:
+                                if is_filename_match_for_character(current_api_original_filename, term_to_match):
+                                    file_is_candidate_by_char_filter_scope = True
+                                    char_filter_info_that_matched_file = filter_item_obj
+                                    self.logger(f"   File '{current_api_original_filename}' matches char filter term '{term_to_match}' (from '{filter_item_obj['name']}'). Scope: Files.")
+                                    break
+                            if file_is_candidate_by_char_filter_scope: break
+                    elif self.char_filter_scope == CHAR_SCOPE_TITLE:
+                        if post_is_candidate_by_title_char_match:
                             file_is_candidate_by_char_filter_scope = True
-                            char_filter_that_matched_file = char_name
-                            break
-                elif self.char_filter_scope == CHAR_SCOPE_TITLE:
-                    if post_is_candidate_by_title_char_match:
-                        file_is_candidate_by_char_filter_scope = True
-                elif self.char_filter_scope == CHAR_SCOPE_BOTH:
-                    if post_is_candidate_by_title_char_match:
-                        file_is_candidate_by_char_filter_scope = True
-                    else:
-                        for char_name in self.filter_character_list:
-                            if is_filename_match_for_character(current_api_original_filename, char_name):
-                                file_is_candidate_by_char_filter_scope = True
-                                char_filter_that_matched_file = char_name
-                                break
+                            char_filter_info_that_matched_file = char_filter_that_matched_title 
+                            self.logger(f"   File '{current_api_original_filename}' is candidate because post title matched. Scope: Title.")
+                    elif self.char_filter_scope == CHAR_SCOPE_BOTH:
+                        if post_is_candidate_by_title_char_match: 
+                            file_is_candidate_by_char_filter_scope = True
+                            char_filter_info_that_matched_file = char_filter_that_matched_title
+                            self.logger(f"   File '{current_api_original_filename}' is candidate because post title matched. Scope: Both (Title part).")
+                        else: 
+                            for filter_item_obj in self.filter_character_list_objects:
+                                terms_to_check_for_file_both = list(filter_item_obj["aliases"])
+                                if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check_for_file_both:
+                                    terms_to_check_for_file_both.append(filter_item_obj["name"])
+                                unique_terms_for_file_both_check = list(set(terms_to_check_for_file_both))
+                                
+                                for term_to_match in unique_terms_for_file_both_check:
+                                    if is_filename_match_for_character(current_api_original_filename, term_to_match):
+                                        file_is_candidate_by_char_filter_scope = True
+                                        char_filter_info_that_matched_file = filter_item_obj
+                                        self.logger(f"   File '{current_api_original_filename}' matches char filter term '{term_to_match}' (from '{filter_item_obj['name']}'). Scope: Both (File part).")
+                                        break
+                                if file_is_candidate_by_char_filter_scope: break
                 
                 if not file_is_candidate_by_char_filter_scope:
                     self.logger(f"   -> Skip File (Char Filter Scope '{self.char_filter_scope}'): '{current_api_original_filename}' no match.")
@@ -941,10 +1091,10 @@ class PostProcessorWorker:
                     char_title_subfolder_name = None
                     if self.target_post_id_from_initial_url and self.custom_folder_name:
                         char_title_subfolder_name = self.custom_folder_name
-                    elif char_filter_that_matched_title:
-                        char_title_subfolder_name = clean_folder_name(char_filter_that_matched_title)
-                    elif char_filter_that_matched_file:
-                        char_title_subfolder_name = clean_folder_name(char_filter_that_matched_file)
+                    elif char_filter_info_that_matched_file: 
+                        char_title_subfolder_name = clean_folder_name(char_filter_info_that_matched_file["name"])
+                    elif char_filter_that_matched_title: 
+                        char_title_subfolder_name = clean_folder_name(char_filter_that_matched_title["name"])
                     elif base_folder_names_for_post_content:
                         char_title_subfolder_name = base_folder_names_for_post_content[0]
                     
@@ -953,7 +1103,7 @@ class PostProcessorWorker:
                 
                 if self.use_post_subfolders:
                     cleaned_title_for_subfolder = clean_folder_name(post_title)
-                    post_specific_subfolder_name = f"{post_id}_{cleaned_title_for_subfolder}" if cleaned_title_for_subfolder else f"{post_id}_untitled"
+                    post_specific_subfolder_name = cleaned_title_for_subfolder # Use only the cleaned title
                     current_path_for_file = os.path.join(current_path_for_file, post_specific_subfolder_name)
                 
                 target_folder_path_for_this_file = current_path_for_file
@@ -990,7 +1140,7 @@ class PostProcessorWorker:
                     total_skipped_this_post += 1
         
         if self.signals and hasattr(self.signals, 'file_progress_signal'):
-            self.signals.file_progress_signal.emit("", 0, 0)
+            self.signals.file_progress_signal.emit("", None) 
 
         if self.check_cancel(): self.logger(f"   Post {post_id} processing interrupted/cancelled.");
         else: self.logger(f"   Post {post_id} Summary: Downloaded={total_downloaded_this_post}, Skipped Files={total_skipped_this_post}")
@@ -1004,7 +1154,7 @@ class DownloadThread(QThread):
     file_download_status_signal = pyqtSignal(bool)
     finished_signal = pyqtSignal(int, int, bool, list)
     external_link_signal = pyqtSignal(str, str, str, str)
-    file_progress_signal = pyqtSignal(str, int, int)
+    file_progress_signal = pyqtSignal(str, object)
 
 
     def __init__(self, api_url_input, output_dir, known_names_copy,
@@ -1025,8 +1175,10 @@ class DownloadThread(QThread):
                  manga_mode_active=False,
                  unwanted_keywords=None,
                  manga_filename_style=STYLE_POST_TITLE,
-                 char_filter_scope=CHAR_SCOPE_FILES
-                 ):
+                 char_filter_scope=CHAR_SCOPE_FILES,
+                 remove_from_filename_words_list=None,
+                 allow_multipart_download=True,
+                 duplicate_file_mode=DUPLICATE_MODE_DELETE): # Default to DELETE
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -1034,7 +1186,7 @@ class DownloadThread(QThread):
         self.cancellation_event = cancellation_event
         self.skip_current_file_flag = skip_current_file_flag
         self.initial_target_post_id = target_post_id_from_initial_url
-        self.filter_character_list = filter_character_list if filter_character_list else []
+        self.filter_character_list_objects = filter_character_list if filter_character_list else []
         self.filter_mode = filter_mode
         self.skip_zip = skip_zip
         self.skip_rar = skip_rar
@@ -1065,7 +1217,9 @@ class DownloadThread(QThread):
                                  {'spicy', 'hd', 'nsfw', '4k', 'preview', 'teaser', 'clip'}
         self.manga_filename_style = manga_filename_style
         self.char_filter_scope = char_filter_scope
-
+        self.remove_from_filename_words_list = remove_from_filename_words_list
+        self.allow_multipart_download = allow_multipart_download
+        self.duplicate_file_mode = duplicate_file_mode
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
             self.compress_images = False
@@ -1116,7 +1270,7 @@ class DownloadThread(QThread):
                          post_data=individual_post_data,
                          download_root=self.output_dir,
                          known_names=self.known_names,
-                         filter_character_list=self.filter_character_list,
+                         filter_character_list=self.filter_character_list_objects, 
                          unwanted_keywords=self.unwanted_keywords,
                          filter_mode=self.filter_mode,
                          skip_zip=self.skip_zip, skip_rar=self.skip_rar,
@@ -1140,8 +1294,10 @@ class DownloadThread(QThread):
                          skip_current_file_flag=self.skip_current_file_flag,
                          manga_mode_active=self.manga_mode_active,
                          manga_filename_style=self.manga_filename_style,
-                         char_filter_scope=self.char_filter_scope
-                    )
+                         char_filter_scope=self.char_filter_scope,
+                         remove_from_filename_words_list=self.remove_from_filename_words_list,
+                         allow_multipart_download=self.allow_multipart_download,
+                         duplicate_file_mode=self.duplicate_file_mode) 
                     try:
                         dl_count, skip_count, kept_originals_this_post = post_processing_worker.process()
                         grand_total_downloaded_files += dl_count
