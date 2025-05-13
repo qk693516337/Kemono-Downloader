@@ -670,6 +670,7 @@ class DownloaderApp(QWidget):
         url_page_layout.addWidget(QLabel("🔗 Kemono Creator/Post URL:"))
         self.link_input = QLineEdit()
         self.link_input.setPlaceholderText("e.g., https://kemono.su/patreon/user/12345 or .../post/98765")
+        self.link_input.setToolTip("Enter the full URL of a Kemono/Coomer creator's page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765")
         self.link_input.textChanged.connect(self.update_custom_folder_visibility)
         url_page_layout.addWidget(self.link_input, 1)
 
@@ -678,11 +679,13 @@ class DownloaderApp(QWidget):
         self.start_page_input = QLineEdit()
         self.start_page_input.setPlaceholderText("Start")
         self.start_page_input.setFixedWidth(50)
+        self.start_page_input.setToolTip("For creator URLs: Specify the starting page number to download from (e.g., 1, 2, 3).\nLeave blank or set to 1 to start from the first page.\nDisabled for single post URLs or Manga/Comic Mode.")
         self.start_page_input.setValidator(QIntValidator(1, 99999))
         self.to_label = QLabel("to")
         self.end_page_input = QLineEdit()
         self.end_page_input.setPlaceholderText("End")
         self.end_page_input.setFixedWidth(50)
+        self.end_page_input.setToolTip("For creator URLs: Specify the ending page number to download up to (e.g., 5, 10).\nLeave blank to download all pages from the start page.\nDisabled for single post URLs or Manga/Comic Mode.")
         self.end_page_input.setValidator(QIntValidator(1, 99999))
         url_page_layout.addWidget(self.page_range_label)
         url_page_layout.addWidget(self.start_page_input)
@@ -693,8 +696,10 @@ class DownloaderApp(QWidget):
         left_layout.addWidget(QLabel("📁 Download Location:"))
         self.dir_input = QLineEdit()
         self.dir_input.setPlaceholderText("Select folder where downloads will be saved")
+        self.dir_input.setToolTip("Enter or browse to the main folder where all downloaded content will be saved.\nThis is required unless 'Only Links' mode is selected.")
         self.dir_button = QPushButton("Browse...")
         self.dir_button.clicked.connect(self.browse_directory)
+        self.dir_button.setToolTip("Click to open a dialog to select the main download folder.")
         dir_layout = QHBoxLayout()
         dir_layout.addWidget(self.dir_input, 1)
         dir_layout.addWidget(self.dir_button)
@@ -719,7 +724,14 @@ class DownloaderApp(QWidget):
         char_input_and_button_layout.setSpacing(10)
 
         self.character_input = QLineEdit()
-        self.character_input.setPlaceholderText("e.g., yor, Tifa, (Reyna, Sage)")
+        self.character_input.setPlaceholderText("e.g., Tifa, Aerith, (Cloud, Zack)")
+        self.character_input.setToolTip(
+            "Filter files or posts by character/series names (comma-separated).\n"
+            " - Normal Mode: Filters individual files by matching their filenames.\n"
+            " - Manga/Comic Mode: Filters entire posts by matching the post title.\n"
+            "Also used for folder naming if 'Separate Folders' is enabled.\n"
+            "Group aliases for a combined folder name: (alias1, alias2) -> folder 'alias1 alias2'.\n"
+            "Example: yor, Tifa, (Boa, Hancock)")
         char_input_and_button_layout.addWidget(self.character_input, 3)
 
         self.char_filter_scope_toggle_button = QPushButton()
@@ -738,6 +750,10 @@ class DownloaderApp(QWidget):
         custom_folder_v_layout.setSpacing(2)
         self.custom_folder_label = QLabel("🗄️ Custom Folder Name (Single Post Only):")
         self.custom_folder_input = QLineEdit()
+        self.custom_folder_input.setToolTip(
+            "If downloading a single post URL AND 'Separate Folders by Name/Title' is enabled,\n"
+            "you can enter a custom name here for that post's download folder.\n"
+            "Example: My Favorite Scene")
         self.custom_folder_input.setPlaceholderText("Optional: Save this post to specific folder")
         custom_folder_v_layout.addWidget(self.custom_folder_label)
         custom_folder_v_layout.addWidget(self.custom_folder_input)
@@ -769,6 +785,11 @@ class DownloaderApp(QWidget):
         skip_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
         skip_input_and_button_layout.setSpacing(10)
         self.skip_words_input = QLineEdit()
+        self.skip_words_input.setToolTip(
+            "Enter words, comma-separated, to skip downloading certain files or posts.\n"
+            "The 'Scope' button determines if this applies to file names, post titles, or both.\n"
+            "Example: WIP, sketch, preview, text post"
+        )
         self.skip_words_input.setPlaceholderText("e.g., WM, WIP, sketch, preview")
         skip_input_and_button_layout.addWidget(self.skip_words_input, 1) # Input field takes available space
         self.skip_scope_toggle_button = QPushButton()
@@ -788,6 +809,11 @@ class DownloaderApp(QWidget):
         self.remove_from_filename_label = QLabel("✂️ Remove Words from name:")
         remove_words_vertical_layout.addWidget(self.remove_from_filename_label)
         self.remove_from_filename_input = QLineEdit()
+        self.remove_from_filename_input.setToolTip(
+            "Enter words, comma-separated, to remove from downloaded filenames (case-insensitive).\n"
+            "Useful for cleaning up common prefixes/suffixes.\n"
+            "Example: patreon, kemono, [HD], _final"
+        )
         self.remove_from_filename_input.setPlaceholderText("e.g., patreon, HD") # Placeholder for the new field
         remove_words_vertical_layout.addWidget(self.remove_from_filename_input)
         word_manipulation_outer_layout.addWidget(remove_words_widget, 3) # 30% stretch for right group
@@ -803,10 +829,15 @@ class DownloaderApp(QWidget):
         radio_button_layout.setSpacing(10)
         self.radio_group = QButtonGroup(self)
         self.radio_all = QRadioButton("All")
+        self.radio_all.setToolTip("Download all file types found in posts.")
         self.radio_images = QRadioButton("Images/GIFs")
+        self.radio_images.setToolTip("Download only common image formats (JPG, PNG, GIF, WEBP, etc.).")
         self.radio_videos = QRadioButton("Videos")
+        self.radio_videos.setToolTip("Download only common video formats (MP4, MKV, WEBM, MOV, etc.).")
         self.radio_only_archives = QRadioButton("📦 Only Archives")
+        self.radio_only_archives.setToolTip("Exclusively download .zip and .rar files. Other file-specific options are disabled.")
         self.radio_only_links = QRadioButton("🔗 Only Links")
+        self.radio_only_links.setToolTip("Extract and display external links from post descriptions instead of downloading files.\nDownload-related options will be disabled.")
         self.radio_all.setChecked(True)
         self.radio_group.addButton(self.radio_all)
         self.radio_group.addButton(self.radio_images)
@@ -828,12 +859,15 @@ class DownloaderApp(QWidget):
         row1_layout = QHBoxLayout()
         row1_layout.setSpacing(10)
         self.skip_zip_checkbox = QCheckBox("Skip .zip")
+        self.skip_zip_checkbox.setToolTip("If checked, .zip archive files will not be downloaded.\n(Disabled if 'Only Archives' is selected).")
         self.skip_zip_checkbox.setChecked(True)
         row1_layout.addWidget(self.skip_zip_checkbox)
         self.skip_rar_checkbox = QCheckBox("Skip .rar")
+        self.skip_rar_checkbox.setToolTip("If checked, .rar archive files will not be downloaded.\n(Disabled if 'Only Archives' is selected).")
         self.skip_rar_checkbox.setChecked(True)
         row1_layout.addWidget(self.skip_rar_checkbox)
         self.download_thumbnails_checkbox = QCheckBox("Download Thumbnails Only")
+        # Tooltip already exists for download_thumbnails_checkbox
         self.download_thumbnails_checkbox.setChecked(False)
         self.download_thumbnails_checkbox.setToolTip("Thumbnail download functionality is currently limited without the API.")
         row1_layout.addWidget(self.download_thumbnails_checkbox)
@@ -850,6 +884,10 @@ class DownloaderApp(QWidget):
         advanced_row1_layout = QHBoxLayout()
         advanced_row1_layout.setSpacing(10)
         self.use_subfolders_checkbox = QCheckBox("Separate Folders by Name/Title")
+        self.use_subfolders_checkbox.setToolTip(
+            "Create subfolders based on 'Filter by Character(s)' input or post titles.\n"
+            "Uses 'Known Shows/Characters' list as a fallback for folder names if no specific filter matches.\n"
+            "Enables the 'Filter by Character(s)' input and 'Custom Folder Name' for single posts.")
         self.use_subfolders_checkbox.setChecked(True)
         self.use_subfolders_checkbox.toggled.connect(self.update_ui_for_subfolders)
         advanced_row1_layout.addWidget(self.use_subfolders_checkbox)
@@ -869,6 +907,7 @@ class DownloaderApp(QWidget):
         multithreading_layout = QHBoxLayout()
         multithreading_layout.setContentsMargins(0,0,0,0)
         self.use_multithreading_checkbox = QCheckBox("Use Multithreading")
+        # Tooltip already exists for use_multithreading_checkbox
         self.use_multithreading_checkbox.setChecked(True)
         self.use_multithreading_checkbox.setToolTip(
             "Enables concurrent operations. See 'Threads' input for details."
@@ -877,6 +916,7 @@ class DownloaderApp(QWidget):
         self.thread_count_label = QLabel("Threads:")
         multithreading_layout.addWidget(self.thread_count_label)
         self.thread_count_input = QLineEdit()
+        # Tooltip already exists for thread_count_input
         self.thread_count_input.setFixedWidth(40)
         self.thread_count_input.setText("4")
         self.thread_count_input.setToolTip(
@@ -890,10 +930,14 @@ class DownloaderApp(QWidget):
         advanced_row2_layout.addLayout(multithreading_layout)
 
         self.external_links_checkbox = QCheckBox("Show External Links in Log")
+        self.external_links_checkbox.setToolTip(
+            "If checked, a secondary log panel appears below the main log to display external links found in post descriptions.\n"
+            "(Disabled if 'Only Links' or 'Only Archives' mode is active).")
         self.external_links_checkbox.setChecked(False)
         advanced_row2_layout.addWidget(self.external_links_checkbox)
 
         self.manga_mode_checkbox = QCheckBox("Manga/Comic Mode")
+        # Tooltip already exists for manga_mode_checkbox
         self.manga_mode_checkbox.setToolTip("Downloads posts from oldest to newest and renames files based on post title (for creator feeds only).")
         self.manga_mode_checkbox.setChecked(False)
         advanced_row2_layout.addWidget(self.manga_mode_checkbox) # Keep manga mode checkbox here
@@ -906,10 +950,12 @@ class DownloaderApp(QWidget):
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
         self.download_btn = QPushButton("⬇️ Start Download")
+        self.download_btn.setToolTip("Click to start the download or link extraction process with the current settings.")
         self.download_btn.setStyleSheet("padding: 8px 15px; font-weight: bold;")
         self.download_btn.clicked.connect(self.start_download)
         self.cancel_btn = QPushButton("❌ Cancel & Reset UI") # Updated button text for clarity
         self.cancel_btn.setEnabled(False)
+        self.cancel_btn.setToolTip("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
         self.cancel_btn.clicked.connect(self.cancel_download_button_action) # Changed connection
         btn_layout.addWidget(self.download_btn)
         btn_layout.addWidget(self.cancel_btn)
@@ -920,21 +966,29 @@ class DownloaderApp(QWidget):
         known_chars_label_layout.setSpacing(10)
         self.known_chars_label = QLabel("🎭 Known Shows/Characters (for Folder Names):")
         self.character_search_input = QLineEdit()
+        self.character_search_input.setToolTip("Type here to filter the list of known shows/characters below.")
         self.character_search_input.setPlaceholderText("Search characters...")
         known_chars_label_layout.addWidget(self.known_chars_label, 1)
         known_chars_label_layout.addWidget(self.character_search_input)
         left_layout.addLayout(known_chars_label_layout)
 
         self.character_list = QListWidget()
+        self.character_list.setToolTip(
+            "This list contains names used for automatic folder creation when 'Separate Folders' is on\n"
+            "and no specific 'Filter by Character(s)' is provided or matches a post.\n"
+            "Add names of series, games, or characters you frequently download.")
         self.character_list.setSelectionMode(QListWidget.ExtendedSelection)
         left_layout.addWidget(self.character_list, 1)
 
         char_manage_layout = QHBoxLayout()
         char_manage_layout.setSpacing(10)
         self.new_char_input = QLineEdit()
+        self.new_char_input.setToolTip("Enter a new show, game, or character name to add to the list above.")
         self.new_char_input.setPlaceholderText("Add new show/character name")
         self.add_char_button = QPushButton("➕ Add")
+        self.add_char_button.setToolTip("Add the name from the input field to the 'Known Shows/Characters' list.")
         self.delete_char_button = QPushButton("🗑️ Delete Selected")
+        self.delete_char_button.setToolTip("Delete the selected name(s) from the 'Known Shows/Characters' list.")
         self.add_char_button.clicked.connect(self.add_new_character)
         self.new_char_input.returnPressed.connect(self.add_char_button.click)
         self.delete_char_button.clicked.connect(self.delete_selected_character)
@@ -950,6 +1004,7 @@ class DownloaderApp(QWidget):
         log_title_layout.addStretch(1)
 
         self.link_search_input = QLineEdit()
+        self.link_search_input.setToolTip("When in 'Only Links' mode, type here to filter the displayed links by text, URL, or platform.")
         self.link_search_input.setPlaceholderText("Search Links...")
         self.link_search_input.setVisible(False)
         self.link_search_input.setFixedWidth(150)
@@ -962,6 +1017,7 @@ class DownloaderApp(QWidget):
         log_title_layout.addWidget(self.link_search_button)
 
         self.manga_rename_toggle_button = QPushButton()
+        # Tooltip is dynamically set by _update_manga_filename_style_button_text
         self.manga_rename_toggle_button.setVisible(False)
         self.manga_rename_toggle_button.setFixedWidth(140)
         self.manga_rename_toggle_button.setStyleSheet("padding: 4px 8px;")
@@ -969,6 +1025,7 @@ class DownloaderApp(QWidget):
         log_title_layout.addWidget(self.manga_rename_toggle_button)
 
         self.multipart_toggle_button = QPushButton() # Create the button
+        # Tooltip is dynamically set by _update_multipart_toggle_button_text
         self.multipart_toggle_button.setToolTip("Toggle between Multi-part and Single-stream downloads for large files.")
         self.multipart_toggle_button.setFixedWidth(130) # Adjust width as needed
         self.multipart_toggle_button.setStyleSheet("padding: 4px 8px;") # Added padding
@@ -976,6 +1033,7 @@ class DownloaderApp(QWidget):
         log_title_layout.addWidget(self.multipart_toggle_button) # Add to layout
         
         self.duplicate_mode_toggle_button = QPushButton()
+        # Tooltip is dynamically set by _update_duplicate_mode_button_text
         self.duplicate_mode_toggle_button.setToolTip("Toggle how duplicate filenames are handled (Rename or Delete).")
         self.duplicate_mode_toggle_button.setFixedWidth(150) # Adjust width
         self.duplicate_mode_toggle_button.setStyleSheet("padding: 4px 8px;") # Added padding
@@ -983,12 +1041,14 @@ class DownloaderApp(QWidget):
         log_title_layout.addWidget(self.duplicate_mode_toggle_button)
 
         self.log_verbosity_button = QPushButton("Show Basic Log")
+        # Tooltip already exists for log_verbosity_button
         self.log_verbosity_button.setToolTip("Toggle between full and basic log details.")
         self.log_verbosity_button.setFixedWidth(110)
         self.log_verbosity_button.setStyleSheet("padding: 4px 8px;")
         log_title_layout.addWidget(self.log_verbosity_button)
 
         self.reset_button = QPushButton("🔄 Reset")
+        # Tooltip already exists for reset_button
         self.reset_button.setToolTip("Reset all inputs and logs to default state (only when idle).")
         self.reset_button.setFixedWidth(80)
         self.reset_button.setStyleSheet("padding: 4px 8px;")
@@ -997,12 +1057,14 @@ class DownloaderApp(QWidget):
 
         self.log_splitter = QSplitter(Qt.Vertical)
         self.main_log_output = QTextEdit()
+        self.main_log_output.setToolTip("Displays progress messages, errors, and summaries. In 'Only Links' mode, shows extracted links.")
         self.main_log_output.setReadOnly(True)
         self.main_log_output.setLineWrapMode(QTextEdit.NoWrap)
         self.main_log_output.setStyleSheet("""
             QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
                          color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }""")
         self.external_log_output = QTextEdit()
+        self.external_log_output.setToolTip("If 'Show External Links in Log' is checked, this panel displays external links found in post descriptions.")
         self.external_log_output.setReadOnly(True)
         self.external_log_output.setLineWrapMode(QTextEdit.NoWrap)
         self.external_log_output.setStyleSheet("""
@@ -1017,6 +1079,7 @@ class DownloaderApp(QWidget):
         export_button_layout = QHBoxLayout()
         export_button_layout.addStretch(1)
         self.export_links_button = QPushButton("Export Links")
+        # Tooltip already exists for export_links_button
         self.export_links_button.setToolTip("Export all extracted links to a .txt file.")
         self.export_links_button.setFixedWidth(100)
         self.export_links_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
@@ -1027,9 +1090,11 @@ class DownloaderApp(QWidget):
 
 
         self.progress_label = QLabel("Progress: Idle")
+        self.progress_label.setToolTip("Shows the overall progress of the download or link extraction process (e.g., posts processed).")
         self.progress_label.setStyleSheet("padding-top: 5px; font-style: italic;")
         right_layout.addWidget(self.progress_label)
         self.file_progress_label = QLabel("")
+        self.file_progress_label.setToolTip("Shows the progress of individual file downloads, including speed and size.")
         self.file_progress_label.setWordWrap(True)
         self.file_progress_label.setStyleSheet("padding-top: 2px; font-style: italic; color: #A0A0A0;")
         right_layout.addWidget(self.file_progress_label)
@@ -1061,7 +1126,7 @@ class DownloaderApp(QWidget):
         self._update_skip_scope_button_text()
         self._update_char_filter_scope_button_text()
         self._update_duplicate_mode_button_text()
-
+        
     def _center_on_screen(self):
         """Centers the widget on the screen."""
         try:
@@ -1311,11 +1376,26 @@ class DownloaderApp(QWidget):
         is_only_links = (filter_mode_text == "🔗 Only Links")
         is_only_archives = (filter_mode_text == "📦 Only Archives")
 
+        # --- Visibility for log header buttons ---
+        # Hide these buttons if in "Only Links" or "Only Archives" mode
+        if self.skip_scope_toggle_button:
+            self.skip_scope_toggle_button.setVisible(not (is_only_links or is_only_archives))
+        if hasattr(self, 'multipart_toggle_button') and self.multipart_toggle_button:
+            self.multipart_toggle_button.setVisible(not (is_only_links or is_only_archives))
+        # Other log header buttons (manga, duplicate, char filter scope) are handled by
+        # update_ui_for_manga_mode and update_ui_for_subfolders, which are called below.
+
         if self.link_search_input: self.link_search_input.setVisible(is_only_links)
         if self.link_search_button: self.link_search_button.setVisible(is_only_links)
         if self.export_links_button:
             self.export_links_button.setVisible(is_only_links)
             self.export_links_button.setEnabled(is_only_links and bool(self.extracted_links_cache))
+        
+        if self.download_btn: # Update download button text
+            if is_only_links:
+                self.download_btn.setText("🔗 Extract Links")
+            else:
+                self.download_btn.setText("⬇️ Start Download")
         if not is_only_links and self.link_search_input: self.link_search_input.clear()
 
         file_download_mode_active = not is_only_links
@@ -1386,6 +1466,10 @@ class DownloaderApp(QWidget):
         
         self.update_ui_for_subfolders(subfolders_on)
         self.update_custom_folder_visibility()
+        # Ensure manga mode UI updates (which includes the visibility of 
+        # manga_rename_toggle_button and duplicate_mode_toggle_button)
+        # are triggered after filter mode changes.
+        self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
 
 
     def _filter_links_log(self):
@@ -1709,24 +1793,34 @@ class DownloaderApp(QWidget):
 
 
     def update_ui_for_manga_mode(self, checked):
+        # Get current filter mode status
+        is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
+        is_only_archives_mode = self.radio_only_archives and self.radio_only_archives.isChecked()
+
         url_text = self.link_input.text().strip() if self.link_input else ""
         _, _, post_id = extract_post_info(url_text)
 
         is_creator_feed = not post_id if url_text else False
 
+        # Manga mode checkbox itself is only enabled for creator feeds
         if self.manga_mode_checkbox:
             self.manga_mode_checkbox.setEnabled(is_creator_feed)
             if not is_creator_feed and self.manga_mode_checkbox.isChecked():
+                # If URL changes to non-creator feed, uncheck manga mode
                 self.manga_mode_checkbox.setChecked(False)
                 checked = self.manga_mode_checkbox.isChecked() 
 
         manga_mode_effectively_on = is_creator_feed and checked
 
         if self.manga_rename_toggle_button:
-            self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on)
+            # Visible if manga mode is on AND not in "Only Links" or "Only Archives" mode
+            self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode))
 
         if hasattr(self, 'duplicate_mode_toggle_button'):
-            self.duplicate_mode_toggle_button.setVisible(not manga_mode_effectively_on) # Hidden in Manga Mode
+            # Visible if manga mode is OFF AND not in "Only Links" or "Only Archives" mode
+            self.duplicate_mode_toggle_button.setVisible(
+                not manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode)
+            )
 
         if manga_mode_effectively_on:
             if self.page_range_label: self.page_range_label.setEnabled(False)
@@ -2575,6 +2669,7 @@ class DownloaderApp(QWidget):
 
         self.duplicate_file_mode = DUPLICATE_MODE_DELETE # Reset to default (Delete)
         self.settings.setValue(DUPLICATE_FILE_MODE_KEY, self.duplicate_file_mode)
+        
         self._update_duplicate_mode_button_text()
 
         self.settings.sync()
