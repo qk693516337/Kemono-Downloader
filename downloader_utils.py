@@ -38,10 +38,7 @@ SKIP_SCOPE_BOTH = "both"
 CHAR_SCOPE_TITLE = "title"
 CHAR_SCOPE_FILES = "files"
 CHAR_SCOPE_BOTH = "both"
-
-# DUPLICATE_MODE_RENAME is removed. Renaming only happens within a target folder if needed.
-DUPLICATE_MODE_DELETE = "delete" 
-DUPLICATE_MODE_MOVE_TO_SUBFOLDER = "move"
+CHAR_SCOPE_COMMENTS = "comments"
 
 fastapi_app = None
 KNOWN_NAMES = []
@@ -99,6 +96,15 @@ def clean_filename(name):
     cleaned = re.sub(r'\s+', '_', cleaned)
     return cleaned if cleaned else "untitled_file"
 
+def strip_html_tags(html_text):
+    if not html_text: return ""
+    # First, unescape HTML entities
+    text = html.unescape(html_text)
+    # Then, remove HTML tags using a simple regex
+    # This is a basic approach and might not handle all complex HTML perfectly
+    clean_pattern = re.compile('<.*?>')
+    cleaned_text = re.sub(clean_pattern, '', text)
+    return cleaned_text.strip()
 
 def extract_folder_name_from_title(title, unwanted_keywords):
     if not title: return 'Uncategorized'
@@ -221,6 +227,31 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
     except Exception as e:
         raise RuntimeError(f"Unexpected error fetching offset {offset} ({paginated_url}): {e}")
 
+def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, cancellation_event=None):
+    if cancellation_event and cancellation_event.is_set():
+        logger("   Comment fetch cancelled before request.")
+        raise RuntimeError("Comment fetch operation cancelled by user.")
+
+    comments_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}/comments"
+    logger(f"   Fetching comments: {comments_api_url}")
+    try:
+        response = requests.get(comments_api_url, headers=headers, timeout=(10, 30)) # Shorter timeout for comments
+        response.raise_for_status()
+        if 'application/json' not in response.headers.get('Content-Type', '').lower():
+            logger(f"⚠️ Unexpected content type from comments API: {response.headers.get('Content-Type')}. Body: {response.text[:200]}")
+            return [] # Return empty list if not JSON
+        return response.json()
+    except requests.exceptions.Timeout:
+        raise RuntimeError(f"Timeout fetching comments for post {post_id} from {comments_api_url}")
+    except requests.exceptions.RequestException as e:
+        err_msg = f"Error fetching comments for post {post_id} from {comments_api_url}: {e}"
+        if e.response is not None:
+            err_msg += f" (Status: {e.response.status_code}, Body: {e.response.text[:200]})"
+        raise RuntimeError(err_msg)
+    except ValueError as e: # JSONDecodeError inherits from ValueError
+        raise RuntimeError(f"Error decoding JSON from comments API for post {post_id} ({comments_api_url}): {e}. Response text: {response.text[:200]}")
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error fetching comments for post {post_id} ({comments_api_url}): {e}")
 
 def download_from_api(api_url_input, logger=print, start_page=None, end_page=None, manga_mode=False, cancellation_event=None):
     headers = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
@@ -412,7 +443,7 @@ class PostProcessorWorker:
                  char_filter_scope=CHAR_SCOPE_FILES,
                  remove_from_filename_words_list=None,
                  allow_multipart_download=True,
-                 duplicate_file_mode=DUPLICATE_MODE_DELETE):
+                 ): # Removed duplicate_file_mode and session-wide tracking
         self.post = post_data
         self.download_root = download_root
         self.known_names = known_names
@@ -450,7 +481,7 @@ class PostProcessorWorker:
         self.char_filter_scope = char_filter_scope
         self.remove_from_filename_words_list = remove_from_filename_words_list if remove_from_filename_words_list is not None else []
         self.allow_multipart_download = allow_multipart_download
-        self.duplicate_file_mode = duplicate_file_mode # This will be the effective mode (possibly overridden by main.py for manga)
+        # self.duplicate_file_mode and session-wide tracking removed
         
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
@@ -469,10 +500,7 @@ class PostProcessorWorker:
                               post_title="", file_index_in_post=0, num_files_in_this_post=1):
         was_original_name_kept_flag = False 
         final_filename_saved_for_return = "" 
-
-        # current_target_folder_path is the actual folder where the file will be saved.
-        # It starts as the main character/post folder (target_folder_path) by default.
-        current_target_folder_path = target_folder_path 
+        # target_folder_path is the base character/post folder.
 
         if self.check_cancel() or (skip_event and skip_event.is_set()): return 0, 1, "", False
 
@@ -561,44 +589,29 @@ class PostProcessorWorker:
                 self.logger(f"   -> Pref Skip: '{api_original_filename}' (RAR).")
                 return 0, 1, api_original_filename, False
 
+        # --- Pre-Download Duplicate Handling (Standard Mode Only - Manga mode has its own suffixing) ---
         if not self.manga_mode_active:
-            # --- Pre-Download Duplicate Handling (Standard Mode Only) ---
-            is_duplicate_for_main_folder_by_path = os.path.exists(os.path.join(target_folder_path, filename_to_save_in_main_path)) and \
-                                                   os.path.getsize(os.path.join(target_folder_path, filename_to_save_in_main_path)) > 0
+            path_in_main_folder_check = os.path.join(target_folder_path, filename_to_save_in_main_path)
+            is_duplicate_by_path = os.path.exists(path_in_main_folder_check) and \
+                                   os.path.getsize(path_in_main_folder_check) > 0
             
-            is_duplicate_for_main_folder_by_session_name = False
+            is_duplicate_by_session_name = False
             with self.downloaded_files_lock:
                 if filename_to_save_in_main_path in self.downloaded_files:
-                    is_duplicate_for_main_folder_by_session_name = True
+                    is_duplicate_by_session_name = True
 
-            if is_duplicate_for_main_folder_by_path or is_duplicate_for_main_folder_by_session_name:
-                if self.duplicate_file_mode == DUPLICATE_MODE_DELETE:
-                    reason = "Path Exists" if is_duplicate_for_main_folder_by_path else "Session Name"
-                    self.logger(f"   -> Delete Duplicate ({reason}): '{filename_to_save_in_main_path}'. Skipping download.")
-                    with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
-                    return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
-                
-                elif self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER:
-                    reason = "Path Exists" if is_duplicate_for_main_folder_by_path else "Session Name"
-                    self.logger(f"   -> Pre-DL Move ({reason}): '{filename_to_save_in_main_path}'. Will target 'Duplicate' subfolder.")
-                    current_target_folder_path = os.path.join(target_folder_path, "Duplicate")
-                    with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) 
+            if is_duplicate_by_path or is_duplicate_by_session_name:
+                reason = "Path Exists" if is_duplicate_by_path else "Session Name"
+                self.logger(f"   -> Skip Duplicate ({reason}, Pre-DL): '{filename_to_save_in_main_path}'. Skipping download.")
+                with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Mark as processed
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
         
+        # Ensure base target folder exists (used for .part file with multipart)
         try:
-            os.makedirs(current_target_folder_path, exist_ok=True)
+            os.makedirs(target_folder_path, exist_ok=True) # For .part file
         except OSError as e:
-            self.logger(f"   ❌ Critical error creating directory '{current_target_folder_path}': {e}. Skipping file '{api_original_filename}'.")
+            self.logger(f"   ❌ Critical error creating directory '{target_folder_path}': {e}. Skipping file '{api_original_filename}'.")
             return 0, 1, api_original_filename, False
-        
-        # If mode is MOVE (and not manga mode), and current_target_folder_path is now "Duplicate",
-        # check if the file *already* exists by its base name in this "Duplicate" folder. (Standard Mode Only)
-        if not self.manga_mode_active and \
-           self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER and \
-           "Duplicate" in current_target_folder_path.split(os.sep) and \
-           os.path.exists(os.path.join(current_target_folder_path, filename_to_save_in_main_path)):
-            self.logger(f"   -> File '{filename_to_save_in_main_path}' already exists in '{os.path.basename(current_target_folder_path)}' subfolder. Skipping download.")
-            # The name was already added to downloaded_files if it was a pre-DL move.
-            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
 
         # --- Download Attempt ---
         max_retries = 3
@@ -633,9 +646,10 @@ class PostProcessorWorker:
                     if self.signals and hasattr(self.signals, 'file_download_status_signal'):
                         self.signals.file_download_status_signal.emit(False)
                     
-                    mp_save_path_base = os.path.join(current_target_folder_path, filename_to_save_in_main_path)
+                    # .part file is always based on the main target_folder_path and filename_to_save_in_main_path
+                    mp_save_path_base_for_part = os.path.join(target_folder_path, filename_to_save_in_main_path)
                     mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
-                        file_url, mp_save_path_base, total_size_bytes, num_parts_for_file, headers,
+                        file_url, mp_save_path_base_for_part, total_size_bytes, num_parts_for_file, headers,
                         api_original_filename, self.signals, self.cancellation_event, skip_event, self.logger
                     )
                     if mp_success:
@@ -705,130 +719,132 @@ class PostProcessorWorker:
             if file_content_bytes: file_content_bytes.close()
             return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
 
-        if not self.manga_mode_active:
-            # --- Post-Download Hash Check (Standard Mode Only) ---
-            with self.downloaded_file_hashes_lock:
-                 if calculated_file_hash in self.downloaded_file_hashes:
-                    if self.duplicate_file_mode == DUPLICATE_MODE_DELETE:
-                        self.logger(f"   -> Delete Duplicate (Hash): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...). Skipping save.")
-                        with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
-                        if file_content_bytes: file_content_bytes.close()
-                        return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
-                    
-                    elif self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER:
-                        self.logger(f"   -> Post-DL Move (Hash): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...). Content already downloaded.")
-                        if "Duplicate" not in current_target_folder_path.split(os.sep): 
-                            current_target_folder_path = os.path.join(target_folder_path, "Duplicate")
-                            self.logger(f"     Redirecting to 'Duplicate' subfolder: '{current_target_folder_path}'")
-                            # Ensure "Duplicate" folder exists if this is a new redirection due to hash
-                            try: os.makedirs(current_target_folder_path, exist_ok=True)
-                            except OSError as e_mkdir_hash: self.logger(f"    Error creating Duplicate folder for hash collision: {e_mkdir_hash}")
-                            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) 
-        
-        # --- Final Filename Determination for Saving ---
-        filename_for_actual_save = filename_to_save_in_main_path 
+        # --- Universal Post-Download Hash Check ---
+        with self.downloaded_file_hashes_lock:
+            if calculated_file_hash in self.downloaded_file_hashes:
+                self.logger(f"   -> Skip Saving Duplicate (Hash Match): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...).")
+                with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Mark logical name
+                if file_content_bytes: file_content_bytes.close()
+                # If it was a multipart download, its .part file needs cleanup
+                if not isinstance(file_content_bytes, BytesIO): # Indicates multipart download
+                    part_file_to_remove = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
+                    if os.path.exists(part_file_to_remove):
+                        try: os.remove(part_file_to_remove);
+                        except OSError: self.logger(f"  -> Failed to remove .part file for hash duplicate: {part_file_to_remove}")
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag
 
-        # If mode is MOVE (and not manga mode) and the file is destined for the main folder,
-        # but a file with that name *now* exists (e.g. race condition, or different file with same name not caught by hash),
-        # reroute it to the "Duplicate" folder.
-        if not self.manga_mode_active and \
-           self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER and \
-           current_target_folder_path == target_folder_path and \
-           os.path.exists(os.path.join(current_target_folder_path, filename_for_actual_save)):
-            self.logger(f"   -> Post-DL Move (Late Name Collision in Main): '{filename_for_actual_save}'. Moving to 'Duplicate'.")
-            current_target_folder_path = os.path.join(target_folder_path, "Duplicate")
-            try: # Ensure "Duplicate" folder exists if this is a new redirection
-                os.makedirs(current_target_folder_path, exist_ok=True)
-            except OSError as e_mkdir: self.logger(f"    Error creating Duplicate folder during late move: {e_mkdir}")
-            # The name filename_to_save_in_main_path was already added to downloaded_files if it was a pre-DL name collision.
-            # If it was a hash collision that got rerouted, it was also added.
-            # If this is a new reroute due to late name collision, ensure it's marked.
+        # --- Determine Save Location and Final Filename ---
+        effective_save_folder = target_folder_path  # Default: main character/post folder
+        # filename_to_save_in_main_path is the logical name after cleaning, manga styling, word removal
+        filename_after_styling_and_word_removal = filename_to_save_in_main_path
 
+        # "Move" logic and "Duplicate" subfolder logic removed.
+        # effective_save_folder will always be target_folder_path.
+                
+        try: # Ensure the chosen save folder (main or Duplicate) exists
+            os.makedirs(effective_save_folder, exist_ok=True)
+        except OSError as e:
+            self.logger(f"   ❌ Critical error creating directory '{effective_save_folder}': {e}. Skipping file '{api_original_filename}'.")
+            if file_content_bytes: file_content_bytes.close()
+            # Cleanup .part file if multipart
+            if not isinstance(file_content_bytes, BytesIO):
+                part_file_to_remove = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
+                if os.path.exists(part_file_to_remove): os.remove(part_file_to_remove)
+            return 0, 1, api_original_filename, False
 
-        # Apply numeric suffix renaming (_1, _2) *only if needed within the current_target_folder_path*
-        # This means:
-        # - If current_target_folder_path is the main folder (and not MOVE mode, or MOVE mode but file was unique):
-        #   Renaming happens if a file with filename_for_actual_save exists there.
-        # - If current_target_folder_path is "Duplicate" (because of MOVE mode):
-        #   Renaming happens if filename_for_actual_save exists *within "Duplicate"*.
-        counter = 1
-        base_name_final_coll, ext_final_coll = os.path.splitext(filename_for_actual_save)
-        temp_filename_final_check = filename_for_actual_save
-        while os.path.exists(os.path.join(current_target_folder_path, temp_filename_final_check)):
-            temp_filename_final_check = f"{base_name_final_coll}_{counter}{ext_final_coll}"
-            counter += 1
-        if temp_filename_final_check != filename_for_actual_save:
-            self.logger(f"     Final rename for target folder '{os.path.basename(current_target_folder_path)}': '{temp_filename_final_check}' (was '{filename_for_actual_save}')")
-            filename_for_actual_save = temp_filename_final_check
-        
-        bytes_to_write = file_content_bytes 
-        final_filename_after_processing = filename_for_actual_save 
-        current_save_path_final = os.path.join(current_target_folder_path, final_filename_after_processing)
-        
+        # --- Image Compression ---
+        # This operates on file_content_bytes (which is BytesIO or a file handle from multipart)
+        # It might change filename_after_styling_and_word_removal's extension (e.g., .jpg to .webp)
+        # and returns new data_to_write_after_compression (BytesIO) or original file_content_bytes.
+        data_to_write_after_compression = file_content_bytes 
+        filename_after_compression = filename_after_styling_and_word_removal
+
         is_img_for_compress_check = is_image(api_original_filename)
         if is_img_for_compress_check and self.compress_images and Image and downloaded_size_bytes > (1.5 * 1024 * 1024):
             self.logger(f"   Compressing '{api_original_filename}' ({downloaded_size_bytes / (1024*1024):.2f} MB)...")
             try:
-                bytes_to_write.seek(0) 
-                with Image.open(bytes_to_write) as img_obj: 
+                file_content_bytes.seek(0) 
+                with Image.open(file_content_bytes) as img_obj: 
                     if img_obj.mode == 'P': img_obj = img_obj.convert('RGBA')
                     elif img_obj.mode not in ['RGB', 'RGBA', 'L']: img_obj = img_obj.convert('RGB')
                     compressed_bytes_io = BytesIO()
                     img_obj.save(compressed_bytes_io, format='WebP', quality=80, method=4)
                     compressed_size = compressed_bytes_io.getbuffer().nbytes
 
-                if compressed_size < downloaded_size_bytes * 0.9: 
+                if compressed_size < downloaded_size_bytes * 0.9:  # If significantly smaller
                     self.logger(f"   Compression success: {compressed_size / (1024*1024):.2f} MB.")
-                    if hasattr(bytes_to_write, 'close'): bytes_to_write.close() 
-                    
-                    original_part_file_path = os.path.join(current_target_folder_path, filename_to_save_in_main_path) + ".part" # Use original base for .part
-                    if os.path.exists(original_part_file_path):
-                        os.remove(original_part_file_path)
-                    
-                    bytes_to_write = compressed_bytes_io; bytes_to_write.seek(0)
-                    base_name_orig, _ = os.path.splitext(filename_for_actual_save) 
-                    final_filename_after_processing = base_name_orig + '.webp'
-                    current_save_path_final = os.path.join(current_target_folder_path, final_filename_after_processing)
-                    self.logger(f"   Updated filename (compressed): {final_filename_after_processing}")
+                    data_to_write_after_compression = compressed_bytes_io; data_to_write_after_compression.seek(0)
+                    base_name_orig, _ = os.path.splitext(filename_after_compression) 
+                    filename_after_compression = base_name_orig + '.webp'
+                    self.logger(f"   Updated filename (compressed): {filename_after_compression}")
                 else:
-                    self.logger(f"   Compression skipped: WebP not significantly smaller."); bytes_to_write.seek(0)
+                    self.logger(f"   Compression skipped: WebP not significantly smaller."); file_content_bytes.seek(0) # Reset original stream
+                    data_to_write_after_compression = file_content_bytes # Use original
             except Exception as comp_e:
-                self.logger(f"❌ Compression failed for '{api_original_filename}': {comp_e}. Saving original."); bytes_to_write.seek(0)
+                self.logger(f"❌ Compression failed for '{api_original_filename}': {comp_e}. Saving original."); file_content_bytes.seek(0)
+                data_to_write_after_compression = file_content_bytes # Use original
 
-        if final_filename_after_processing != filename_for_actual_save and \
-           os.path.exists(current_save_path_final) and os.path.getsize(current_save_path_final) > 0:
-            self.logger(f"   -> Exists (Path - Post-Compress): '{final_filename_after_processing}' in '{os.path.basename(current_target_folder_path)}'.")
-            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) 
-            if bytes_to_write and hasattr(bytes_to_write, 'close'): bytes_to_write.close()
-            return 0, 1, final_filename_after_processing, was_original_name_kept_flag
+        # --- Final Numeric Suffixing in the effective_save_folder ---
+        final_filename_on_disk = filename_after_compression # This is the name after potential compression
+        temp_base, temp_ext = os.path.splitext(final_filename_on_disk)
+        suffix_counter = 1
+        while os.path.exists(os.path.join(effective_save_folder, final_filename_on_disk)):
+            final_filename_on_disk = f"{temp_base}_{suffix_counter}{temp_ext}"
+            suffix_counter += 1
+        
+        if final_filename_on_disk != filename_after_compression:
+            self.logger(f"     Applied numeric suffix in '{os.path.basename(effective_save_folder)}': '{final_filename_on_disk}' (was '{filename_after_compression}')")
+
+        # --- Save File ---
+        final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
 
         try:
-            os.makedirs(current_target_folder_path, exist_ok=True)
+            # data_to_write_after_compression is BytesIO (single stream, or compressed multipart)
+            # OR it's the original file_content_bytes (which is a file handle if uncompressed multipart)
             
-            if isinstance(bytes_to_write, BytesIO): 
-                with open(current_save_path_final, 'wb') as f_out:
-                    f_out.write(bytes_to_write.getvalue())
-            else: 
-                if hasattr(bytes_to_write, 'close'): bytes_to_write.close()
-                source_part_file = os.path.join(current_target_folder_path, filename_to_save_in_main_path) + ".part" # Use original base for .part
-                os.rename(source_part_file, current_save_path_final)
+            if data_to_write_after_compression is file_content_bytes and not isinstance(file_content_bytes, BytesIO):
+                # This means uncompressed multipart download. Original .part file handle is file_content_bytes.
+                # The .part file is at target_folder_path/filename_to_save_in_main_path.part
+                original_part_file_actual_path = file_content_bytes.name
+                file_content_bytes.close() # Close handle first
+                os.rename(original_part_file_actual_path, final_save_path)
+                self.logger(f"   Renamed .part file to final: {final_save_path}")
+            else: # Single stream download, or compressed multipart. Write from BytesIO.
+                with open(final_save_path, 'wb') as f_out:
+                    f_out.write(data_to_write_after_compression.getvalue())
+                
+                # If original was multipart and then compressed, clean up original .part file
+                if data_to_write_after_compression is not file_content_bytes and not isinstance(file_content_bytes, BytesIO):
+                    original_part_file_actual_path = file_content_bytes.name
+                    file_content_bytes.close()
+                    if os.path.exists(original_part_file_actual_path):
+                        try: os.remove(original_part_file_actual_path)
+                        except OSError as e_rem: self.logger(f"  -> Failed to remove .part after compression: {e_rem}")
 
             with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
-            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+            with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Track by logical name
             
-            final_filename_saved_for_return = final_filename_after_processing 
-            self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024*1024):.2f} MB) in '{os.path.basename(current_target_folder_path)}'")
+            final_filename_saved_for_return = final_filename_on_disk
+            self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024*1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
+            # Session-wide base name tracking removed.
             time.sleep(0.05)
             return 1, 0, final_filename_saved_for_return, was_original_name_kept_flag
         except Exception as save_err:
-             self.logger(f"❌ Save Fail for '{final_filename_after_processing}': {save_err}")
-             if os.path.exists(current_save_path_final):
-                  try: os.remove(current_save_path_final);
-                  except OSError: self.logger(f"  -> Failed to remove partially saved file: {current_save_path_final}")
+             self.logger(f"❌ Save Fail for '{final_filename_on_disk}': {save_err}")
+             if os.path.exists(final_save_path):
+                  try: os.remove(final_save_path);
+                  except OSError: self.logger(f"  -> Failed to remove partially saved file: {final_save_path}")
              return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag
         finally:
-            if bytes_to_write and hasattr(bytes_to_write, 'close'):
-                bytes_to_write.close()
+            # Ensure all handles are closed
+            if data_to_write_after_compression and hasattr(data_to_write_after_compression, 'close'):
+                data_to_write_after_compression.close()
+            # If original file_content_bytes was a different handle (e.g. multipart before compression) and not closed yet
+            if file_content_bytes and file_content_bytes is not data_to_write_after_compression and hasattr(file_content_bytes, 'close'):
+                try:
+                    if not file_content_bytes.closed: # Check if already closed
+                        file_content_bytes.close()
+                except Exception: pass # Ignore errors on close if already handled
 
 
     def process(self):
@@ -858,36 +874,140 @@ class PostProcessorWorker:
 
         post_is_candidate_by_title_char_match = False
         char_filter_that_matched_title = None
+        post_is_candidate_by_comment_char_match = False
+        # New variables for CHAR_SCOPE_COMMENTS file-first logic
+        post_is_candidate_by_file_char_match_in_comment_scope = False
+        char_filter_that_matched_file_in_comment_scope = None
+        char_filter_that_matched_comment = None
 
         if self.filter_character_list_objects and \
            (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH):
-            self.logger(f"   [Debug Title Match] Checking post title '{post_title}' against {len(self.filter_character_list_objects)} filter objects. Scope: {self.char_filter_scope}") 
+            # self.logger(f"   [Debug Title Match] Checking post title '{post_title}' against {len(self.filter_character_list_objects)} filter objects. Scope: {self.char_filter_scope}") 
             for idx, filter_item_obj in enumerate(self.filter_character_list_objects):
-                self.logger(f"     [Debug Title Match] Filter obj #{idx}: {filter_item_obj}") 
+                if self.check_cancel(): break
+                # self.logger(f"     [Debug Title Match] Filter obj #{idx}: {filter_item_obj}") 
                 terms_to_check_for_title = list(filter_item_obj["aliases"])
                 if filter_item_obj["is_group"]:
                     if filter_item_obj["name"] not in terms_to_check_for_title:
                         terms_to_check_for_title.append(filter_item_obj["name"])
                 
                 unique_terms_for_title_check = list(set(terms_to_check_for_title)) 
-                self.logger(f"       [Debug Title Match] Unique terms for this filter obj: {unique_terms_for_title_check}") 
+                # self.logger(f"       [Debug Title Match] Unique terms for this filter obj: {unique_terms_for_title_check}") 
 
                 for term_to_match in unique_terms_for_title_check:
-                    self.logger(f"         [Debug Title Match] Checking term: '{term_to_match}'") 
+                    # self.logger(f"         [Debug Title Match] Checking term: '{term_to_match}'") 
                     match_found_for_term = is_title_match_for_character(post_title, term_to_match)
-                    self.logger(f"           [Debug Title Match] Result for '{term_to_match}': {match_found_for_term}") 
+                    # self.logger(f"           [Debug Title Match] Result for '{term_to_match}': {match_found_for_term}") 
                     if match_found_for_term:
                         post_is_candidate_by_title_char_match = True
                         char_filter_that_matched_title = filter_item_obj 
                         self.logger(f"   Post title matches char filter term '{term_to_match}' (from group/name '{filter_item_obj['name']}', Scope: {self.char_filter_scope}). Post is candidate.")
                         break
                 if post_is_candidate_by_title_char_match: break
-            self.logger(f"   [Debug Title Match] Final post_is_candidate_by_title_char_match: {post_is_candidate_by_title_char_match}") 
+            # self.logger(f"   [Debug Title Match] Final post_is_candidate_by_title_char_match: {post_is_candidate_by_title_char_match}") 
         
-        if self.filter_character_list_objects and self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
-            self.logger(f"   -> Skip Post (Scope: Title - No Char Match): Title '{post_title[:50]}' does not match character filters.")
-            return 0, num_potential_files_in_post, []
+        # --- Populate all_files_from_post_api before character filter logic that needs it ---
+        # This is needed for the file-first check in CHAR_SCOPE_COMMENTS
+        all_files_from_post_api_for_char_check = []
+        api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
+        if not api_file_domain_for_char_check or not any(d in api_file_domain_for_char_check.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
+            api_file_domain_for_char_check = "kemono.su" if "kemono" in self.service.lower() else "coomer.party"
 
+        if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
+            original_api_name = post_main_file_info.get('name') or os.path.basename(post_main_file_info['path'].lstrip('/'))
+            if original_api_name:
+                all_files_from_post_api_for_char_check.append({'_original_name_for_log': original_api_name})
+
+        for att_info in post_attachments:
+            if isinstance(att_info, dict) and att_info.get('path'):
+                original_api_att_name = att_info.get('name') or os.path.basename(att_info['path'].lstrip('/'))
+                if original_api_att_name:
+                    all_files_from_post_api_for_char_check.append({'_original_name_for_log': original_api_att_name})
+        # --- End population of all_files_from_post_api_for_char_check ---
+
+
+        if self.filter_character_list_objects and self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+            self.logger(f"   [Char Scope: Comments] Phase 1: Checking post files for matches before comments for post ID '{post_id}'.")
+            for file_info_item in all_files_from_post_api_for_char_check: # Use the pre-populated list of file names
+                if self.check_cancel(): break
+                current_api_original_filename_for_check = file_info_item.get('_original_name_for_log')
+                if not current_api_original_filename_for_check: continue
+
+                for filter_item_obj in self.filter_character_list_objects:
+                    terms_to_check = list(filter_item_obj["aliases"])
+                    if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check:
+                        terms_to_check.append(filter_item_obj["name"])
+                    
+                    for term_to_match in terms_to_check:
+                        if is_filename_match_for_character(current_api_original_filename_for_check, term_to_match):
+                            post_is_candidate_by_file_char_match_in_comment_scope = True
+                            char_filter_that_matched_file_in_comment_scope = filter_item_obj
+                            self.logger(f"     Match Found (File in Comments Scope): File '{current_api_original_filename_for_check}' matches char filter term '{term_to_match}' (from group/name '{filter_item_obj['name']}'). Post is candidate.")
+                            break
+                    if post_is_candidate_by_file_char_match_in_comment_scope: break
+                if post_is_candidate_by_file_char_match_in_comment_scope: break
+            self.logger(f"   [Char Scope: Comments] Phase 1 Result: post_is_candidate_by_file_char_match_in_comment_scope = {post_is_candidate_by_file_char_match_in_comment_scope}")
+        
+        if self.filter_character_list_objects and self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+            if not post_is_candidate_by_file_char_match_in_comment_scope:
+                self.logger(f"   [Char Scope: Comments] Phase 2: No file match found. Checking post comments for post ID '{post_id}'.")
+                try:
+                    parsed_input_url_for_comments = urlparse(self.api_url_input)
+                    api_domain_for_comments = parsed_input_url_for_comments.netloc
+                    if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
+                        self.logger(f"⚠️ Unrecognized domain '{api_domain_for_comments}' for comment API. Defaulting based on service.")
+                        api_domain_for_comments = "kemono.su" if "kemono" in self.service.lower() else "coomer.party"
+
+                    comments_data = fetch_post_comments(
+                        api_domain_for_comments, self.service, self.user_id, post_id,
+                        headers, self.logger, self.cancellation_event
+                    )
+                    if comments_data:
+                        self.logger(f"     Fetched {len(comments_data)} comments for post {post_id}.")
+                        for comment_item_idx, comment_item in enumerate(comments_data):
+                            if self.check_cancel(): break
+                            raw_comment_content = comment_item.get('content', '')
+                            if not raw_comment_content: continue
+                            
+                            cleaned_comment_text = strip_html_tags(raw_comment_content)
+                            if not cleaned_comment_text.strip(): continue
+
+                            for filter_item_obj in self.filter_character_list_objects:
+                                terms_to_check_comment = list(filter_item_obj["aliases"])
+                                if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check_comment:
+                                    terms_to_check_comment.append(filter_item_obj["name"])
+                                
+                                for term_to_match_comment in terms_to_check_comment:
+                                    if is_title_match_for_character(cleaned_comment_text, term_to_match_comment): # Re-use title matcher
+                                        post_is_candidate_by_comment_char_match = True
+                                        char_filter_that_matched_comment = filter_item_obj
+                                        self.logger(f"     Match Found (Comment in Comments Scope): Comment in post {post_id} matches char filter term '{term_to_match_comment}' (from group/name '{filter_item_obj['name']}'). Post is candidate.")
+                                        self.logger(f"       Matching comment (first 100 chars): '{cleaned_comment_text[:100]}...'")
+                                        break 
+                                if post_is_candidate_by_comment_char_match: break
+                            if post_is_candidate_by_comment_char_match: break 
+                    else:
+                        self.logger(f"     No comments found or fetched for post {post_id} to check against character filters.")
+
+                except RuntimeError as e_fetch_comment: 
+                    self.logger(f"   ⚠️ Error fetching or processing comments for post {post_id}: {e_fetch_comment}")
+                except Exception as e_generic_comment: 
+                    self.logger(f"   ❌ Unexpected error during comment processing for post {post_id}: {e_generic_comment}\n{traceback.format_exc(limit=2)}")
+                self.logger(f"   [Char Scope: Comments] Phase 2 Result: post_is_candidate_by_comment_char_match = {post_is_candidate_by_comment_char_match}")
+            else: # post_is_candidate_by_file_char_match_in_comment_scope was True
+                self.logger(f"   [Char Scope: Comments] Phase 2: Skipped comment check for post ID '{post_id}' because a file match already made it a candidate.")
+
+        # --- Skip Post Logic based on Title or Comment Scope (if filters are active) ---
+        if self.filter_character_list_objects:
+            if self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
+                self.logger(f"   -> Skip Post (Scope: Title - No Char Match): Title '{post_title[:50]}' does not match character filters.")
+                return 0, num_potential_files_in_post, []
+            if self.char_filter_scope == CHAR_SCOPE_COMMENTS and \
+               not post_is_candidate_by_file_char_match_in_comment_scope and \
+               not post_is_candidate_by_comment_char_match: # MODIFIED: Check both file and comment match flags
+                self.logger(f"   -> Skip Post (Scope: Comments - No Char Match in Comments): Post ID '{post_id}', Title '{post_title[:50]}...'")
+                return 0, num_potential_files_in_post, []
+                
         if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
             post_title_lower = post_title.lower()
             for skip_word in self.skip_words_list:
@@ -907,9 +1027,26 @@ class PostProcessorWorker:
 
         base_folder_names_for_post_content = []
         if not self.extract_links_only and self.use_subfolders:
-            if post_is_candidate_by_title_char_match and char_filter_that_matched_title:
-                base_folder_names_for_post_content = [clean_folder_name(char_filter_that_matched_title["name"])]
-            elif not self.filter_character_list_objects: 
+            primary_char_filter_for_folder = None
+            log_reason_for_folder = ""
+
+            if self.char_filter_scope == CHAR_SCOPE_COMMENTS and char_filter_that_matched_comment:
+                # For CHAR_SCOPE_COMMENTS, prioritize file match for folder name if it happened
+                if post_is_candidate_by_file_char_match_in_comment_scope and char_filter_that_matched_file_in_comment_scope:
+                    primary_char_filter_for_folder = char_filter_that_matched_file_in_comment_scope
+                    log_reason_for_folder = "Matched char filter in filename (Comments scope)"
+                elif post_is_candidate_by_comment_char_match and char_filter_that_matched_comment: # Fallback to comment match
+                    primary_char_filter_for_folder = char_filter_that_matched_comment
+                    log_reason_for_folder = "Matched char filter in comments (Comments scope, no file match)"
+            elif (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and char_filter_that_matched_title: # Existing logic for other scopes
+                primary_char_filter_for_folder = char_filter_that_matched_title
+                log_reason_for_folder = "Matched char filter in title"
+            # If scope is FILES, primary_char_filter_for_folder will be None here. Folder determined per file.
+
+            if primary_char_filter_for_folder:
+                base_folder_names_for_post_content = [clean_folder_name(primary_char_filter_for_folder["name"])]
+                self.logger(f"   Base folder name(s) for post content ({log_reason_for_folder}): {', '.join(base_folder_names_for_post_content)}")
+            elif not self.filter_character_list_objects: # No char filters defined, use generic logic
                 derived_folders = match_folders_from_title(post_title, self.known_names, self.unwanted_keywords)
                 if derived_folders:
                     base_folder_names_for_post_content.extend(derived_folders)
@@ -917,11 +1054,10 @@ class PostProcessorWorker:
                     base_folder_names_for_post_content.append(extract_folder_name_from_title(post_title, self.unwanted_keywords))
                 if not base_folder_names_for_post_content or not base_folder_names_for_post_content[0]:
                     base_folder_names_for_post_content = [clean_folder_name(post_title if post_title else "untitled_creator_content")]
+                self.logger(f"   Base folder name(s) for post content (Generic title parsing - no char filters): {', '.join(base_folder_names_for_post_content)}")
+            # If char filters are defined, and scope is FILES, then base_folder_names_for_post_content remains empty.
+            # The folder will be determined by char_filter_info_that_matched_file later.
             
-            if base_folder_names_for_post_content: 
-                log_reason = "Matched char filter" if (post_is_candidate_by_title_char_match and char_filter_that_matched_title) else "Generic title parsing (no char filters)"
-                self.logger(f"   Base folder name(s) for post content ({log_reason}): {', '.join(base_folder_names_for_post_content)}")
-
         if not self.extract_links_only and self.use_subfolders and self.skip_words_list:
             for folder_name_to_check in base_folder_names_for_post_content:
                 if not folder_name_to_check: continue
@@ -1066,19 +1202,32 @@ class PostProcessorWorker:
                             char_filter_info_that_matched_file = char_filter_that_matched_title
                             self.logger(f"   File '{current_api_original_filename}' is candidate because post title matched. Scope: Both (Title part).")
                         else: 
-                            for filter_item_obj in self.filter_character_list_objects:
-                                terms_to_check_for_file_both = list(filter_item_obj["aliases"])
-                                if filter_item_obj["is_group"] and filter_item_obj["name"] not in terms_to_check_for_file_both:
-                                    terms_to_check_for_file_both.append(filter_item_obj["name"])
-                                unique_terms_for_file_both_check = list(set(terms_to_check_for_file_both))
+                            # This part is for the "File" part of "Both" scope
+                            for filter_item_obj_both_file in self.filter_character_list_objects:
+                                terms_to_check_for_file_both = list(filter_item_obj_both_file["aliases"])
+                                if filter_item_obj_both_file["is_group"] and filter_item_obj_both_file["name"] not in terms_to_check_for_file_both:
+                                    terms_to_check_for_file_both.append(filter_item_obj_both_file["name"])
+                                # Ensure unique_terms_for_file_both_check is defined here
+                                unique_terms_for_file_both_check = list(set(terms_to_check_for_file_both)) 
                                 
                                 for term_to_match in unique_terms_for_file_both_check:
                                     if is_filename_match_for_character(current_api_original_filename, term_to_match):
                                         file_is_candidate_by_char_filter_scope = True
-                                        char_filter_info_that_matched_file = filter_item_obj
+                                        char_filter_info_that_matched_file = filter_item_obj_both_file # Use the filter that matched the file
                                         self.logger(f"   File '{current_api_original_filename}' matches char filter term '{term_to_match}' (from '{filter_item_obj['name']}'). Scope: Both (File part).")
                                         break
                                 if file_is_candidate_by_char_filter_scope: break
+                    elif self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+                        # If the post is a candidate (either by file or comment under this scope), then this file is also a candidate.
+                        # The folder naming will use the filter that made the POST a candidate.
+                        if post_is_candidate_by_file_char_match_in_comment_scope: # Post was candidate due to a file match
+                            file_is_candidate_by_char_filter_scope = True
+                            char_filter_info_that_matched_file = char_filter_that_matched_file_in_comment_scope # Use the filter that matched a file in the post
+                            self.logger(f"   File '{current_api_original_filename}' is candidate because a file in this post matched char filter (Overall Scope: Comments).")
+                        elif post_is_candidate_by_comment_char_match: # Post was candidate due to comment match (no file match for post)
+                            file_is_candidate_by_char_filter_scope = True
+                            char_filter_info_that_matched_file = char_filter_that_matched_comment # Use the filter that matched comments
+                            self.logger(f"   File '{current_api_original_filename}' is candidate because post comments matched char filter (Overall Scope: Comments).")
                 
                 if not file_is_candidate_by_char_filter_scope:
                     self.logger(f"   -> Skip File (Char Filter Scope '{self.char_filter_scope}'): '{current_api_original_filename}' no match.")
@@ -1178,7 +1327,7 @@ class DownloadThread(QThread):
                  char_filter_scope=CHAR_SCOPE_FILES,
                  remove_from_filename_words_list=None,
                  allow_multipart_download=True,
-                 duplicate_file_mode=DUPLICATE_MODE_DELETE): # Default to DELETE
+                 ): # Removed duplicate_file_mode and session-wide tracking
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -1219,7 +1368,7 @@ class DownloadThread(QThread):
         self.char_filter_scope = char_filter_scope
         self.remove_from_filename_words_list = remove_from_filename_words_list
         self.allow_multipart_download = allow_multipart_download
-        self.duplicate_file_mode = duplicate_file_mode
+        # self.duplicate_file_mode and session-wide tracking removed
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
             self.compress_images = False
@@ -1297,7 +1446,7 @@ class DownloadThread(QThread):
                          char_filter_scope=self.char_filter_scope,
                          remove_from_filename_words_list=self.remove_from_filename_words_list,
                          allow_multipart_download=self.allow_multipart_download,
-                         duplicate_file_mode=self.duplicate_file_mode) 
+                         ) # Removed duplicate_file_mode and session-wide tracking
                     try:
                         dl_count, skip_count, kept_originals_this_post = post_processing_worker.process()
                         grand_total_downloaded_files += dl_count

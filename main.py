@@ -48,8 +48,9 @@ try:
         SKIP_SCOPE_POSTS,
         SKIP_SCOPE_BOTH,
         CHAR_SCOPE_TITLE, # Added for completeness if used directly
-        CHAR_SCOPE_FILES, # Added
-        CHAR_SCOPE_BOTH   # Added
+        CHAR_SCOPE_FILES, # Ensure this is imported
+        CHAR_SCOPE_BOTH, 
+        CHAR_SCOPE_COMMENTS
     )
     print("Successfully imported names from downloader_utils.")
 except ImportError as e:
@@ -68,6 +69,7 @@ except ImportError as e:
     CHAR_SCOPE_TITLE = "title"
     CHAR_SCOPE_FILES = "files"
     CHAR_SCOPE_BOTH = "both"
+    CHAR_SCOPE_COMMENTS = "comments"
 
 except Exception as e:
     print(f"--- UNEXPECTED IMPORT ERROR ---")
@@ -80,6 +82,7 @@ except Exception as e:
 MAX_THREADS = 200
 RECOMMENDED_MAX_THREADS = 50
 MAX_FILE_THREADS_PER_POST_OR_WORKER = 10
+MAX_POST_WORKERS_WHEN_COMMENT_FILTERING = 3 # New constant
 
 HTML_PREFIX = "<!HTML!>"
 
@@ -92,13 +95,7 @@ SKIP_WORDS_SCOPE_KEY = "skipWordsScopeV1"
 ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 
 CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
-# CHAR_SCOPE_TITLE, CHAR_SCOPE_FILES, CHAR_SCOPE_BOTH are already defined or imported
-
-DUPLICATE_FILE_MODE_KEY = "duplicateFileModeV1"
-# DUPLICATE_MODE_RENAME is removed. Renaming only happens within a target folder if needed.
-DUPLICATE_MODE_DELETE = "delete"
-DUPLICATE_MODE_MOVE_TO_SUBFOLDER = "move" # New mode
-
+# CHAR_SCOPE_TITLE, CHAR_SCOPE_FILES, CHAR_SCOPE_BOTH, CHAR_SCOPE_COMMENTS are already defined or imported
 
 # --- Tour Classes (Moved from tour.py) ---
 class TourStepWidget(QWidget):
@@ -480,25 +477,21 @@ class DownloaderApp(QWidget):
         self.radio_only_links = None
         self.radio_only_archives = None
         
-        self.skip_scope_toggle_button = None
         self.char_filter_scope_toggle_button = None
-
-        self.all_kept_original_filenames = []
 
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
         self.skip_words_scope = self.settings.value(SKIP_WORDS_SCOPE_KEY, SKIP_SCOPE_POSTS, type=str)
-        self.char_filter_scope = self.settings.value(CHAR_FILTER_SCOPE_KEY, CHAR_SCOPE_TITLE, type=str)
+        self.char_filter_scope = self.settings.value(CHAR_FILTER_SCOPE_KEY, CHAR_SCOPE_FILES, type=str) # Default to Files
         # Always default multi-part download to OFF on launch, ignoring any saved setting.
         self.allow_multipart_download_setting = False 
-        self.duplicate_file_mode = self.settings.value(DUPLICATE_FILE_MODE_KEY, DUPLICATE_MODE_DELETE, type=str) # Default to DELETE
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
-
 
 
         self.load_known_names_from_util()
         self.setWindowTitle("Kemono Downloader v3.2.0")
         # self.setGeometry(150, 150, 1050, 820) # Initial geometry will be set after showing
         self.setStyleSheet(self.get_dark_theme())
+
         self.init_ui()
         self._connect_signals()
 
@@ -510,7 +503,6 @@ class DownloaderApp(QWidget):
         self.log_signal.emit(f"ℹ️ Skip words scope loaded: '{self.skip_words_scope}'")
         self.log_signal.emit(f"ℹ️ Character filter scope loaded: '{self.char_filter_scope}'")
         self.log_signal.emit(f"ℹ️ Multi-part download defaults to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'} on launch")
-        self.log_signal.emit(f"ℹ️ Duplicate file handling mode loaded: '{self.duplicate_file_mode.capitalize()}'")
 
 
     def _connect_signals(self):
@@ -560,7 +552,6 @@ class DownloaderApp(QWidget):
             self.char_filter_scope_toggle_button.clicked.connect(self._cycle_char_filter_scope)
         
         if hasattr(self, 'multipart_toggle_button'): self.multipart_toggle_button.clicked.connect(self._toggle_multipart_mode)
-        if hasattr(self, 'duplicate_mode_toggle_button'): self.duplicate_mode_toggle_button.clicked.connect(self._cycle_duplicate_mode)
 
 
     def load_known_names_from_util(self):
@@ -606,7 +597,6 @@ class DownloaderApp(QWidget):
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
-        self.settings.setValue(DUPLICATE_FILE_MODE_KEY, self.duplicate_file_mode) # Save current mode
         self.settings.sync()
 
         should_exit = True
@@ -726,17 +716,17 @@ class DownloaderApp(QWidget):
         self.character_input = QLineEdit()
         self.character_input.setPlaceholderText("e.g., Tifa, Aerith, (Cloud, Zack)")
         self.character_input.setToolTip(
-            "Filter files or posts by character/series names (comma-separated).\n"
-            " - Normal Mode: Filters individual files by matching their filenames.\n"
-            " - Manga/Comic Mode: Filters entire posts by matching the post title.\n"
+            "Filter by character/series names (comma-separated, e.g., Tifa, Aerith).\n"
+            "The behavior of this filter (Files, Title, Both, or Comments) is controlled by the 'Filter: [Scope]' button next to this input.\n"
             "Also used for folder naming if 'Separate Folders' is enabled.\n"
             "Group aliases for a combined folder name: (alias1, alias2) -> folder 'alias1 alias2'.\n"
             "Example: yor, Tifa, (Boa, Hancock)")
         char_input_and_button_layout.addWidget(self.character_input, 3)
 
         self.char_filter_scope_toggle_button = QPushButton()
+        # Initial text and tooltip will be set by calling _update_char_filter_scope_button_text()
+        # at the end of init_ui or when the scope is first set.
         self._update_char_filter_scope_button_text()
-        self.char_filter_scope_toggle_button.setToolTip("Click to cycle character filter scope (Files -> Title -> Both)")
         self.char_filter_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
         self.char_filter_scope_toggle_button.setMinimumWidth(100)
         char_input_and_button_layout.addWidget(self.char_filter_scope_toggle_button, 1)
@@ -794,7 +784,6 @@ class DownloaderApp(QWidget):
         skip_input_and_button_layout.addWidget(self.skip_words_input, 1) # Input field takes available space
         self.skip_scope_toggle_button = QPushButton()
         self._update_skip_scope_button_text()
-        self.skip_scope_toggle_button.setToolTip("Click to cycle skip scope (Files -> Posts -> Both)")
         self.skip_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
         self.skip_scope_toggle_button.setMinimumWidth(100)
         skip_input_and_button_layout.addWidget(self.skip_scope_toggle_button, 0) # Button takes its minimum
@@ -1017,38 +1006,26 @@ class DownloaderApp(QWidget):
         log_title_layout.addWidget(self.link_search_button)
 
         self.manga_rename_toggle_button = QPushButton()
-        # Tooltip is dynamically set by _update_manga_filename_style_button_text
         self.manga_rename_toggle_button.setVisible(False)
         self.manga_rename_toggle_button.setFixedWidth(140)
         self.manga_rename_toggle_button.setStyleSheet("padding: 4px 8px;")
         self._update_manga_filename_style_button_text()
         log_title_layout.addWidget(self.manga_rename_toggle_button)
 
-        self.multipart_toggle_button = QPushButton() # Create the button
-        # Tooltip is dynamically set by _update_multipart_toggle_button_text
+        self.multipart_toggle_button = QPushButton()
         self.multipart_toggle_button.setToolTip("Toggle between Multi-part and Single-stream downloads for large files.")
         self.multipart_toggle_button.setFixedWidth(130) # Adjust width as needed
         self.multipart_toggle_button.setStyleSheet("padding: 4px 8px;") # Added padding
         self._update_multipart_toggle_button_text() # Set initial text
         log_title_layout.addWidget(self.multipart_toggle_button) # Add to layout
         
-        self.duplicate_mode_toggle_button = QPushButton()
-        # Tooltip is dynamically set by _update_duplicate_mode_button_text
-        self.duplicate_mode_toggle_button.setToolTip("Toggle how duplicate filenames are handled (Rename or Delete).")
-        self.duplicate_mode_toggle_button.setFixedWidth(150) # Adjust width
-        self.duplicate_mode_toggle_button.setStyleSheet("padding: 4px 8px;") # Added padding
-        self._update_duplicate_mode_button_text() # Set initial text
-        log_title_layout.addWidget(self.duplicate_mode_toggle_button)
-
         self.log_verbosity_button = QPushButton("Show Basic Log")
-        # Tooltip already exists for log_verbosity_button
         self.log_verbosity_button.setToolTip("Toggle between full and basic log details.")
         self.log_verbosity_button.setFixedWidth(110)
         self.log_verbosity_button.setStyleSheet("padding: 4px 8px;")
         log_title_layout.addWidget(self.log_verbosity_button)
 
         self.reset_button = QPushButton("🔄 Reset")
-        # Tooltip already exists for reset_button
         self.reset_button.setToolTip("Reset all inputs and logs to default state (only when idle).")
         self.reset_button.setFixedWidth(80)
         self.reset_button.setStyleSheet("padding: 4px 8px;")
@@ -1125,7 +1102,6 @@ class DownloaderApp(QWidget):
         self._update_manga_filename_style_button_text()
         self._update_skip_scope_button_text()
         self._update_char_filter_scope_button_text()
-        self._update_duplicate_mode_button_text()
         
     def _center_on_screen(self):
         """Centers the widget on the screen."""
@@ -1382,8 +1358,7 @@ class DownloaderApp(QWidget):
             self.skip_scope_toggle_button.setVisible(not (is_only_links or is_only_archives))
         if hasattr(self, 'multipart_toggle_button') and self.multipart_toggle_button:
             self.multipart_toggle_button.setVisible(not (is_only_links or is_only_archives))
-        # Other log header buttons (manga, duplicate, char filter scope) are handled by
-        # update_ui_for_manga_mode and update_ui_for_subfolders, which are called below.
+        # Other log header buttons (manga, char filter scope) are handled by update_ui_for_manga_mode and update_ui_for_subfolders
 
         if self.link_search_input: self.link_search_input.setVisible(is_only_links)
         if self.link_search_button: self.link_search_button.setVisible(is_only_links)
@@ -1466,9 +1441,7 @@ class DownloaderApp(QWidget):
         
         self.update_ui_for_subfolders(subfolders_on)
         self.update_custom_folder_visibility()
-        # Ensure manga mode UI updates (which includes the visibility of 
-        # manga_rename_toggle_button and duplicate_mode_toggle_button)
-        # are triggered after filter mode changes.
+        # Ensure manga mode UI updates (which includes the visibility of manga_rename_toggle_button)
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
 
 
@@ -1556,12 +1529,46 @@ class DownloaderApp(QWidget):
         if self.skip_scope_toggle_button:
             if self.skip_words_scope == SKIP_SCOPE_FILES:
                 self.skip_scope_toggle_button.setText("Scope: Files")
+                self.skip_scope_toggle_button.setToolTip(
+                    "Current Skip Scope: Files\n\n"
+                    "Skips individual files if their names contain any of the 'Skip with Words'.\n"
+                    "Example: Skip words \"WIP, sketch\".\n"
+                    "- File \"art_WIP.jpg\" -> SKIPPED.\n"
+                    "- File \"final_art.png\" -> DOWNLOADED (if other conditions met).\n"
+                    "Post is still processed for other non-skipped files.\n\n"
+                    "Click to cycle to: Posts"
+                )
             elif self.skip_words_scope == SKIP_SCOPE_POSTS:
                 self.skip_scope_toggle_button.setText("Scope: Posts")
+                self.skip_scope_toggle_button.setToolTip(
+                    "Current Skip Scope: Posts\n\n"
+                    "Skips entire posts if their titles contain any of the 'Skip with Words'.\n"
+                    "All files from a skipped post are ignored.\n"
+                    "Example: Skip words \"preview, announcement\".\n"
+                    "- Post \"Exciting Announcement!\" -> SKIPPED.\n"
+                    "- Post \"Finished Artwork\" -> PROCESSED (if other conditions met).\n\n"
+                    "Click to cycle to: Both"
+                )
             elif self.skip_words_scope == SKIP_SCOPE_BOTH:
                 self.skip_scope_toggle_button.setText("Scope: Both")
+                self.skip_scope_toggle_button.setToolTip(
+                    "Current Skip Scope: Both (Posts then Files)\n\n"
+                    "1. Checks post title: If title contains a skip word, the entire post is SKIPPED.\n"
+                    "2. If post title is OK, then checks individual filenames: If a filename contains a skip word, only that file is SKIPPED.\n"
+                    "Example: Skip words \"WIP, sketch\".\n"
+                    "- Post \"Sketches and WIPs\" (title match) -> ENTIRE POST SKIPPED.\n"
+                    "- Post \"Art Update\" (title OK) with files:\n"
+                    "    - \"character_WIP.jpg\" (file match) -> SKIPPED.\n"
+                    "    - \"final_scene.png\" (file OK) -> DOWNLOADED.\n\n"
+                    "Click to cycle to: Files"
+                )
             else:
                 self.skip_scope_toggle_button.setText("Scope: Unknown")
+                self.skip_scope_toggle_button.setToolTip(
+                    "Current Skip Scope: Unknown\n\n"
+                    "The skip words scope is in an unknown state. Please cycle or reset.\n\n"
+                    "Click to cycle to: Files"
+                )
 
 
     def _cycle_skip_scope(self):
@@ -1585,26 +1592,72 @@ class DownloaderApp(QWidget):
         if self.char_filter_scope_toggle_button:
             if self.char_filter_scope == CHAR_SCOPE_FILES:
                 self.char_filter_scope_toggle_button.setText("Filter: Files")
+                self.char_filter_scope_toggle_button.setToolTip(
+                    "Current Scope: Files\n\n"
+                    "Filters individual files by name. A post is kept if any file matches.\n"
+                    "Only matching files from that post are downloaded.\n"
+                    "Example: Filter 'Tifa'. File 'Tifa_artwork.jpg' matches and is downloaded.\n"
+                    "Folder Naming: Uses character from matching filename.\n\n"
+                    "Click to cycle to: Title"
+                )
             elif self.char_filter_scope == CHAR_SCOPE_TITLE:
                 self.char_filter_scope_toggle_button.setText("Filter: Title")
+                self.char_filter_scope_toggle_button.setToolTip(
+                    "Current Scope: Title\n\n"
+                    "Filters entire posts by their title. All files from a matching post are downloaded.\n"
+                    "Example: Filter 'Aerith'. Post titled 'Aerith's Garden' matches; all its files are downloaded.\n"
+                    "Folder Naming: Uses character from matching post title.\n\n"
+                    "Click to cycle to: Both"
+                )
             elif self.char_filter_scope == CHAR_SCOPE_BOTH:
                 self.char_filter_scope_toggle_button.setText("Filter: Both")
+                self.char_filter_scope_toggle_button.setToolTip(
+                    "Current Scope: Both (Title then Files)\n\n"
+                    "1. Checks post title: If matches, all files from post are downloaded.\n"
+                    "2. If title doesn't match, checks filenames: If any file matches, only that file is downloaded.\n"
+                    "Example: Filter 'Cloud'.\n"
+                    " - Post 'Cloud Strife' (title match) -> all files downloaded.\n"
+                    " - Post 'Bike Chase' with 'Cloud_fenrir.jpg' (file match) -> only 'Cloud_fenrir.jpg' downloaded.\n"
+                    "Folder Naming: Prioritizes title match, then file match.\n\n"
+                    "Click to cycle to: Comments"
+                )
+            elif self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+                self.char_filter_scope_toggle_button.setText("Filter: Comments (Beta)")
+                self.char_filter_scope_toggle_button.setToolTip(
+                    "Current Scope: Comments (Beta - Files first, then Comments as fallback)\n\n"
+                    "1. Checks filenames: If any file in the post matches the filter, the entire post is downloaded. Comments are NOT checked for this filter term.\n"
+                    "2. If no file matches, THEN checks post comments: If a comment matches, the entire post is downloaded.\n"
+                    "Example: Filter 'Barret'.\n"
+                    " - Post A: Files 'Barret_gunarm.jpg', 'other.png'. File 'Barret_gunarm.jpg' matches. All files from Post A downloaded. Comments not checked for 'Barret'.\n"
+                    " - Post B: Files 'dyne.jpg', 'weapon.gif'. Comments: '...a drawing of Barret Wallace...'. No file match for 'Barret'. Comment matches. All files from Post B downloaded.\n"
+                    "Folder Naming: Prioritizes character from file match, then from comment match.\n\n"
+                    "Click to cycle to: Files"
+                )
             else:
                 self.char_filter_scope_toggle_button.setText("Filter: Unknown")
+                self.char_filter_scope_toggle_button.setToolTip(
+                    "Current Scope: Unknown\n\n"
+                    "The character filter scope is in an unknown state. Please cycle or reset.\n\n"
+                    "Click to cycle to: Files"
+                )
 
     def _cycle_char_filter_scope(self):
+        # Cycle: Files -> Title -> Both -> Comments -> Files
         if self.char_filter_scope == CHAR_SCOPE_FILES:
             self.char_filter_scope = CHAR_SCOPE_TITLE
         elif self.char_filter_scope == CHAR_SCOPE_TITLE:
             self.char_filter_scope = CHAR_SCOPE_BOTH
         elif self.char_filter_scope == CHAR_SCOPE_BOTH:
+             self.char_filter_scope = CHAR_SCOPE_COMMENTS
+        elif self.char_filter_scope == CHAR_SCOPE_COMMENTS:
             self.char_filter_scope = CHAR_SCOPE_FILES
         else:
-            self.char_filter_scope = CHAR_SCOPE_FILES
+            self.char_filter_scope = CHAR_SCOPE_FILES # Default fallback
         
         self._update_char_filter_scope_button_text()
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
         self.log_signal.emit(f"ℹ️ Character filter scope changed to: '{self.char_filter_scope}'")
+
 
 
     def add_new_character(self):
@@ -1751,18 +1804,34 @@ class DownloaderApp(QWidget):
             if self.manga_filename_style == STYLE_POST_TITLE:
                 self.manga_rename_toggle_button.setText("Name: Post Title")
                 self.manga_rename_toggle_button.setToolTip(
-                    "Manga files: First file named by post title. Subsequent files in same post keep original names.\n"
-                    "Click to change to original file names for all files."
+                    "Manga Filename Style: Post Title\n\n"
+                    "When Manga/Comic Mode is active for a creator feed:\n"
+                    "- The *first* file in a post is named after the post's title (e.g., \"MyMangaChapter1.jpg\").\n"
+                    "- Any *subsequent* files within the *same post* will retain their original filenames (e.g., \"page_02.png\", \"bonus_art.jpg\").\n"
+                    "- This is generally recommended for better organization of sequential content.\n"
+                    "- Example: Post \"Chapter 1: The Beginning\" with files \"001.jpg\", \"002.jpg\".\n"
+                    "  Downloads as: \"Chapter 1 The Beginning.jpg\", \"002.jpg\".\n\n"
+                    "Click to change to: Original File Name"
                 )
             elif self.manga_filename_style == STYLE_ORIGINAL_NAME:
                 self.manga_rename_toggle_button.setText("Name: Original File")
                 self.manga_rename_toggle_button.setToolTip(
-                    "Manga files will keep their original names as provided by the site (e.g., 001.jpg, page_01.png).\n"
-                    "Click to change to post title based naming for the first file."
+                    "Manga Filename Style: Original File Name\n\n"
+                    "When Manga/Comic Mode is active for a creator feed:\n"
+                    "- *All* files in a post will attempt to keep their original filenames as provided by the site (e.g., \"001.jpg\", \"page_02.png\").\n"
+                    "- This can be useful if original names are already well-structured and sequential.\n"
+                    "- If original names are inconsistent, using \"Post Title\" style is often better.\n"
+                    "- Example: Post \"Chapter 1: The Beginning\" with files \"001.jpg\", \"002.jpg\".\n"
+                    "  Downloads as: \"001.jpg\", \"002.jpg\".\n\n"
+                    "Click to change to: Post Title"
                 )
             else:
                 self.manga_rename_toggle_button.setText("Name: Unknown Style")
-                self.manga_rename_toggle_button.setToolTip("Manga filename style is in an unknown state.")
+                self.manga_rename_toggle_button.setToolTip(
+                    "Manga Filename Style: Unknown\n\n"
+                    "The manga filename style is in an unknown state. Please cycle or reset.\n\n"
+                    "Click to change to: Post Title"
+                )
 
 
     def _toggle_manga_filename_style(self):
@@ -1816,11 +1885,6 @@ class DownloaderApp(QWidget):
             # Visible if manga mode is on AND not in "Only Links" or "Only Archives" mode
             self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode))
 
-        if hasattr(self, 'duplicate_mode_toggle_button'):
-            # Visible if manga mode is OFF AND not in "Only Links" or "Only Archives" mode
-            self.duplicate_mode_toggle_button.setVisible(
-                not manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode)
-            )
 
         if manga_mode_effectively_on:
             if self.page_range_label: self.page_range_label.setEnabled(False)
@@ -1909,12 +1973,11 @@ class DownloaderApp(QWidget):
             
         raw_skip_words = self.skip_words_input.text().strip()
         skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
-        current_skip_words_scope = self.get_skip_words_scope()
 
         raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
-        effective_duplicate_file_mode = self.duplicate_file_mode # Start with user's choice
         allow_multipart = self.allow_multipart_download_setting # Use the internal setting
         remove_from_filename_words_list = [word.strip() for word in raw_remove_filename_words.split(',') if word.strip()]
+        current_skip_words_scope = self.get_skip_words_scope()
         current_char_filter_scope = self.get_char_filter_scope()
         manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
         
@@ -1967,10 +2030,8 @@ class DownloaderApp(QWidget):
         elif manga_mode:
             start_page, end_page = None, None 
         
-        # effective_duplicate_file_mode will be self.duplicate_file_mode (UI button's state).
         # Manga Mode specific duplicate handling is now managed entirely within downloader_utils.py
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
-        self.all_kept_original_filenames = []
 
         raw_character_filters_text = self.character_input.text().strip()
         
@@ -2130,6 +2191,7 @@ class DownloaderApp(QWidget):
         self.total_posts_to_process = 0; self.processed_posts_count = 0; self.download_counter = 0; self.skip_counter = 0
         self.progress_label.setText("Progress: Initializing...")
 
+        
         effective_num_post_workers = 1
         effective_num_file_threads_per_worker = 1
         
@@ -2179,8 +2241,7 @@ class DownloaderApp(QWidget):
                 f"   Skip Words Scope: {current_skip_words_scope.capitalize()}",
                 f"   Remove Words from Filename: {', '.join(remove_from_filename_words_list) if remove_from_filename_words_list else 'None'}",
                 f"   Compress Images: {'Enabled' if compress_images else 'Disabled'}",
-                f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}",
-                f"   Multi-part Download: {'Enabled' if allow_multipart else 'Disabled'}"
+                f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}" # Removed duplicate file handling log
             ])
         else:
             log_messages.append(f"   Mode: Extracting Links Only")
@@ -2192,7 +2253,6 @@ class DownloaderApp(QWidget):
             log_messages.append(f"     ↳ Manga Filename Style: {'Post Title Based' if self.manga_filename_style == STYLE_POST_TITLE else 'Original File Name'}")
             if filter_character_list_to_pass:
                  log_messages.append(f"     ↳ Manga Character Filter (for naming/folder): {', '.join(item['name'] for item in filter_character_list_to_pass)}")
-                 log_messages.append(f"       ↳ Char Filter Scope (Manga): {current_char_filter_scope.capitalize()}")
             log_messages.append(f"     ↳ Manga Duplicates: Will be renamed with numeric suffix if names clash (e.g., _1, _2).")
 
         should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
@@ -2242,8 +2302,8 @@ class DownloaderApp(QWidget):
             'signals': self.worker_signals,
             'manga_filename_style': self.manga_filename_style,
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
-            'allow_multipart_download': allow_multipart, # Corrected from previous thought
-            'duplicate_file_mode': effective_duplicate_file_mode # Pass the potentially overridden mode
+            'allow_multipart_download': allow_multipart,
+            # 'duplicate_file_mode' and session-wide tracking removed
         }
 
         try:
@@ -2258,13 +2318,11 @@ class DownloaderApp(QWidget):
                     'use_subfolders', 'use_post_subfolders', 'custom_folder_name',
                     'compress_images', 'download_thumbnails', 'service', 'user_id',
                     'downloaded_files', 'downloaded_file_hashes', 'remove_from_filename_words_list',
-                    'downloaded_files_lock', 'downloaded_file_hashes_lock', 
-                    'skip_words_list', 'skip_words_scope', 'char_filter_scope', 
-                    'show_external_links', 'extract_links_only',
-                    'num_file_threads_for_worker',
-                    'skip_current_file_flag',
-                    'start_page', 'end_page', 'target_post_id_from_initial_url',
-                    'manga_mode_active', 'unwanted_keywords', 'manga_filename_style', 'duplicate_file_mode',
+                    'downloaded_files_lock', 'downloaded_file_hashes_lock',
+                    'skip_words_list', 'skip_words_scope', 'char_filter_scope',
+                    'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
+                    'start_page', 'end_page', 'target_post_id_from_initial_url', 'duplicate_file_mode',
+                    'manga_mode_active', 'unwanted_keywords', 'manga_filename_style',
                     'allow_multipart_download'
                 ]
                 args_template['skip_current_file_flag'] = None
@@ -2385,18 +2443,17 @@ class DownloaderApp(QWidget):
             'downloaded_files_lock', 'downloaded_file_hashes_lock', 'remove_from_filename_words_list',
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
             'show_external_links', 'extract_links_only', 'allow_multipart_download',
-            'num_file_threads',
-            'skip_current_file_flag',
+            'num_file_threads', 'skip_current_file_flag',
             'manga_mode_active', 'manga_filename_style'
         ]
         # Ensure 'allow_multipart_download' is also considered for optional keys if it has a default in PostProcessorWorker
         ppw_optional_keys_with_defaults = {
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
-            'show_external_links', 'extract_links_only',
-            'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style'
+            'show_external_links', 'extract_links_only', 'duplicate_file_mode', # Added duplicate_file_mode here
+            'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style',
+            'processed_base_filenames_session_wide', 'processed_base_filenames_session_wide_lock' # Add these
         }
-
-
+        
         for post_data_item in all_posts_data:
             if self.cancellation_event.is_set(): break
             if not isinstance(post_data_item, dict):
@@ -2464,12 +2521,10 @@ class DownloaderApp(QWidget):
         widgets_to_toggle = [ self.download_btn, self.link_input, self.radio_all, self.radio_images, self.radio_videos, self.radio_only_links,
             self.skip_zip_checkbox, self.skip_rar_checkbox, self.use_subfolders_checkbox, self.compress_images_checkbox,
             self.download_thumbnails_checkbox, self.use_multithreading_checkbox, self.skip_words_input, self.character_search_input,
-            self.new_char_input, self.add_char_button, self.delete_char_button, 
-            self.char_filter_scope_toggle_button, 
-            self.start_page_input, self.end_page_input,
-            self.page_range_label, self.to_label, self.character_input, self.custom_folder_input, self.custom_folder_label, self.remove_from_filename_input,
-            self.reset_button, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.multipart_toggle_button,
-            self.skip_scope_toggle_button 
+            self.new_char_input, self.add_char_button, self.delete_char_button, self.char_filter_scope_toggle_button, # duplicate_file_mode_toggle_button removed
+            self.start_page_input, self.end_page_input, self.page_range_label, self.to_label, 
+            self.character_input, self.custom_folder_input, self.custom_folder_label, self.remove_from_filename_input,
+            self.reset_button, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.multipart_toggle_button, self.skip_scope_toggle_button
         ]
         
         for widget in widgets_to_toggle:
@@ -2663,14 +2718,9 @@ class DownloaderApp(QWidget):
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
         self._update_skip_scope_button_text()
 
-        self.char_filter_scope = CHAR_SCOPE_TITLE 
+        self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files on full reset
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope) 
         self._update_char_filter_scope_button_text() 
-
-        self.duplicate_file_mode = DUPLICATE_MODE_DELETE # Reset to default (Delete)
-        self.settings.setValue(DUPLICATE_FILE_MODE_KEY, self.duplicate_file_mode)
-        
-        self._update_duplicate_mode_button_text()
 
         self.settings.sync()
         self._update_manga_filename_style_button_text()
@@ -2693,12 +2743,8 @@ class DownloaderApp(QWidget):
 
         self.skip_words_scope = SKIP_SCOPE_POSTS
         self._update_skip_scope_button_text()
-        self.char_filter_scope = CHAR_SCOPE_TITLE
+        self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files
         self._update_char_filter_scope_button_text() 
-        self.duplicate_file_mode = DUPLICATE_MODE_DELETE # Default to DELETE
-        self._update_duplicate_mode_button_text()
-
-
         self._handle_filter_mode_change(self.radio_all, True)
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         self.filter_character_list("")
@@ -2728,6 +2774,26 @@ class DownloaderApp(QWidget):
         if hasattr(self, 'multipart_toggle_button'):
             text = "Multi-part: ON" if self.allow_multipart_download_setting else "Multi-part: OFF"
             self.multipart_toggle_button.setText(text)
+            if self.allow_multipart_download_setting:
+                self.multipart_toggle_button.setToolTip(
+                    "Multi-part Download: ON\n\n"
+                    "Enables downloading large files in multiple segments (parts) simultaneously.\n"
+                    "- Can significantly speed up downloads for *single large files* (e.g., videos, large archives) if the server supports it.\n"
+                    "- May increase CPU/network usage.\n"
+                    "- For creator feeds with many *small files* (e.g., images), this might not offer speed benefits and could make the UI/log feel busy.\n"
+                    "- If a multi-part download fails for a file, it will automatically retry with a single stream.\n"
+                    "- Example: A 500MB video might be downloaded in 5 parts of 100MB each, concurrently.\n\n"
+                    "Click to turn OFF (use single-stream for all files)."
+                )
+            else:
+                self.multipart_toggle_button.setToolTip(
+                    "Multi-part Download: OFF\n\n"
+                    "All files will be downloaded using a single connection (stream).\n"
+                    "- This is generally stable and works well for most scenarios, especially for feeds with many smaller files.\n"
+                    "- Large files will be downloaded sequentially in one go.\n"
+                    "- Example: A 500MB video will be downloaded as one continuous stream.\n\n"
+                    "Click to turn ON (enable multi-part for large files, see advisory on click)."
+                )
 
     def _toggle_multipart_mode(self):
         # If currently OFF, and user is trying to turn it ON
@@ -2762,23 +2828,6 @@ class DownloaderApp(QWidget):
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
         self.log_signal.emit(f"ℹ️ Multi-part download set to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'}")
 
-    def _update_duplicate_mode_button_text(self):
-        if hasattr(self, 'duplicate_mode_toggle_button'):
-            if self.duplicate_file_mode == DUPLICATE_MODE_DELETE:
-                self.duplicate_mode_toggle_button.setText("Duplicates: Delete")
-            elif self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER:
-                self.duplicate_mode_toggle_button.setText("Duplicates: Move")
-            else: # Should not happen
-                self.duplicate_mode_toggle_button.setText("Duplicates: Move") # Default to Move if unknown
-
-    def _cycle_duplicate_mode(self):
-        if self.duplicate_file_mode == DUPLICATE_MODE_MOVE_TO_SUBFOLDER:
-            self.duplicate_file_mode = DUPLICATE_MODE_DELETE
-        else: # If it's DELETE or unknown, cycle back to MOVE
-            self.duplicate_file_mode = DUPLICATE_MODE_MOVE_TO_SUBFOLDER
-        self._update_duplicate_mode_button_text()
-        self.settings.setValue(DUPLICATE_FILE_MODE_KEY, self.duplicate_file_mode)
-        self.log_signal.emit(f"ℹ️ Duplicate file handling mode changed to: '{self.duplicate_file_mode.capitalize()}'")
 
 if __name__ == '__main__':
     import traceback
