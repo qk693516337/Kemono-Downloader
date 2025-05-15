@@ -1,98 +1,204 @@
-# Kemono Downloader v3.1.0
+# Kemono Downloader v3.2.0
 
-A feature-rich GUI application built with PyQt5 to download content from [Kemono.su](https://kemono.su) or [Coomer.party](https://coomer.party). Offers robust filtering, smart organization, manga-specific handling, and performance tuning. Now with session resuming, better retry logic, and smarter file management.
+A feature-rich GUI application built with PyQt5 to download content from **Kemono.su** or **Coomer.party**.  
+Offers robust filtering, smart organization, manga-specific handling, and performance tuning.  
+
+This version introduces:
+- Multi-part downloads  
+- Character filtering by comments  
+- Filename word removal  
+- Various UI/workflow enhancements
 
 ---
 
-## 🚀 What's New in v3.1.0
+## 🚀 What's New in v3.2.0
 
-* **Session Resuming**  
-  * Automatically saves and resumes incomplete downloads.  
+### 🔹 Character Filter by Post Comments (Beta)
 
-* **Retry on Failure**  
-  * Failed files auto-retry up to 3 times.  
-  * Clear logging for each retry attempt.
+- New "Comments" scope for the 'Filter by Character(s)' feature.
 
-* **Improved Manga Mode**  
-  * Better post ordering and handling of missing or untitled posts.  
-  * Optional numeric-only sorting for consistent naming.
+**How it works:**
+1. Checks if any **filenames** match your character filter. If yes → downloads the post (skips comment check).
+2. If no filename matches → scans the **post's comments**. If matched → downloads the post.
 
-* **UI Enhancements**  
-  * Settings persist across sessions.  
-  * Improved layout spacing, tooltips, and status indicators.
+- Prioritizes filename-matched character name for folder naming, otherwise uses comment match.
+- Cycle through filter scopes with the `Filter: [Scope]` button next to the character input.
 
-* **Stability & Speed**  
-  * Faster post fetching with lower memory usage.  
-  * Minor bug fixes (duplicate folders, empty post crashes).
+---
+
+### ✂️ Remove Specific Words from Filenames
+
+- Input field: `"✂️ Remove Words from name"`
+- Enter comma-separated words (e.g., `patreon, kemono, [HD], _final`)
+- These are removed from filenames (case-insensitive) to improve organization.
+
+---
+
+### 🧩 Multi-part Downloads for Large Files
+
+- Toggle multi-part downloads (OFF by default).
+- Improves speed on large files (e.g., >10MB videos, zips).
+- Falls back to single-stream on failure.
+- Toggle via `Multi-part: ON/OFF` in the log header.
+
+---
+
+### 🧠 UI and Workflow Enhancements
+
+- **Updated Welcome Tour**  
+  Shows on first launch, covers all new and core features.
+
+- **Smarter Cancel/Reset**  
+  Cancels active tasks and resets UI — but retains URL and Download Directory fields.
+
+- **Simplified Interface**  
+  - Removed "Skip Current File" and local API server for a cleaner experience.
+
+---
+
+### 📁 Refined File & Duplicate Handling
+
+- **Duplicate Filenames**  
+  Adds numeric suffix (`file.jpg`, `file_1.jpg`, etc.).  
+  Removed the "Duplicate" subfolder system.
+
+- **Efficient Hash Check**  
+  Detects and skips duplicate files within the same session (before writing to disk).
+
+- **Better Temp File Cleanup**  
+  Cleans up `.part` files — especially if duplicate or compressed post-download.
 
 ---
 
 ## 🧩 Core Features
 
-* **Simple GUI**  
-  Built with PyQt5 for a clean, responsive experience.
+### 🎛 Simple GUI
+- Built with **PyQt5**  
+- Dark theme, responsive layout
 
-* **Supports Both Post and Creator URLs**  
-  Download a single post or an entire feed with one click.
+### 📥 Supports Post and Creator URLs
+- Download a single post or an entire creator’s feed.
 
-* **Smart Folder System**  
-  Organize files using post titles, known character/show names, or a folder per post.  
-  Detects and auto-names folders based on custom keywords.
+### 🔢 Page Range Support
+- Choose page range when downloading creator feeds (except in Manga Mode).
 
-* **Known Names Manager**  
-  Add, search, and delete tags for smarter organization.  
-  Saved to `Known.txt` for reuse.
+---
 
-* **Advanced Filters**  
-  * Skip posts or files with specific keywords (e.g. `WIP`, `sketch`).  
-  * Filter by media type: images, videos, or GIFs.  
-  * Skip `.zip` and `.rar` archives.  
+### 🗂 Smart Folder System
 
-* **Manga Mode**  
-  Rename and sort manga posts by title and upload order.  
-  Handles one-image-per-post formats cleanly.
+- Organize by character names, post titles, or custom labels.
+- Option to create a separate folder for each post.
+- Uses `Known.txt` for fallback names.
 
-* **Image Compression**  
-  Auto-convert large images (>1.5MB) to WebP (requires Pillow).
+---
 
-* **Multithreaded Downloads**  
-  Adjustable worker count with warnings at unsafe levels.  
-  Full threading for creators, single-thread fallback for post mode.
+### 📚 Known Names Manager
 
-* **Download Controls**  
-  Cancel files mid-download.  
-  Visual progress tracking with per-post summaries.
+- Add/edit/delete known characters/shows
+- Saves entries in `Known.txt` for automatic folder naming.
 
-* **Dark Mode**  
-  Clean and modern dark-themed interface.
+---
+
+### 🔍 Advanced Filtering
+
+- **Filter by Character(s)**  
+  Scope: `Files`, `Post Titles`, `Both`, or `Post Comments (Beta)`
+
+- **Skip with Words**  
+  Skip posts or files based on keywords. Toggle scope.
+
+- **Media Type Filters**  
+  Choose: `All`, `Images/GIFs`, `Videos`, `📦 Only Archives (.zip/.rar)`
+
+- **🔗 Only Links Mode**  
+  Extracts links from post descriptions.
+
+- **Skip Archives**  
+  Ignore `.zip`/`.rar` unless in "Only Archives" mode.
+
+---
+
+### 📖 Manga/Comic Mode (Creator URLs Only)
+
+- Downloads posts oldest-to-newest.
+
+**Filename Style Toggle:**
+- `Post Title` (default): Names first file in post after title.
+- `Original File`: Uses original file names.
+
+- Uses manga/series title for filtering and folder naming.
+
+---
+
+### 🖼️ Image Compression
+
+- Converts large images to **WebP** if it significantly reduces size.
+- Requires `Pillow` library.
+
+---
+
+### 🖼 Download Thumbnails Only
+
+- Option to fetch only small preview images.
+
+---
+
+### ⚙️ Multithreaded Downloads
+
+- Adjustable threads for:
+  - Multiple post processing (creator feeds)
+  - File-level concurrency (within a post)
+
+---
+
+### ⏯ Download Controls
+
+- Start and cancel active operations.
+
+---
+
+### 🌙 Dark Mode Interface
+
+- Modern, dark-themed GUI for comfort and clarity.
 
 ---
 
 ## 🔧 Backend Enhancements
 
-* **Retry Logic**  
-  Auto-retries individual failed files before skipping.  
-  Logs all failures with HTTP codes and reasons.
+### ♻️ Retry Logic
 
-* **Hash-Based Deduplication**  
-  Prevents redownloading of previously saved files.
+- Retries failed file and chunk downloads before skipping.
 
-* **Smart Naming**  
-  Cleans and standardizes inconsistent post titles.  
-  Adds page indices for manga.
+---
 
-* **Efficient Logging**  
-  Toggle between basic and advanced views.  
-  Live feedback with color-coded logs.
+### 🧬 Session-wide Deduplication
+
+- Uses **MD5 hashes** to avoid saving identical files during a session.
+
+---
+
+### 🧹 Smart Naming & Cleanup
+
+- Cleans special characters in names.
+- Applies numeric suffixes on collision.
+- Removes specified unwanted words.
+
+---
+
+### 📋 Efficient Logging
+
+- Toggle verbosity: `Basic` (important) or `Full` (everything).
+- Separate panel for extracted external links.
+- Real-time feedback with clear statuses.
 
 ---
 
 ## 📦 Installation
 
 ### Requirements
+- Python 3.6+
+- Pip (Python package manager)
 
-* Python 3.6+
-* Pip packages:
-
+### Install Libraries
 ```bash
 pip install PyQt5 requests Pillow
