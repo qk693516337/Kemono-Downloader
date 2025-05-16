@@ -457,26 +457,37 @@ class DownloaderApp(QWidget):
         self._is_processing_external_link_queue = False
         self._current_link_post_title = None
         self.extracted_links_cache = []
-
-        self.basic_log_mode = False
-        self.log_verbosity_button = None
+        
+        # self.basic_log_mode = False # No longer used with this button
+        # self.log_verbosity_button = None # Old text button, already removed
         self.manga_rename_toggle_button = None
-
+        
         self.main_log_output = None
         self.external_log_output = None
         self.log_splitter = None
         self.main_splitter = None
         self.reset_button = None
         self.progress_log_label = None
+        self.log_verbosity_toggle_button = None # New icon button
+
+        self.missed_character_log_output = None # New log area
+        self.log_view_stack = None # To switch between progress and missed char logs
+        self.current_log_view = 'progress' # 'progress' or 'missed_character'
 
         self.link_search_input = None
-        self.link_search_button = None
-        self.export_links_button = None
-
-        self.manga_mode_checkbox = None
+        self.link_search_button = None # For filtering links log
+        self.export_links_button = None # For exporting links
         self.radio_only_links = None
         self.radio_only_archives = None
-        
+
+        # For Missed Character Log summarization
+        self.missed_title_key_terms_count = {}
+        self.missed_title_key_terms_examples = {}
+        self.logged_summary_for_key_term = set()
+        # self.missed_character_log_threshold = 4 # No longer needed for new style
+        self.STOP_WORDS = set(["a", "an", "the", "is", "was", "were", "of", "for", "with", "in", "on", "at", "by", "to", "and", "or", "but", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its", "our", "their", "com", "net", "org", "www"])
+        self.already_logged_bold_key_terms = set() # For the new simple bolded list
+        self.missed_key_terms_buffer = [] # To store terms for alphabetical sorting
         self.char_filter_scope_toggle_button = None
 
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
@@ -510,6 +521,8 @@ class DownloaderApp(QWidget):
              self.worker_signals.progress_signal.connect(self.handle_main_log)
         if hasattr(self.worker_signals, 'file_progress_signal'):
             self.worker_signals.file_progress_signal.connect(self.update_file_progress_display)
+        if hasattr(self.worker_signals, 'missed_character_post_signal'): # New
+            self.worker_signals.missed_character_post_signal.connect(self.handle_missed_character_post)
         if hasattr(self.worker_signals, 'external_link_signal'):
             self.worker_signals.external_link_signal.connect(self.handle_external_link_signal)
 
@@ -531,7 +544,7 @@ class DownloaderApp(QWidget):
             self.radio_group.buttonToggled.connect(self._handle_filter_mode_change)
 
         if self.reset_button: self.reset_button.clicked.connect(self.reset_application_state)
-        if self.log_verbosity_button: self.log_verbosity_button.clicked.connect(self.toggle_log_verbosity)
+        if self.log_verbosity_toggle_button: self.log_verbosity_toggle_button.clicked.connect(self.toggle_active_log_view)
 
         if self.link_search_button: self.link_search_button.clicked.connect(self._filter_links_log)
         if self.link_search_input:
@@ -1011,19 +1024,21 @@ class DownloaderApp(QWidget):
         self.manga_rename_toggle_button.setStyleSheet("padding: 4px 8px;")
         self._update_manga_filename_style_button_text()
         log_title_layout.addWidget(self.manga_rename_toggle_button)
-
+        
         self.multipart_toggle_button = QPushButton()
         self.multipart_toggle_button.setToolTip("Toggle between Multi-part and Single-stream downloads for large files.")
         self.multipart_toggle_button.setFixedWidth(130) # Adjust width as needed
         self.multipart_toggle_button.setStyleSheet("padding: 4px 8px;") # Added padding
         self._update_multipart_toggle_button_text() # Set initial text
         log_title_layout.addWidget(self.multipart_toggle_button) # Add to layout
-        
-        self.log_verbosity_button = QPushButton("Show Basic Log")
-        self.log_verbosity_button.setToolTip("Toggle between full and basic log details.")
-        self.log_verbosity_button.setFixedWidth(110)
-        self.log_verbosity_button.setStyleSheet("padding: 4px 8px;")
-        log_title_layout.addWidget(self.log_verbosity_button)
+
+        self.EYE_ICON = "\U0001F441"  # 👁️
+        self.CLOSED_EYE_ICON = "\U0001F648" # 🙈
+        self.log_verbosity_toggle_button = QPushButton(self.EYE_ICON) # Initial state: Progress Log visible
+        self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
+        self.log_verbosity_toggle_button.setFixedWidth(45) # Adjusted for emoji
+        self.log_verbosity_toggle_button.setStyleSheet("font-size: 11pt; padding: 2px 2px 3px 2px;")
+        log_title_layout.addWidget(self.log_verbosity_toggle_button)
 
         self.reset_button = QPushButton("🔄 Reset")
         self.reset_button.setToolTip("Reset all inputs and logs to default state (only when idle).")
@@ -1033,6 +1048,9 @@ class DownloaderApp(QWidget):
         right_layout.addLayout(log_title_layout)
 
         self.log_splitter = QSplitter(Qt.Vertical)
+        
+        self.log_view_stack = QStackedWidget() # Create the stack
+
         self.main_log_output = QTextEdit()
         self.main_log_output.setToolTip("Displays progress messages, errors, and summaries. In 'Only Links' mode, shows extracted links.")
         self.main_log_output.setReadOnly(True)
@@ -1040,6 +1058,15 @@ class DownloaderApp(QWidget):
         self.main_log_output.setStyleSheet("""
             QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
                          color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }""")
+        self.log_view_stack.addWidget(self.main_log_output) # Add progress log to stack
+
+        self.missed_character_log_output = QTextEdit() # Create missed character log
+        self.missed_character_log_output.setToolTip("Displays information about posts/files skipped due to character filters.")
+        self.missed_character_log_output.setReadOnly(True)
+        self.missed_character_log_output.setLineWrapMode(QTextEdit.NoWrap) # Or QTextEdit.WidgetWidth
+        self.missed_character_log_output.setStyleSheet(self.main_log_output.styleSheet()) # Use same style
+        self.log_view_stack.addWidget(self.missed_character_log_output) # Add missed char log to stack
+
         self.external_log_output = QTextEdit()
         self.external_log_output.setToolTip("If 'Show External Links in Log' is checked, this panel displays external links found in post descriptions.")
         self.external_log_output.setReadOnly(True)
@@ -1048,7 +1075,8 @@ class DownloaderApp(QWidget):
             QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
                          color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }""")
         self.external_log_output.hide()
-        self.log_splitter.addWidget(self.main_log_output)
+
+        self.log_splitter.addWidget(self.log_view_stack) # Add stack to splitter (first widget)
         self.log_splitter.addWidget(self.external_log_output)
         self.log_splitter.setSizes([self.height(), 0])
         right_layout.addWidget(self.log_splitter, 1)
@@ -1148,27 +1176,11 @@ class DownloaderApp(QWidget):
         is_html_message = message.startswith(HTML_PREFIX)
         display_message = message
         use_html = False
-
+        
         if is_html_message:
              display_message = message[len(HTML_PREFIX):]
              use_html = True
-        elif self.basic_log_mode:
-            basic_keywords = [
-                '🚀 starting download', '🏁 download finished', '🏁 download cancelled',
-                '❌', '⚠️', '✅ all posts processed', '✅ reached end of posts',
-                'summary:', 'progress:', '[fetcher]',
-                'critical error', 'import error', 'error', 'fail', 'timeout',
-                'unsupported url', 'invalid url', 'no posts found', 'could not create directory',
-                'missing dependency', 'high thread count', 'manga mode filter warning',
-                'duplicate name', 'potential name conflict', 'invalid filter name',
-                'no valid character filters'
-            ]
-            message_lower = message.lower()
-            if not any(keyword in message_lower for keyword in basic_keywords):
-                 if not message.strip().startswith("✅ Saved:") and \
-                    not message.strip().startswith("✅ Added") and \
-                    not message.strip().startswith("✅ Application reset complete"):
-                    return
+        # Basic log mode toggle is removed for this button. Progress log is always "full".
         
         try:
              safe_message = str(display_message).replace('\x00', '[NULL]')
@@ -1182,13 +1194,82 @@ class DownloaderApp(QWidget):
                  scrollbar.setValue(scrollbar.maximum())
         except Exception as e:
              print(f"GUI Main Log Error: {e}\nOriginal Message: {message}")
+    def _extract_key_term_from_title(self, title):
+        if not title:
+            return None
+        # Try to find words that look like names/keywords
+        title_cleaned = re.sub(r'\[.*?\]', '', title) # Remove content in square brackets
+        title_cleaned = re.sub(r'\(.*?\)', '', title_cleaned) # Remove content in parentheses
+        title_cleaned = title_cleaned.strip()
 
+        # Find all words and their original start positions
+        word_matches = list(re.finditer(r'\b[a-zA-Z][a-zA-Z0-9_-]*\b', title_cleaned))
+        
+        capitalized_candidates = []
+        for match in word_matches:
+            word = match.group(0)
+            # istitle() checks if first char is upper and rest lower (or non-cased like numbers)
+            # We also check if the whole word is not uppercase (like "AI") unless it's short
+            if word.istitle() and word.lower() not in self.STOP_WORDS and len(word) > 2:
+                 if not (len(word) > 3 and word.isupper()): # Avoid all-caps words unless short (like "AI")
+                    capitalized_candidates.append({'text': word, 'len': len(word), 'pos': match.start()})
+        
+        if capitalized_candidates:
+            # Sort by length (desc), then by original position (desc - later words preferred if same length)
+            capitalized_candidates.sort(key=lambda x: (x['len'], x['pos']), reverse=True)
+            return capitalized_candidates[0]['text']
+
+        # Fallback: longest word not in stop words, if no good capitalized word found
+        non_capitalized_words_info = []
+        for match in word_matches:
+            word = match.group(0)
+            if word.lower() not in self.STOP_WORDS and len(word) > 3: # Min length 4 for non-capitalized
+                 non_capitalized_words_info.append({'text': word, 'len': len(word), 'pos': match.start()})
+        
+        if non_capitalized_words_info:
+            # Sort by length (desc), then position (desc - later preferred if same length)
+            non_capitalized_words_info.sort(key=lambda x: (x['len'], x['pos']), reverse=True)
+            return non_capitalized_words_info[0]['text']
+                
+        return None
+
+    def handle_missed_character_post(self, post_title, reason):
+        if self.missed_character_log_output:
+            key_term = self._extract_key_term_from_title(post_title)
+
+            if key_term:
+                normalized_key_term = key_term.lower()
+                if normalized_key_term not in self.already_logged_bold_key_terms:
+                    # Use the extracted key_term directly to preserve its original casing for display
+                    self.already_logged_bold_key_terms.add(normalized_key_term)
+                    self.missed_key_terms_buffer.append(key_term) # Store original case
+                    self._refresh_missed_character_log()
+        else: # Fallback if UI element isn't ready (should not happen in normal operation)
+            print(f"Debug (Missed Char Log): Title='{post_title}', Reason='{reason}'")
+
+    def _refresh_missed_character_log(self):
+        if self.missed_character_log_output:
+            self.missed_character_log_output.clear()
+            # Sort case-insensitively but keep original casing from buffer
+            sorted_terms = sorted(self.missed_key_terms_buffer, key=str.lower)
+            separator_line = "-" * 40  # Define the separator
+            
+            for term in sorted_terms:
+                display_term = term.capitalize() # Ensure first letter is capitalized
+
+                self.missed_character_log_output.append(separator_line)
+                # Center the bold, blue text using a <p> tag with align attribute
+                self.missed_character_log_output.append(f'<p align="center"><b><font style="font-size: 12.4pt; color: #87CEEB;">{display_term}</font></b></p>')
+                self.missed_character_log_output.append(separator_line)
+                self.missed_character_log_output.append("") # Add a blank line for spacing
+            
+            scrollbar = self.missed_character_log_output.verticalScrollBar()
+            scrollbar.setValue(0) # Scroll to top after refresh
 
     def _is_download_active(self):
         single_thread_active = self.download_thread and self.download_thread.isRunning()
         pool_active = self.thread_pool is not None and any(not f.done() for f in self.active_futures if f is not None)
         return single_thread_active or pool_active
-
 
     def handle_external_link_signal(self, post_title, link_text, link_url, platform):
         link_data = (post_title, link_text, link_url, platform)
@@ -2344,7 +2425,9 @@ class DownloaderApp(QWidget):
             if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.connect(self.download_thread.receive_add_character_result)
             if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.connect(self.handle_external_link_signal)
             if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.connect(self.update_file_progress_display)
-
+            if hasattr(self.download_thread, 'missed_character_post_signal'): # New
+            
+                self.download_thread.missed_character_post_signal.connect(self.handle_missed_character_post)
             self.download_thread.start()
             self.log_signal.emit("✅ Single download thread (for posts) started.")
         except Exception as e:
@@ -2537,7 +2620,7 @@ class DownloaderApp(QWidget):
             is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
             self.external_links_checkbox.setEnabled(enabled and not is_only_links)
 
-        if self.log_verbosity_button: self.log_verbosity_button.setEnabled(True)
+        if self.log_verbosity_toggle_button: self.log_verbosity_toggle_button.setEnabled(True) # New button, always enabled
 
         multithreading_currently_on = self.use_multithreading_checkbox.isChecked()
         self.thread_count_input.setEnabled(enabled and multithreading_currently_on)
@@ -2678,6 +2761,8 @@ class DownloaderApp(QWidget):
                 if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
                 if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
                 if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
+                if hasattr(self.download_thread, 'missed_character_post_signal'): # New
+                    self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
             except (TypeError, RuntimeError) as e: self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
             # Ensure these are cleared if the download_finished is for the single download thread
             if self.download_thread and not self.download_thread.isRunning(): # Check if it was this thread
@@ -2688,29 +2773,55 @@ class DownloaderApp(QWidget):
 
         self.set_ui_enabled(True); self.cancel_btn.setEnabled(False)
 
-    def toggle_log_verbosity(self):
-        self.basic_log_mode = not self.basic_log_mode
-        if self.basic_log_mode: self.log_verbosity_button.setText("Show Full Log"); self.log_signal.emit("="*20 + " Basic Log Mode Enabled " + "="*20)
-        else: self.log_verbosity_button.setText("Show Basic Log"); self.log_signal.emit("="*20 + " Full Log Mode Enabled " + "="*20)
+    def toggle_active_log_view(self):
+        if self.current_log_view == 'progress':
+            self.current_log_view = 'missed_character'
+            if self.log_view_stack: self.log_view_stack.setCurrentIndex(1) # Show missed character log
+            if self.log_verbosity_toggle_button:
+                self.log_verbosity_toggle_button.setText(self.CLOSED_EYE_ICON) # Monkey icon
+                self.log_verbosity_toggle_button.setToolTip("Current View: Missed Character Log. Click to switch to Progress Log.")
+            if self.progress_log_label: self.progress_log_label.setText("🚫 Missed Character Log:")
+            # self.log_signal.emit("="*20 + " Switched to Missed Character Log View " + "="*20) # Optional log message
+        else: # current_log_view == 'missed_character'
+            self.current_log_view = 'progress'
+            if self.log_view_stack: self.log_view_stack.setCurrentIndex(0) # Show progress log
+            if self.log_verbosity_toggle_button:
+                self.log_verbosity_toggle_button.setText(self.EYE_ICON) # Open eye icon
+                self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
+            if self.progress_log_label: self.progress_log_label.setText("📜 Progress Log:")
+            # self.log_signal.emit("="*20 + " Switched to Progress Log View " + "="*20) # Optional log message
 
     def reset_application_state(self):
         if self._is_download_active(): QMessageBox.warning(self, "Reset Error", "Cannot reset while a download is in progress. Please cancel first."); return
         self.log_signal.emit("🔄 Resetting application state to defaults..."); self._reset_ui_to_defaults()
         self.main_log_output.clear(); self.external_log_output.clear()
+        if self.missed_character_log_output: self.missed_character_log_output.clear()
+
+        self.current_log_view = 'progress' # Reset to progress log view
+        if self.log_view_stack: self.log_view_stack.setCurrentIndex(0)
+        if self.progress_log_label: self.progress_log_label.setText("📜 Progress Log:")
+        if self.log_verbosity_toggle_button:
+            self.log_verbosity_toggle_button.setText(self.EYE_ICON)
+            self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
+
         if self.show_external_links and not (self.radio_only_links and self.radio_only_links.isChecked()): self.external_log_output.append("🔗 External Links Found:")
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
         self.progress_label.setText("Progress: Idle"); self.file_progress_label.setText("")
-
         with self.downloaded_files_lock: count = len(self.downloaded_files); self.downloaded_files.clear();
+        # Reset old summarization state (if any remnants) and new bold list state
+        self.missed_title_key_terms_count.clear()
+        self.missed_title_key_terms_examples.clear()
+        self.logged_summary_for_key_term.clear()
+        self.already_logged_bold_key_terms.clear()
+        self.missed_key_terms_buffer.clear()
+
         if count > 0: self.log_signal.emit(f"   Cleared {count} downloaded filename(s) from session memory.")
         with self.downloaded_file_hashes_lock: count = len(self.downloaded_file_hashes); self.downloaded_file_hashes.clear();
         if count > 0: self.log_signal.emit(f"   Cleared {count} downloaded file hash(es) from session memory.")
 
         self.total_posts_to_process = 0; self.processed_posts_count = 0; self.download_counter = 0; self.skip_counter = 0
         self.all_kept_original_filenames = []
-        self.cancellation_event.clear(); self.basic_log_mode = False
-        if self.log_verbosity_button: self.log_verbosity_button.setText("Show Basic Log")
-
+        self.cancellation_event.clear()
         self.manga_filename_style = STYLE_POST_TITLE
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
         
@@ -2738,21 +2849,37 @@ class DownloaderApp(QWidget):
         self.use_subfolder_per_post_checkbox.setChecked(False); self.use_multithreading_checkbox.setChecked(True);
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox: self.manga_mode_checkbox.setChecked(False)        
+
+        # Reset old summarization state (if any remnants) and new bold list state
+        self.missed_title_key_terms_count.clear()
+        self.missed_title_key_terms_examples.clear()
+        self.logged_summary_for_key_term.clear()
+        self.already_logged_bold_key_terms.clear()
+        self.missed_key_terms_buffer.clear()
+        if self.missed_character_log_output: self.missed_character_log_output.clear()
+
         self.allow_multipart_download_setting = False # Default to OFF
         self._update_multipart_toggle_button_text() # Update button text
 
         self.skip_words_scope = SKIP_SCOPE_POSTS
         self._update_skip_scope_button_text()
         self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files
-        self._update_char_filter_scope_button_text() 
+        self._update_char_filter_scope_button_text()
+
+        self.current_log_view = 'progress' # Reset to progress log view
+        if self.log_view_stack: self.log_view_stack.setCurrentIndex(0)
+        if self.progress_log_label: self.progress_log_label.setText("📜 Progress Log:")
+
         self._handle_filter_mode_change(self.radio_all, True)
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         self.filter_character_list("")
 
         self.download_btn.setEnabled(True); self.cancel_btn.setEnabled(False)
         if self.reset_button: self.reset_button.setEnabled(True)
-        if self.log_verbosity_button: self.log_verbosity_button.setText("Show Basic Log")
-
+        # self.basic_log_mode is False after reset, so Full Log is active
+        if self.log_verbosity_toggle_button: # Reset eye button to show Progress Log
+            self.log_verbosity_toggle_button.setText(self.EYE_ICON)
+            self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(False)
 

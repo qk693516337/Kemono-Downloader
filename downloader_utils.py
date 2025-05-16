@@ -423,6 +423,7 @@ class PostProcessorSignals(QObject):
     file_download_status_signal = pyqtSignal(bool)
     external_link_signal = pyqtSignal(str, str, str, str)
     file_progress_signal = pyqtSignal(str, object)
+    missed_character_post_signal = pyqtSignal(str, str) # New: post_title, reason
 
 
 class PostProcessorWorker:
@@ -1001,17 +1002,24 @@ class PostProcessorWorker:
         if self.filter_character_list_objects:
             if self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
                 self.logger(f"   -> Skip Post (Scope: Title - No Char Match): Title '{post_title[:50]}' does not match character filters.")
+                if self.signals and hasattr(self.signals, 'missed_character_post_signal'):
+                    self.signals.missed_character_post_signal.emit(post_title, "No title match for character filter")
                 return 0, num_potential_files_in_post, []
             if self.char_filter_scope == CHAR_SCOPE_COMMENTS and \
                not post_is_candidate_by_file_char_match_in_comment_scope and \
                not post_is_candidate_by_comment_char_match: # MODIFIED: Check both file and comment match flags
                 self.logger(f"   -> Skip Post (Scope: Comments - No Char Match in Comments): Post ID '{post_id}', Title '{post_title[:50]}...'")
+                if self.signals and hasattr(self.signals, 'missed_character_post_signal'):
+                    self.signals.missed_character_post_signal.emit(post_title, "No character match in files or comments (Comments scope)")
                 return 0, num_potential_files_in_post, []
                 
         if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
             post_title_lower = post_title.lower()
             for skip_word in self.skip_words_list:
                 if skip_word.lower() in post_title_lower:
+                    # This is a skip by "skip_words_list", not by character filter.
+                    # If you want these in the "Missed Character Log" too, you'd add a signal emit here.
+                    # For now, sticking to the request for character filter misses.
                     self.logger(f"   -> Skip Post (Keyword in Title '{skip_word}'): '{post_title[:50]}...'. Scope: {self.skip_words_scope}")
                     return 0, num_potential_files_in_post, []
 
@@ -1019,6 +1027,8 @@ class PostProcessorWorker:
            (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and \
            not post_is_candidate_by_title_char_match:
             self.logger(f"   -> Skip Post (Manga Mode with Title/Both Scope - No Title Char Match): Title '{post_title[:50]}' doesn't match filters.")
+            if self.signals and hasattr(self.signals, 'missed_character_post_signal'):
+                self.signals.missed_character_post_signal.emit(post_title, "Manga Mode: No title match for character filter (Title/Both scope)")
             return 0, num_potential_files_in_post, []
 
         if not isinstance(post_attachments, list):
@@ -1304,6 +1314,7 @@ class DownloadThread(QThread):
     finished_signal = pyqtSignal(int, int, bool, list)
     external_link_signal = pyqtSignal(str, str, str, str)
     file_progress_signal = pyqtSignal(str, object)
+    missed_character_post_signal = pyqtSignal(str, str) # New: post_title, reason
 
 
     def __init__(self, api_url_input, output_dir, known_names_copy,
@@ -1399,6 +1410,7 @@ class DownloadThread(QThread):
             worker_signals_obj.file_download_status_signal.connect(self.file_download_status_signal)
             worker_signals_obj.file_progress_signal.connect(self.file_progress_signal)
             worker_signals_obj.external_link_signal.connect(self.external_link_signal)
+            worker_signals_obj.missed_character_post_signal.connect(self.missed_character_post_signal) # New connection
 
             self.logger("   Starting post fetch (single-threaded download process)...")
             post_generator = download_from_api(
@@ -1482,6 +1494,7 @@ class DownloadThread(QThread):
                     worker_signals_obj.file_download_status_signal.disconnect(self.file_download_status_signal)
                     worker_signals_obj.external_link_signal.disconnect(self.external_link_signal)
                     worker_signals_obj.file_progress_signal.disconnect(self.file_progress_signal)
+                    worker_signals_obj.missed_character_post_signal.disconnect(self.missed_character_post_signal) # New disconnection
             except (TypeError, RuntimeError) as e:
                 self.logger(f"ℹ️ Note during DownloadThread signal disconnection: {e}")
             
