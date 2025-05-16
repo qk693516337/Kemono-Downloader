@@ -1,131 +1,139 @@
-# **Kemono Downloader v3.3.0**
+# Kemono Downloader v3.3.0
 
-A feature-rich GUI application built with PyQt5 to download content from **Kemono.su** or **Coomer.party**.  
-Offers powerful filtering, smart organization, manga-specific tools, link extraction, and performance tuning.
-
-This version introduces:  
-- Skipped Character Review via Eye Toggle  
-- Grouped Folder Naming (e.g., `(Boa, Hancock)`)  
-- Refined UI behavior and bug fixes
-
-***
-
-## **🚀 What's New in v3.3.0**
-
-### **👁 Skipped Characters Review (Eye Toggle)**
-
-A new toggle button (👁) above the progress bar reveals a list of characters that appeared in the creator's feed but were skipped due to missing filters.  
-Helps users avoid missed content by showing what they might have excluded unknowingly.
-
-- Only available after download.  
-- Hidden by default and toggled manually.
+A powerful, feature-rich GUI application for downloading content from **[Kemono.su](https://kemono.su)** and **[Coomer.party](https://coomer.party)**.  
+Built with **PyQt5**, this tool is ideal for users who want deep filtering, customizable folder structure, efficient downloads, and intelligent automation — all within a modern GUI.
 
 ---
 
-### **📁 Grouped Folder Naming via Parentheses**
+## 🔄 Recent Updates (v3.3.0)
 
-Users can now group multiple aliases for a character under one folder by using parentheses.  
-Example:  
-`(Boa, Hancock), Robin` → Both "Boa" and "Hancock" content will be saved to a folder named `Boa Hancock`.
+### Skipped Characters Review (Eye Toggle)
+- After a download, you can toggle a log view to review characters or keywords that were skipped based on your filters.
+- Helps catch overlooked content you might want to adjust filters for.
 
-Useful for creators who name the same character inconsistently.
-
-***
-
-## **🧩 Core Features**
-
-### **🎛 Simple GUI**
-- PyQt5-based interface
-- Dark theme, responsive layout
+### Grouped Folder Naming
+- You can group aliases together using parentheses.
+- Example: `(Boa, Hancock), Robin` → Downloads for "Boa" and "Hancock" go into one folder: `Boa Hancock`.
+- Great for creators who use inconsistent naming.
 
 ---
 
-### **📥 Supports Post and Creator URLs**
-- Download a single post or an entire creator feed
+## 🖥 User Interface & Workflow
+
+### Clean PyQt5 GUI
+- Simple and responsive interface
+- Dark theme for long usage comfort
+- Persistent settings saved between sessions
+- Introductory tour for first-time users
+
+### Download Modes
+- Download from:
+  - **Single Post URL**
+  - **Entire Creator Feed**
+- Optional:
+  - **Page Range** for creator feeds
+  - **Custom folder name** for single-post downloads
 
 ---
 
-### **🔢 Page Range Support**
-- Optional range for creator feed pagination (disabled in Manga Mode)
+## 🧠 Smart Filtering
+
+### Character Name Filtering
+- Input comma-separated names to only include relevant content.
+- Filtering modes:
+  - **Files**: Checks filenames
+  - **Titles**: Checks post titles
+  - **Both**: Hybrid mode
+  - **Comments**: Also scans post comments for matches
+
+### Skip Words
+- Enter words to **exclude** files or posts.
+- Modes: File-level, Post-level, or Both
+- Helps exclude WIPs, previews, sketches, etc.
+
+### File Type Filters
+- Filter download targets by type:
+  - All
+  - Images/GIFs
+  - Videos
+  - Archives
+  - External Links (no downloads)
+
+### Filename Cleanup
+- Auto-remove unwanted keywords from filenames (e.g., `[HD]`, `patreon`)
 
 ---
 
-### **🗂 Smart Folder System**
-- Organizes by character name, post title, or custom folder
-- Per-post subfolder option
-- Uses fallback from `Known.txt`
+## 📚 Manga/Comic Mode
+
+Special handling for serialized content:
+- Automatically fetches posts **oldest to newest**
+- File naming options:
+  - Use **Post Title** (e.g., `MyChapter1.jpg`)
+  - Use **Original Filename** (e.g., `page_001.png`)
+- Ignores page ranges and applies full-feed scan
+- Works best when paired with grouped name filters (e.g., series titles)
 
 ---
 
-### **📚 Known Names Manager**
-- Add/edit/delete known characters or show names
-- Names stored persistently in `Known.txt`
+## 📁 Folder Structure & Naming
+
+- Auto-foldering by:
+  - Character name
+  - Post title
+  - Custom name (for post URLs)
+- Optional:
+  - Subfolder per post
+- Auto-detection and fallback from `Known.txt` if needed
+- Smart cleaning of folder/file names to remove illegal characters
 
 ---
 
-### **🔍 Advanced Filtering**
-- **Filter by Character(s)**: Scope options — `Files`, `Titles`, `Both`, `Comments`
-- **Skip with Words**: Filter by keywords in post/file names
-- **Remove Words from Filename**: Clean filenames with unwanted terms
-- **File Type Filtering**: All, Images/GIFs, Videos, Archives, or Only Links
-- **Only Archives**: Filters `.zip` and `.rar` downloads
-- **Only Links Mode**: Extracts links from post descriptions without downloading
+## 🖼 Thumbnail & Compression Tools
+
+- **Thumbnail Mode**: Downloads only the preview thumbnails
+- **Image Compression** (via Pillow):
+  - Large images auto-converted to WebP
+  - Only saved if final size is significantly smaller
 
 ---
 
-### **📖 Manga/Comic Mode (Creator URLs Only)**
-- Sorts posts from oldest to newest
-- Auto naming by `Post Title` (default) or `Original Filename`
-- Best used with grouped filter names (e.g., series titles)
+## ⚙️ Performance Features
+
+- **Multithreading**: Set number of threads for concurrent file and post downloads
+- **Multi-part Downloads**:
+  - Large files split into multiple threads for faster retrieval
+  - Detailed chunk-level progress tracking
+  - Smart retries and fallback on failure
 
 ---
 
-### **🖼️ Image Compression**
-- Large images converted to WebP (requires Pillow)
-- Only compresses if size is reduced significantly
+## 📋 Logging & Progress
+
+- Real-time log output with two views:
+  - **Progress Log**
+  - **Missed Character Summary**
+- Log filters external links and organizes them separately
+- Export logs as `.txt` for backup/reference
+- Auto-log failed/skipped files and links
 
 ---
 
-### **🖼 Download Thumbnails Only**
-- Download post thumbnails instead of full content
+## 🗃 Config System
+
+- `Known.txt`: Add frequently used names for fallback filtering and folder naming
+- Auto-loaded and saved in system AppData (or local fallback)
+- GUI for editing known names inside the app
 
 ---
 
-### **⚙️ Multithreaded Downloads**
-- Configurable thread count
-- Speeds up creator feed downloads and parallel file saving
+## 💻 Installation
 
----
-
-### **⏯ Download Controls**
-- Start, cancel, and safely reset without clearing paths or URLs
-
----
-
-### **📋 Logging System**
-- Real-time logs for downloads and status messages
-- Toggle Basic or Full verbosity
-- Separate external links panel with `.txt` export support
-
-***
-
-## **🔧 Backend Enhancements**
-
-- Improved retry logic for failed chunks
-- Session-wide deduplication via MD5
-- Better temp file cleanup
-- Smart filename suffixing on conflicts
-- Unwanted word removal in filenames
-
-***
-
-## **📦 Installation**
-
-### **Requirements**
-- Python 3.6+
+### Requirements
+- Python 3.6 or higher
 - pip
 
-### **Install Dependencies**
+### Install Dependencies
 ```bash
 pip install PyQt5 requests Pillow
 ```
