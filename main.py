@@ -133,7 +133,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader" # Shared with main app for consistency if needed, but can be distinct
     CONFIG_APP_NAME_TOUR = "ApplicationTour"    # Specific QSettings group for tour
-    TOUR_SHOWN_KEY = "neverShowTourAgainV3"     # Updated key for new tour content
+    TOUR_SHOWN_KEY = "neverShowTourAgainV4"     # Updated key for new tour content
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -202,7 +202,7 @@ class TourDialog(QDialog):
 
         # --- Define Tour Steps with Updated Content ---
         step1_content = (
-            "Hello! This quick tour will walk you through the main features of the Kemono Downloader."
+            "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates."
             "<ul>"
             "<li>Our goal is to help you easily download content from Kemono and Coomer.</li>"
             "<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li>"
@@ -232,23 +232,26 @@ class TourDialog(QDialog):
             "Refine what you download with these filters:"
             "<ul>"
             "<li><b>🎯 Filter by Character(s):</b><br>"
-            "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). "
-            "   <ul><li>In <b>Normal Mode</b>, this filters individual files by matching their filenames.</li>"
-            "       <li>In <b>Manga/Comic Mode</b>, this filters entire posts by matching the post title. Useful for targeting specific series.</li>"
-            "       <li>Also helps in folder naming if 'Separate Folders' is enabled.</li></ul></li><br>"
+            "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2)</i> becomes folder 'alias1 alias2'.<br>"
+            "   The <b>'Filter: [Scope]'</b> button next to this input controls how this filter is applied:"
+            "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded.</li>"
+            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded.</li>"
+            "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded.</li>"
+            "       <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a match, all files are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests).</li></ul>"
+            "   This filter also influences folder naming if 'Separate Folders' is enabled.</li><br>"
             "<li><b>🚫 Skip with Words:</b><br>"
             "   Enter words, comma-separated (e.g., <i>WIP, sketch, preview</i>). "
-            "   The <b>Scope</b> button (next to this input) cycles how this filter applies:"
+            "   The <b>'Scope: [Type]'</b> button (next to this input) cycles how this filter applies:"
             "   <ul><li><i>Scope: Files:</i> Skips files if their names contain any of these words.</li>"
             "       <li><i>Scope: Posts:</i> Skips entire posts if their titles contain any of these words.</li>"
-            "       <li><i>Scope: Both:</i> Applies both file and post title skipping.</li></ul></li><br>"
+            "       <li><i>Scope: Both:</i> Applies both file and post title skipping (post first, then files).</li></ul></li><br>"
             "<li><b>Filter Files (Radio Buttons):</b> Choose what to download:"
             "   <ul>"
             "   <li><i>All:</i> Downloads all file types found.</li>"
             "   <li><i>Images/GIFs:</i> Only common image formats and GIFs.</li>"
             "   <li><i>Videos:</i> Only common video formats.</li>"
-            "   <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked.</li>"
-            "   <li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files.</li>"
+            "   <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li>"
+            "   <li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled.</li>"
             "   </ul></li>"
             "</ul>"
         )
@@ -259,6 +262,8 @@ class TourDialog(QDialog):
             "<ul>"
             "<li><b>Skip .zip / Skip .rar:</b> Check these to avoid downloading these archive file types. "
             "   <i>(Note: These are disabled and ignored if '📦 Only Archives' mode is selected).</i></li><br>"
+            "<li><b>✂️ Remove Words from name:</b><br>"
+            "   Enter words, comma-separated (e.g., <i>patreon, [HD]</i>), to remove from downloaded filenames (case-insensitive).</li><br>"
             "<li><b>Download Thumbnails Only:</b> Downloads small preview images instead of full-sized files (if available).</li><br>"
             "<li><b>Compress Large Images:</b> If the 'Pillow' library is installed, images larger than 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li><br>"
             "<li><b>🗄️ Custom Folder Name (Single Post Only):</b><br>"
@@ -274,6 +279,11 @@ class TourDialog(QDialog):
             "<li><b>⚙️ Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the 'Known Shows/Characters' list as a fallback for folder names).</li><br>"
             "<li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li><br>"
             "<li><b>🚀 Use Multithreading (Threads):</b> Enables faster downloads for creator pages by processing multiple posts or files concurrently. The number of threads can be adjusted. Single post URLs are processed using a single thread for post data but can use multiple threads for file downloads within that post.</li><br>"
+            "<li><b>Multi-part Download Toggle (Top-right of log area):</b><br>"
+            "   The <b>'Multi-part: [ON/OFF]'</b> button allows enabling/disabling multi-segment downloads for individual large files. "
+            "   <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling.</li>"
+            "       <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li></ul>"
+            "   This is disabled if 'Only Links' or 'Only Archives' mode is active.</li><br>"
             "<li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content."
             "   <ul>"
             "   <li>Downloads posts from <b>oldest to newest</b>.</li>"
@@ -296,9 +306,12 @@ class TourDialog(QDialog):
             "<ul>"
             "<li><b>📜 Progress Log / Extracted Links Log:</b> Shows detailed download messages. If '🔗 Only Links' mode is active, this area displays the extracted links.</li><br>"
             "<li><b>Show External Links in Log:</b> If checked, a secondary log panel appears below the main log to display any external links found in post descriptions. <i>(This is disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</i></li><br>"
-            "<li><b>Log Verbosity (Show Basic/Full Log):</b> Toggles the main log between showing all messages (Full) or only key summaries, errors, and warnings (Basic).</li><br>"
+            "<li><b>Log View Toggle (👁️ / 🙈 Button):</b><br>"
+            "   This button (top-right of log area) switches the main log view:"
+            "   <ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li>"
+            "       <li><b>🙈 Missed Character Log:</b> Displays a summarized list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>"
             "<li><b>🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li><br>"
-            "<li><b>⬇️ Start Download / ❌ Cancel:</b> These buttons initiate or stop the current download/extraction process.</li>"
+            "<li><b>⬇️ Start Download / 🔗 Extract Links / ❌ Cancel:</b> These buttons initiate or stop the current download/extraction process. The 'Cancel' button also performs a soft UI reset, preserving your URL and Directory inputs.</li>"
             "</ul>"
             "<br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader."
         )
@@ -2975,9 +2988,6 @@ if __name__ == '__main__':
 
         # TourDialog is now defined in this file, so we can call it directly.
         try:
-            # The following lines were forcing the tour to show on every launch.
-            # By commenting them out, the application will now respect the
-            # "Never show this tour again" setting saved by the TourDialog.
             tour_result = TourDialog.run_tour_if_needed(downloader_app_instance)
             if tour_result == QDialog.Accepted: print("Tour completed by user.")
             elif tour_result == QDialog.Rejected: print("Tour skipped or was already shown.")
