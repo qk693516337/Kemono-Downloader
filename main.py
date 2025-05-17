@@ -19,7 +19,7 @@ from PyQt5.QtGui import (
 )
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
-    QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QDesktopWidget,
+    QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget,
     QRadioButton, QButtonGroup, QCheckBox, QSplitter, QSizePolicy, QDialog, QStackedWidget,
     QFrame,
     QAbstractButton
@@ -182,15 +182,23 @@ class TourDialog(QDialog):
 
     def _center_on_screen(self):
         """Centers the dialog on the screen."""
+        # Updated to use availableGeometry and center more reliably
         try:
-            screen_geometry = QDesktopWidget().screenGeometry()
-            dialog_geometry = self.frameGeometry()
-            center_point = screen_geometry.center()
-            dialog_geometry.moveCenter(center_point)
-            self.move(dialog_geometry.topLeft())
+            primary_screen = QApplication.primaryScreen()
+            if not primary_screen:
+                screens = QApplication.screens()
+                if not screens: return # Cannot center
+                primary_screen = screens[0]
+            
+            available_geo = primary_screen.availableGeometry()
+            widget_geo = self.frameGeometry()
+            
+            x = available_geo.x() + (available_geo.width() - widget_geo.width()) // 2
+            y = available_geo.y() + (available_geo.height() - widget_geo.height()) // 2
+            self.move(x, y)
         except Exception as e:
             print(f"[Tour] Error centering dialog: {e}")
-
+            
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -394,18 +402,41 @@ class TourDialog(QDialog):
         try:
             settings = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
             never_show_again_from_settings = settings.value(TourDialog.TOUR_SHOWN_KEY, False, type=bool)
+            
+            primary_screen = QApplication.primaryScreen()
+            if not primary_screen:
+                screens = QApplication.screens()
+                primary_screen = screens[0] if screens else None
+
+            dialog_width, dialog_height = 600, 620 # Default fixed size
+
+            if primary_screen:
+                available_geo = primary_screen.availableGeometry()
+                screen_w, screen_h = available_geo.width(), available_geo.height()
+
+                # Calculate preferred size for tour dialog (e.g., 50% width, 60% height)
+                pref_w = int(screen_w * 0.50)
+                pref_h = int(screen_h * 0.60)
+
+                # Apply constraints (min/max)
+                min_w, max_w = 550, 700
+                min_h, max_h = 580, 750
+                
+                dialog_width = max(min_w, min(pref_w, max_w))
+                dialog_height = max(min_h, min(pref_h, max_h))
 
             if never_show_again_from_settings:
                 print(f"[Tour] Skipped: '{TourDialog.TOUR_SHOWN_KEY}' is True in settings.")
                 return QDialog.Rejected
 
             tour_dialog = TourDialog(parent_app_window)
+            tour_dialog.setFixedSize(dialog_width, dialog_height) # Apply calculated fixed size
             result = tour_dialog.exec_()
-
             return result
+
         except Exception as e:
             print(f"[Tour] CRITICAL ERROR in run_tour_if_needed: {e}")
-            traceback.print_exc()
+            # traceback.print_exc() # Keep console cleaner for this specific case
             return QDialog.Rejected
 # --- End Tour Classes ---
 
@@ -1146,15 +1177,23 @@ class DownloaderApp(QWidget):
         
     def _center_on_screen(self):
         """Centers the widget on the screen."""
+        # Updated to use availableGeometry and center more reliably
         try:
-            screen_geometry = QDesktopWidget().screenGeometry()
-            widget_geometry = self.frameGeometry()
-            widget_geometry.moveCenter(screen_geometry.center())
-            self.move(widget_geometry.topLeft())
+            primary_screen = QApplication.primaryScreen()
+            if not primary_screen:
+                screens = QApplication.screens()
+                if not screens: return # Cannot center
+                primary_screen = screens[0]
+            
+            available_geo = primary_screen.availableGeometry()
+            widget_geo = self.frameGeometry()
+            
+            x = available_geo.x() + (available_geo.width() - widget_geo.width()) // 2
+            y = available_geo.y() + (available_geo.height() - widget_geo.height()) // 2
+            self.move(x, y)
         except Exception as e:
             self.log_signal.emit(f"⚠️ Error centering window: {e}")
-
-
+            
     def get_dark_theme(self):
         return """
         QWidget { background-color: #2E2E2E; color: #E0E0E0; font-family: Segoe UI, Arial, sans-serif; font-size: 10pt; }
@@ -2980,10 +3019,37 @@ if __name__ == '__main__':
         else: print(f"Warning: Application icon 'Kemono.ico' not found at {icon_path}")
 
         downloader_app_instance = DownloaderApp()
-        # Set a reasonable default size before showing
-        downloader_app_instance.resize(1150, 780) # Adjusted default size
+
+        # --- Calculate initial window size based on screen dimensions ---
+        primary_screen = QApplication.primaryScreen()
+        if not primary_screen:
+            screens = QApplication.screens()
+            if not screens:
+                # Absolute fallback if no screen information is available
+                downloader_app_instance.resize(1024, 768)
+                downloader_app_instance.show()
+                sys.exit(qt_app.exec_())
+            primary_screen = screens[0]
+
+        available_geo = primary_screen.availableGeometry()
+        screen_width = available_geo.width()
+        screen_height = available_geo.height()
+
+        # Define desired size relative to screen and minimums
+        min_app_width = 960    # Minimum width for the app to be usable
+        min_app_height = 680   # Minimum height
+        desired_app_width_ratio = 0.80  # Use 80% of available screen width
+        desired_app_height_ratio = 0.85 # Use 85% of available screen height
+
+        app_width = max(min_app_width, int(screen_width * desired_app_width_ratio))
+        app_height = max(min_app_height, int(screen_height * desired_app_height_ratio))
+
+        # Ensure the calculated size doesn't exceed the available screen space
+        app_width = min(app_width, screen_width)
+        app_height = min(app_height, screen_height)
+        
+        downloader_app_instance.resize(app_width, app_height)
         downloader_app_instance.show()
-        # Center the window on the screen after it's shown and sized
         downloader_app_instance._center_on_screen()
 
         # TourDialog is now defined in this file, so we can call it directly.
