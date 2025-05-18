@@ -30,6 +30,7 @@ from io import BytesIO
 
 STYLE_POST_TITLE = "post_title"
 STYLE_ORIGINAL_NAME = "original_name"
+STYLE_DATE_BASED = "date_based" # For manga date-based sequential naming
 
 SKIP_SCOPE_FILES = "files"
 SKIP_SCOPE_POSTS = "posts"
@@ -313,16 +314,37 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
         if cancellation_event and cancellation_event.is_set(): return
 
         if all_posts_for_manga_mode:
-            logger(f"   Manga Mode: Fetched {len(all_posts_for_manga_mode)} total posts. Reversing order...")
-            all_posts_for_manga_mode.reverse()
+            logger(f"   Manga Mode: Fetched {len(all_posts_for_manga_mode)} total posts. Sorting by publication date (oldest first)...")
+
+            def sort_key_tuple(post):
+                published_date_str = post.get('published')
+                added_date_str = post.get('added')
+                post_id_str = post.get('id', "0")
+
+                primary_sort_val = "0000-00-00T00:00:00" # Default for missing dates (effectively oldest)
+                if published_date_str:
+                    primary_sort_val = published_date_str
+                elif added_date_str:
+                    logger(f"    ⚠️ Post ID {post_id_str} missing 'published' date, using 'added' date '{added_date_str}' for primary sorting.")
+                    primary_sort_val = added_date_str
+                else:
+                    logger(f"    ⚠️ Post ID {post_id_str} missing both 'published' and 'added' dates. Placing at start of sort (using default earliest date).")
+                
+                secondary_sort_val = 0 # Default for non-integer IDs
+                try:
+                    secondary_sort_val = int(post_id_str)
+                except ValueError:
+                    logger(f"    ⚠️ Post ID '{post_id_str}' is not a valid integer for secondary sorting, using 0.")
+                
+                return (primary_sort_val, secondary_sort_val)
+
+            all_posts_for_manga_mode.sort(key=sort_key_tuple) # Sorts ascending by (date, id)
 
             for i in range(0, len(all_posts_for_manga_mode), page_size):
                 if cancellation_event and cancellation_event.is_set():
                     logger("   Manga mode post yielding cancelled.")
                     break
                 yield all_posts_for_manga_mode[i:i + page_size]
-        else:
-            logger("   Manga Mode: No posts found to process.")
         return
 
     current_page_num = 1
@@ -428,13 +450,13 @@ class PostProcessorSignals(QObject):
 
 class PostProcessorWorker:
     def __init__(self, post_data, download_root, known_names,
-                 filter_character_list,
+                 filter_character_list, emitter, # Changed signals to emitter
                  unwanted_keywords, filter_mode, skip_zip, skip_rar,
                  use_subfolders, use_post_subfolders, target_post_id_from_initial_url, custom_folder_name,
                  compress_images, download_thumbnails, service, user_id,
-                 api_url_input, cancellation_event, signals,
+                 api_url_input, cancellation_event,
                  downloaded_files, downloaded_file_hashes, downloaded_files_lock, downloaded_file_hashes_lock,
-                 skip_words_list=None, 
+                 skip_words_list=None,
                  skip_words_scope=SKIP_SCOPE_FILES,
                  show_external_links=False,
                  extract_links_only=False,
@@ -444,7 +466,8 @@ class PostProcessorWorker:
                  char_filter_scope=CHAR_SCOPE_FILES,
                  remove_from_filename_words_list=None,
                  allow_multipart_download=True,
-                 ): # Removed duplicate_file_mode and session-wide tracking
+                 manga_date_file_counter_ref=None, # New parameter for date-based manga naming
+                 ):
         self.post = post_data
         self.download_root = download_root
         self.known_names = known_names
@@ -463,7 +486,10 @@ class PostProcessorWorker:
         self.user_id = user_id
         self.api_url_input = api_url_input
         self.cancellation_event = cancellation_event
-        self.signals = signals
+        self.emitter = emitter # Store the emitter
+        if not self.emitter:
+            # This case should ideally be prevented by the caller
+            raise ValueError("PostProcessorWorker requires an emitter (signals object or queue).")
         self.skip_current_file_flag = skip_current_file_flag
 
         self.downloaded_files = downloaded_files if downloaded_files is not None else set()
@@ -482,23 +508,35 @@ class PostProcessorWorker:
         self.char_filter_scope = char_filter_scope
         self.remove_from_filename_words_list = remove_from_filename_words_list if remove_from_filename_words_list is not None else []
         self.allow_multipart_download = allow_multipart_download
-        # self.duplicate_file_mode and session-wide tracking removed
+        self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store the reference
         
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
 
-    def logger(self, message):
-        if self.signals and hasattr(self.signals, 'progress_signal'):
-            self.signals.progress_signal.emit(message)
+    def _emit_signal(self, signal_type_str, *payload_args):
+        """Helper to emit signal either directly or via queue."""
+        if isinstance(self.emitter, queue.Queue):
+            self.emitter.put({'type': signal_type_str, 'payload': payload_args})
+        elif self.emitter and hasattr(self.emitter, f"{signal_type_str}_signal"):
+            # Assuming emitter is a QObject with pyqtSignal attributes
+            # e.g., emitter.progress_signal.emit(*payload_args)
+            signal_attr = getattr(self.emitter, f"{signal_type_str}_signal")
+            signal_attr.emit(*payload_args)
         else:
-            print(f"(Worker Log - No Signal): {message}")
+            # Fallback or error logging if emitter is not recognized
+            print(f"(Worker Log - Unrecognized Emitter for {signal_type_str}): {payload_args[0] if payload_args else ''}")
+
+    def logger(self, message):
+        self._emit_signal('progress', message)
 
     def check_cancel(self):
         return self.cancellation_event.is_set()
 
     def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event,
-                              post_title="", file_index_in_post=0, num_files_in_this_post=1):
+                              # emitter_for_file_ops, # This will be self.emitter
+                              post_title="", file_index_in_post=0, num_files_in_this_post=1,
+                              manga_date_file_counter_ref=None): # Added manga_date_file_counter_ref
         was_original_name_kept_flag = False 
         final_filename_saved_for_return = "" 
         # target_folder_path is the base character/post folder.
@@ -537,8 +575,33 @@ class PostProcessorWorker:
                     else:
                         filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
                 else:
-                    filename_to_save_in_main_path = clean_filename(api_original_filename)
+                    filename_to_save_in_main_path = clean_filename(api_original_filename) # Fallback to original if no title
                     self.logger(f"⚠️ Manga mode (Post Title Style): Post title missing for post {original_post_id_for_log}. Using cleaned original filename '{filename_to_save_in_main_path}'.")
+            elif self.manga_filename_style == STYLE_DATE_BASED:
+                current_thread_name = threading.current_thread().name
+                self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Manga Date Mode. Counter Ref ID: {id(manga_date_file_counter_ref)}, Value before access: {manga_date_file_counter_ref}")
+
+                if manga_date_file_counter_ref is not None and len(manga_date_file_counter_ref) == 2:
+                    counter_val_for_filename = -1
+                    counter_lock = manga_date_file_counter_ref[1]
+                    
+                    self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Attempting to acquire lock. Counter value before lock: {manga_date_file_counter_ref[0]}")
+                    with counter_lock:
+                        self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Lock acquired. Counter value at lock acquisition: {manga_date_file_counter_ref[0]}")
+                        counter_val_for_filename = manga_date_file_counter_ref[0]
+                        # Increment is done here, under lock, before this number is used by another thread.
+                        # This number is now "reserved" for this file.
+                        # If this file download fails, this number is "lost" (sequence will have a gap). This is acceptable.
+                        manga_date_file_counter_ref[0] += 1
+                        self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Incremented counter. New counter value: {manga_date_file_counter_ref[0]}. Filename will use: {counter_val_for_filename}")
+                    
+                    filename_to_save_in_main_path = f"{counter_val_for_filename:03d}{original_ext}"
+                    self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Lock released. Generated filename: {filename_to_save_in_main_path}")
+                else:
+                    self.logger(f"⚠️ Manga Date Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_date_file_counter_ref}")
+                    # This log line below had a typo, fixed to reflect Date Mode context
+                    filename_to_save_in_main_path = clean_filename(api_original_filename)
+                    self.logger(f"⚠️ Manga mode (Date Based Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
             else: 
                 self.logger(f"⚠️ Manga mode: Unknown filename style '{self.manga_filename_style}'. Defaulting to original filename for '{api_original_filename}'.")
                 filename_to_save_in_main_path = clean_filename(api_original_filename)
@@ -629,9 +692,8 @@ class PostProcessorWorker:
                 if attempt_num_single_stream > 0:
                     self.logger(f"   Retrying download for '{api_original_filename}' (Overall Attempt {attempt_num_single_stream + 1}/{max_retries + 1})...")
                     time.sleep(retry_delay * (2**(attempt_num_single_stream - 1)))
-                
-                if self.signals and hasattr(self.signals, 'file_download_status_signal'):
-                    self.signals.file_download_status_signal.emit(True)
+
+                self._emit_signal('file_download_status', True)
                 
                 response = requests.get(file_url, headers=headers, timeout=(15, 300), stream=True)
                 response.raise_for_status()
@@ -644,14 +706,14 @@ class PostProcessorWorker:
 
                 if attempt_multipart:
                     response.close() 
-                    if self.signals and hasattr(self.signals, 'file_download_status_signal'):
-                        self.signals.file_download_status_signal.emit(False)
+                    self._emit_signal('file_download_status', False)
                     
                     # .part file is always based on the main target_folder_path and filename_to_save_in_main_path
                     mp_save_path_base_for_part = os.path.join(target_folder_path, filename_to_save_in_main_path)
                     mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
-                        file_url, mp_save_path_base_for_part, total_size_bytes, num_parts_for_file, headers,
-                        api_original_filename, self.signals, self.cancellation_event, skip_event, self.logger
+                        file_url, mp_save_path_base_for_part, total_size_bytes, num_parts_for_file, headers, api_original_filename,
+                        emitter_for_multipart=self.emitter, # Pass the worker's emitter
+                        cancellation_event=self.cancellation_event, skip_event=skip_event, logger_func=self.logger
                     )
                     if mp_success:
                         download_successful_flag = True
@@ -676,9 +738,8 @@ class PostProcessorWorker:
                     if chunk:
                         file_content_buffer.write(chunk); md5_hasher.update(chunk)
                         current_attempt_downloaded_bytes += len(chunk)
-                        if time.time() - last_progress_time > 1 and total_size_bytes > 0 and \
-                           self.signals and hasattr(self.signals, 'file_progress_signal'):
-                            self.signals.file_progress_signal.emit(api_original_filename, (current_attempt_downloaded_bytes, total_size_bytes))
+                        if time.time() - last_progress_time > 1 and total_size_bytes > 0:
+                            self._emit_signal('file_progress', api_original_filename, (current_attempt_downloaded_bytes, total_size_bytes))
                             last_progress_time = time.time()
                 
                 if self.check_cancel() or (skip_event and skip_event.is_set()):
@@ -703,12 +764,11 @@ class PostProcessorWorker:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
                 if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
             finally:
-                if self.signals and hasattr(self.signals, 'file_download_status_signal'):
-                    self.signals.file_download_status_signal.emit(False)
+                self._emit_signal('file_download_status', False)
 
-        if self.signals and hasattr(self.signals, 'file_progress_signal'):
-             final_total_for_progress = total_size_bytes if download_successful_flag and total_size_bytes > 0 else downloaded_size_bytes
-             self.signals.file_progress_signal.emit(api_original_filename, (downloaded_size_bytes, final_total_for_progress))
+        # Final progress update for single stream
+        final_total_for_progress = total_size_bytes if download_successful_flag and total_size_bytes > 0 else downloaded_size_bytes
+        self._emit_signal('file_progress', api_original_filename, (downloaded_size_bytes, final_total_for_progress))
 
         if self.check_cancel() or (skip_event and skip_event.is_set()):
             self.logger(f"   ⚠️ Download process interrupted for {api_original_filename}.")
@@ -787,14 +847,19 @@ class PostProcessorWorker:
 
         # --- Final Numeric Suffixing in the effective_save_folder ---
         final_filename_on_disk = filename_after_compression # This is the name after potential compression
-        temp_base, temp_ext = os.path.splitext(final_filename_on_disk)
-        suffix_counter = 1
-        while os.path.exists(os.path.join(effective_save_folder, final_filename_on_disk)):
-            final_filename_on_disk = f"{temp_base}_{suffix_counter}{temp_ext}"
-            suffix_counter += 1
-        
-        if final_filename_on_disk != filename_after_compression:
-            self.logger(f"     Applied numeric suffix in '{os.path.basename(effective_save_folder)}': '{final_filename_on_disk}' (was '{filename_after_compression}')")
+         # If Manga Date Based style, we trust the counter from main.py.
+        # Suffixing should not be needed if the counter initialization was correct.
+        # If a file with the generated DDD.ext name exists, it will be overwritten.
+        if not (self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED):
+            temp_base, temp_ext = os.path.splitext(final_filename_on_disk)
+            suffix_counter = 1
+            # Check for existing file and apply suffix only if not in date-based manga mode
+            while os.path.exists(os.path.join(effective_save_folder, final_filename_on_disk)):
+                final_filename_on_disk = f"{temp_base}_{suffix_counter}{temp_ext}"
+                suffix_counter += 1
+            if final_filename_on_disk != filename_after_compression: # Log if a suffix was applied
+                self.logger(f"     Applied numeric suffix in '{os.path.basename(effective_save_folder)}': '{final_filename_on_disk}' (was '{filename_after_compression}')")
+        # else: for STYLE_DATE_BASED, final_filename_on_disk remains filename_after_compression.
 
         # --- Save File ---
         final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
@@ -824,7 +889,7 @@ class PostProcessorWorker:
 
             with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
             with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Track by logical name
-            
+            # The counter for STYLE_DATE_BASED is now incremented *before* filename generation, under lock.
             final_filename_saved_for_return = final_filename_on_disk
             self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024*1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
             # Session-wide base name tracking removed.
@@ -1002,15 +1067,14 @@ class PostProcessorWorker:
         if self.filter_character_list_objects:
             if self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
                 self.logger(f"   -> Skip Post (Scope: Title - No Char Match): Title '{post_title[:50]}' does not match character filters.")
-                if self.signals and hasattr(self.signals, 'missed_character_post_signal'):
-                    self.signals.missed_character_post_signal.emit(post_title, "No title match for character filter")
+                self._emit_signal('missed_character_post', post_title, "No title match for character filter")
                 return 0, num_potential_files_in_post, []
             if self.char_filter_scope == CHAR_SCOPE_COMMENTS and \
                not post_is_candidate_by_file_char_match_in_comment_scope and \
                not post_is_candidate_by_comment_char_match: # MODIFIED: Check both file and comment match flags
                 self.logger(f"   -> Skip Post (Scope: Comments - No Char Match in Comments): Post ID '{post_id}', Title '{post_title[:50]}...'")
                 if self.signals and hasattr(self.signals, 'missed_character_post_signal'):
-                    self.signals.missed_character_post_signal.emit(post_title, "No character match in files or comments (Comments scope)")
+                    self._emit_signal('missed_character_post', post_title, "No character match in files or comments (Comments scope)")
                 return 0, num_potential_files_in_post, []
                 
         if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
@@ -1027,8 +1091,7 @@ class PostProcessorWorker:
            (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and \
            not post_is_candidate_by_title_char_match:
             self.logger(f"   -> Skip Post (Manga Mode with Title/Both Scope - No Title Char Match): Title '{post_title[:50]}' doesn't match filters.")
-            if self.signals and hasattr(self.signals, 'missed_character_post_signal'):
-                self.signals.missed_character_post_signal.emit(post_title, "Manga Mode: No title match for character filter (Title/Both scope)")
+            self._emit_signal('missed_character_post', post_title, "Manga Mode: No title match for character filter (Title/Both scope)")
             return 0, num_potential_files_in_post, []
 
         if not isinstance(post_attachments, list):
@@ -1099,9 +1162,8 @@ class PostProcessorWorker:
                 for link_url, link_text in unique_links_data.items():
                      platform = get_link_platform(link_url)
                      if platform not in scraped_platforms: 
-                         if self.signals and hasattr(self.signals, 'external_link_signal'):
-                             self.signals.external_link_signal.emit(post_title, link_text, link_url, platform)
-                             links_emitted_count +=1
+                         self._emit_signal('external_link', post_title, link_text, link_url, platform)
+                         links_emitted_count +=1
                 
                 if links_emitted_count > 0: self.logger(f"   🔗 Found {links_emitted_count} potential external link(s) in post content.")
             except Exception as e: self.logger(f"⚠️ Error parsing post content for links: {e}\n{traceback.format_exc(limit=2)}")
@@ -1147,6 +1209,16 @@ class PostProcessorWorker:
             if not all_files_from_post_api:
                  self.logger(f"   -> No image thumbnails found for post {post_id} in thumbnail-only mode.")
                  return 0, 0, []
+        
+        # Sort files within the post by original name if in Date Based manga mode
+        if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED:
+            def natural_sort_key_for_files(file_api_info):
+                name = file_api_info.get('_original_name_for_log', '').lower()
+                # Split into text and number parts for natural sorting (e.g., "file2.jpg" before "file10.jpg")
+                return [int(text) if text.isdigit() else text for text in re.split('([0-9]+)', name)]
+            
+            all_files_from_post_api.sort(key=natural_sort_key_for_files)
+            self.logger(f"   Manga Date Mode: Sorted {len(all_files_from_post_api)} files within post {post_id} by original name for sequential numbering.")
 
 
         if not all_files_from_post_api:
@@ -1274,9 +1346,10 @@ class PostProcessorWorker:
                     headers,
                     post_id,
                     self.skip_current_file_flag,
-                    post_title,
-                    file_idx, 
-                    num_files_in_this_post_for_naming 
+                    post_title=post_title, # Keyword argument
+                    manga_date_file_counter_ref=self.manga_date_file_counter_ref if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED else None,
+                    file_index_in_post=file_idx, # Changed to keyword argument
+                    num_files_in_this_post=num_files_in_this_post_for_naming # Changed to keyword argument
                 ))
 
             for future in as_completed(futures_list):
@@ -1298,8 +1371,8 @@ class PostProcessorWorker:
                     self.logger(f"❌ File download task for post {post_id} resulted in error: {exc_f}")
                     total_skipped_this_post += 1
         
-        if self.signals and hasattr(self.signals, 'file_progress_signal'):
-            self.signals.file_progress_signal.emit("", None) 
+        # Clear file progress display after all files in a post are done
+        self._emit_signal('file_progress', "", None)
 
         if self.check_cancel(): self.logger(f"   Post {post_id} processing interrupted/cancelled.");
         else: self.logger(f"   Post {post_id} Summary: Downloaded={total_downloaded_this_post}, Skipped Files={total_skipped_this_post}")
@@ -1338,7 +1411,8 @@ class DownloadThread(QThread):
                  char_filter_scope=CHAR_SCOPE_FILES,
                  remove_from_filename_words_list=None,
                  allow_multipart_download=True,
-                 ): # Removed duplicate_file_mode and session-wide tracking
+                 manga_date_file_counter_ref=None, # New parameter
+                 ):
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -1379,7 +1453,7 @@ class DownloadThread(QThread):
         self.char_filter_scope = char_filter_scope
         self.remove_from_filename_words_list = remove_from_filename_words_list
         self.allow_multipart_download = allow_multipart_download
-        # self.duplicate_file_mode and session-wide tracking removed
+        self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
             self.compress_images = False
@@ -1404,13 +1478,15 @@ class DownloadThread(QThread):
         grand_list_of_kept_original_filenames = [] 
         was_process_cancelled = False
 
+        # This DownloadThread (being a QThread) will use its own signals object
+        # to communicate with PostProcessorWorker if needed.
         worker_signals_obj = PostProcessorSignals()
         try:
             worker_signals_obj.progress_signal.connect(self.progress_signal)
             worker_signals_obj.file_download_status_signal.connect(self.file_download_status_signal)
             worker_signals_obj.file_progress_signal.connect(self.file_progress_signal)
             worker_signals_obj.external_link_signal.connect(self.external_link_signal)
-            worker_signals_obj.missed_character_post_signal.connect(self.missed_character_post_signal) # New connection
+            worker_signals_obj.missed_character_post_signal.connect(self.missed_character_post_signal)
 
             self.logger("   Starting post fetch (single-threaded download process)...")
             post_generator = download_from_api(
@@ -1441,8 +1517,8 @@ class DownloadThread(QThread):
                          compress_images=self.compress_images, download_thumbnails=self.download_thumbnails,
                          service=self.service, user_id=self.user_id,
                          api_url_input=self.api_url_input,
-                         cancellation_event=self.cancellation_event,
-                         signals=worker_signals_obj,
+                         cancellation_event=self.cancellation_event, # emitter is PostProcessorSignals for single-thread
+                         emitter=worker_signals_obj, # Pass the signals object as the emitter
                          downloaded_files=self.downloaded_files,
                          downloaded_file_hashes=self.downloaded_file_hashes,
                          downloaded_files_lock=self.downloaded_files_lock,
@@ -1458,7 +1534,8 @@ class DownloadThread(QThread):
                          char_filter_scope=self.char_filter_scope,
                          remove_from_filename_words_list=self.remove_from_filename_words_list,
                          allow_multipart_download=self.allow_multipart_download,
-                         ) # Removed duplicate_file_mode and session-wide tracking
+                         manga_date_file_counter_ref=self.manga_date_file_counter_ref, # Pass it here
+                         )
                     try:
                         dl_count, skip_count, kept_originals_this_post = post_processing_worker.process()
                         grand_total_downloaded_files += dl_count
@@ -1494,7 +1571,7 @@ class DownloadThread(QThread):
                     worker_signals_obj.file_download_status_signal.disconnect(self.file_download_status_signal)
                     worker_signals_obj.external_link_signal.disconnect(self.external_link_signal)
                     worker_signals_obj.file_progress_signal.disconnect(self.file_progress_signal)
-                    worker_signals_obj.missed_character_post_signal.disconnect(self.missed_character_post_signal) # New disconnection
+                    worker_signals_obj.missed_character_post_signal.disconnect(self.missed_character_post_signal)
             except (TypeError, RuntimeError) as e:
                 self.logger(f"ℹ️ Note during DownloadThread signal disconnection: {e}")
             

@@ -19,8 +19,8 @@ from PyQt5.QtGui import (
 )
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
-    QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget,
-    QRadioButton, QButtonGroup, QCheckBox, QSplitter, QSizePolicy, QDialog, QStackedWidget,
+    QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton, QButtonGroup, QCheckBox, QSplitter,
+    QDialog, QStackedWidget,
     QFrame,
     QAbstractButton
 )
@@ -91,6 +91,7 @@ CONFIG_APP_NAME_MAIN = "ApplicationSettings"
 MANGA_FILENAME_STYLE_KEY = "mangaFilenameStyleV1"
 STYLE_POST_TITLE = "post_title"
 STYLE_ORIGINAL_NAME = "original_name"
+STYLE_DATE_BASED = "date_based" # New style for date-based naming
 SKIP_WORDS_SCOPE_KEY = "skipWordsScopeV1"
 ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 
@@ -487,6 +488,11 @@ class DownloaderApp(QWidget):
         self.download_counter = 0
         self.skip_counter = 0
 
+        # For handling signals from worker threads via a queue
+        self.worker_to_gui_queue = queue.Queue()
+        self.gui_update_timer = QTimer(self)
+        self.actual_gui_signals = PostProcessorSignals() # Renamed from self.worker_signals
+
         self.worker_signals = PostProcessorSignals()
         self.prompt_mutex = QMutex()
         self._add_character_response = None
@@ -561,23 +567,27 @@ class DownloaderApp(QWidget):
 
 
     def _connect_signals(self):
-        if hasattr(self.worker_signals, 'progress_signal'):
-             self.worker_signals.progress_signal.connect(self.handle_main_log)
-        if hasattr(self.worker_signals, 'file_progress_signal'):
-            self.worker_signals.file_progress_signal.connect(self.update_file_progress_display)
-        if hasattr(self.worker_signals, 'missed_character_post_signal'): # New
-            self.worker_signals.missed_character_post_signal.connect(self.handle_missed_character_post)
-        if hasattr(self.worker_signals, 'external_link_signal'):
-            self.worker_signals.external_link_signal.connect(self.handle_external_link_signal)
+        # Signals from the GUI's perspective (emitted by _process_worker_queue or directly)
+        self.actual_gui_signals.progress_signal.connect(self.handle_main_log)
+        self.actual_gui_signals.file_progress_signal.connect(self.update_file_progress_display)
+        self.actual_gui_signals.missed_character_post_signal.connect(self.handle_missed_character_post)
+        self.actual_gui_signals.external_link_signal.connect(self.handle_external_link_signal)
+        self.actual_gui_signals.file_download_status_signal.connect(lambda status: None) # Placeholder if needed, or connect to UI
 
+        # Timer for processing the worker queue
+        self.gui_update_timer.timeout.connect(self._process_worker_queue)
+        self.gui_update_timer.start(100) # Check queue every 100ms
+
+        # Direct GUI signals
         self.log_signal.connect(self.handle_main_log)
         self.add_character_prompt_signal.connect(self.prompt_add_character)
         self.character_prompt_response_signal.connect(self.receive_add_character_result)
         self.overall_progress_signal.connect(self.update_progress_display)
         self.finished_signal.connect(self.download_finished)
-        self.external_link_signal.connect(self.handle_external_link_signal)
-        self.file_progress_signal.connect(self.update_file_progress_display)
+        # self.external_link_signal.connect(self.handle_external_link_signal) # Covered by actual_gui_signals
+        # self.file_progress_signal.connect(self.update_file_progress_display) # Covered by actual_gui_signals
 
+        # UI element connections
         if hasattr(self, 'character_search_input'): self.character_search_input.textChanged.connect(self.filter_character_list)
         if hasattr(self, 'external_links_checkbox'): self.external_links_checkbox.toggled.connect(self.update_external_links_setting)
         if hasattr(self, 'thread_count_input'): self.thread_count_input.textChanged.connect(self.update_multithreading_label)
@@ -608,8 +618,33 @@ class DownloaderApp(QWidget):
         if self.char_filter_scope_toggle_button:
             self.char_filter_scope_toggle_button.clicked.connect(self._cycle_char_filter_scope)
         
-        if hasattr(self, 'multipart_toggle_button'): self.multipart_toggle_button.clicked.connect(self._toggle_multipart_mode)
+        if hasattr(self, 'multipart_toggle_button'): self.multipart_toggle_button.clicked.connect(self._toggle_multipart_mode) # Keep this if it's separate
 
+    def _process_worker_queue(self):
+        """Processes messages from the worker queue and emits Qt signals from the GUI thread."""
+        while not self.worker_to_gui_queue.empty():
+            try:
+                item = self.worker_to_gui_queue.get_nowait()
+                signal_type = item.get('type')
+                payload = item.get('payload', tuple()) # Default to empty tuple
+
+                if signal_type == 'progress':
+                    self.actual_gui_signals.progress_signal.emit(*payload)
+                elif signal_type == 'file_download_status': # Changed from 'file_status'
+                    self.actual_gui_signals.file_download_status_signal.emit(*payload)
+                elif signal_type == 'external_link': # Changed from 'ext_link'
+                    self.actual_gui_signals.external_link_signal.emit(*payload)
+                elif signal_type == 'file_progress':
+                    self.actual_gui_signals.file_progress_signal.emit(*payload)
+                elif signal_type == 'missed_character_post':
+                    self.actual_gui_signals.missed_character_post_signal.emit(*payload)
+                else:
+                    self.log_signal.emit(f"⚠️ Unknown signal type from worker queue: {signal_type}")
+                self.worker_to_gui_queue.task_done()
+            except queue.Empty:
+                break # Should not happen with while not empty, but good practice
+            except Exception as e:
+                self.log_signal.emit(f"❌ Error processing worker queue: {e}")
 
     def load_known_names_from_util(self):
         global KNOWN_NAMES
@@ -719,7 +754,8 @@ class DownloaderApp(QWidget):
         self.link_input.setPlaceholderText("e.g., https://kemono.su/patreon/user/12345 or .../post/98765")
         self.link_input.setToolTip("Enter the full URL of a Kemono/Coomer creator's page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765")
         self.link_input.textChanged.connect(self.update_custom_folder_visibility)
-        url_page_layout.addWidget(self.link_input, 1)
+        url_page_layout.addWidget(self.link_input, 1) # URL input takes available space
+
 
         self.page_range_label = QLabel("Page Range:")
         self.page_range_label.setStyleSheet("font-weight: bold; padding-left: 10px;")
@@ -1166,7 +1202,7 @@ class DownloaderApp(QWidget):
         self.update_page_range_enabled_state()
         if self.manga_mode_checkbox:
             self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
-        if hasattr(self, 'link_input'): self.link_input.textChanged.connect(self.update_page_range_enabled_state)
+        if hasattr(self, 'link_input'): self.link_input.textChanged.connect(lambda: self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)) # Also trigger manga UI update
         self.load_known_names_from_util()
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         if hasattr(self, 'radio_group') and self.radio_group.checkedButton():
@@ -1174,6 +1210,7 @@ class DownloaderApp(QWidget):
         self._update_manga_filename_style_button_text()
         self._update_skip_scope_button_text()
         self._update_char_filter_scope_button_text()
+        self._update_multithreading_for_date_mode() # Ensure correct initial state
         
     def _center_on_screen(self):
         """Centers the widget on the screen."""
@@ -1958,6 +1995,16 @@ class DownloaderApp(QWidget):
                     "  Downloads as: \"001.jpg\", \"002.jpg\".\n\n"
                     "Click to change to: Post Title"
                 )
+            elif self.manga_filename_style == STYLE_DATE_BASED:
+                self.manga_rename_toggle_button.setText("Name: Date Based")
+                self.manga_rename_toggle_button.setToolTip(
+                    "Manga Filename Style: Date Based\n\n"
+                    "When Manga/Comic Mode is active for a creator feed:\n"
+                    "- Files will be named sequentially (001.ext, 002.ext, ...) based on post publication order (oldest to newest).\n"
+                    "- To ensure correct numbering, multithreading for post processing is automatically disabled when this style is active.\n\n"
+                    "Click to change to: Post Title"
+                )
+
             else:
                 self.manga_rename_toggle_button.setText("Name: Unknown Style")
                 self.manga_rename_toggle_button.setToolTip(
@@ -1971,17 +2018,20 @@ class DownloaderApp(QWidget):
         current_style = self.manga_filename_style
         new_style = ""
 
-        if current_style == STYLE_POST_TITLE:
+        if current_style == STYLE_POST_TITLE: # Title -> Original
             new_style = STYLE_ORIGINAL_NAME
-            reply = QMessageBox.information(self, "Manga Filename Preference",
-                                           "Using 'Name: Post Title' (first file by title, others original) is recommended for Manga Mode.\n\n"
-                                           "Using 'Name: Original File' for all files might lead to less organized downloads if original names are inconsistent or non-sequential.\n\n"
-                                           "Proceed with using 'Name: Original File' for all files?",
-                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            if reply == QMessageBox.No:
-                self.log_signal.emit("ℹ️ Manga filename style change to 'Original File' cancelled by user.")
-                return
-        elif current_style == STYLE_ORIGINAL_NAME:
+            # The warning for original name style
+            # reply = QMessageBox.information(self, "Manga Filename Preference",
+            #                                "Using 'Name: Post Title' (first file by title, others original) is recommended for Manga Mode.\n\n"
+            #                                "Using 'Name: Original File' for all files might lead to less organized downloads if original names are inconsistent or non-sequential.\n\n"
+            #                                "Proceed with using 'Name: Original File' for all files?",
+            #                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            # if reply == QMessageBox.No:
+            #     self.log_signal.emit("ℹ️ Manga filename style change to 'Original File' cancelled by user.")
+            #     return
+        elif current_style == STYLE_ORIGINAL_NAME: # Original -> Date
+            new_style = STYLE_DATE_BASED
+        elif current_style == STYLE_DATE_BASED: # Date -> Title
             new_style = STYLE_POST_TITLE
         else:
             self.log_signal.emit(f"⚠️ Unknown current manga filename style: {current_style}. Resetting to default ('{STYLE_POST_TITLE}').")
@@ -1991,6 +2041,7 @@ class DownloaderApp(QWidget):
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
         self.settings.sync()
         self._update_manga_filename_style_button_text()
+        self._update_multithreading_for_date_mode() # Update multithreading state based on new style
         self.log_signal.emit(f"ℹ️ Manga filename style changed to: '{self.manga_filename_style}'")
 
 
@@ -2036,6 +2087,7 @@ class DownloaderApp(QWidget):
             if not enable_char_filter_widgets: self.character_input.clear()
         if self.char_filter_scope_toggle_button:
             self.char_filter_scope_toggle_button.setEnabled(enable_char_filter_widgets)
+        self._update_multithreading_for_date_mode() # Update multithreading state based on manga mode
 
 
     def filter_character_list(self, search_text):
@@ -2067,6 +2119,29 @@ class DownloaderApp(QWidget):
             self.thread_count_label.setEnabled(True)
             self.update_multithreading_label(self.thread_count_input.text())
 
+    def _update_multithreading_for_date_mode(self):
+        """
+        Checks if Manga Mode is ON and 'Date Based' style is selected.
+        If so, disables multithreading. Otherwise, enables it.
+        """
+        if not hasattr(self, 'manga_mode_checkbox') or not hasattr(self, 'use_multithreading_checkbox'):
+            return # UI elements not ready
+
+        manga_on = self.manga_mode_checkbox.isChecked()
+        is_date_style = (self.manga_filename_style == STYLE_DATE_BASED)
+
+        if manga_on and is_date_style:
+            if self.use_multithreading_checkbox.isChecked() or self.use_multithreading_checkbox.isEnabled():
+                # Only log if a change is made or it was previously enabled
+                if self.use_multithreading_checkbox.isChecked():
+                    self.log_signal.emit("ℹ️ Manga Date Mode: Multithreading for post processing has been disabled to ensure correct sequential file numbering.")
+                self.use_multithreading_checkbox.setChecked(False)
+            self.use_multithreading_checkbox.setEnabled(False)
+            self._handle_multithreading_toggle(False) # Update label to show "1 Thread"
+        else:
+            if not self.use_multithreading_checkbox.isEnabled(): # Only re-enable if it was disabled by this logic
+                self.use_multithreading_checkbox.setEnabled(True)
+            self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked()) # Update label based on current state
 
     def update_progress_display(self, total_posts, processed_posts):
         if total_posts > 0:
@@ -2325,16 +2400,63 @@ class DownloaderApp(QWidget):
         self.progress_label.setText("Progress: Initializing...")
 
         
+        self.manga_date_file_counter_obj = [1, threading.Lock()] # Default: [value, lock]
+        if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not extract_links_only:
+            # Determine the directory to scan for existing numbered files for this series
+            # This path should be the "series" root, before any "per-post" subfolders.
+            series_scan_directory = output_dir # Base download location
+
+            if use_subfolders: # If 'Separate Folders by Name/Title' is ON
+                # Try to get folder name from character filter (manga series title)
+                if filter_character_list_to_pass and filter_character_list_to_pass[0] and filter_character_list_to_pass[0].get("name"):
+                    # Assuming the first filter is the series name for folder creation
+                    series_folder_name = clean_folder_name(filter_character_list_to_pass[0]["name"])
+                    series_scan_directory = os.path.join(series_scan_directory, series_folder_name)
+                elif service and user_id: # Fallback if no char filter, but subfolders are on
+                    # This might group multiple series from one creator if no distinct char filter is used.
+                    # The counter is per download operation, so this is consistent.
+                    creator_based_folder_name = clean_folder_name(user_id) # Or a more specific creator name convention
+                    series_scan_directory = os.path.join(series_scan_directory, creator_based_folder_name)
+                # If neither, series_scan_directory remains output_dir (files go directly there if use_subfolders is on but no name found)
+            # If use_subfolders is OFF, files go into output_dir. So, series_scan_directory remains output_dir.
+
+            highest_num = 0
+            if os.path.isdir(series_scan_directory):
+                self.log_signal.emit(f"ℹ️ Manga Date Mode: Scanning for existing numbered files in '{series_scan_directory}' and its subdirectories...")
+                for dirpath, _, filenames_in_dir in os.walk(series_scan_directory):
+                    for filename_to_check in filenames_in_dir:
+                        # Check the base name (without extension) for leading digits
+                        base_name_no_ext = os.path.splitext(filename_to_check)[0]
+                        match = re.match(r"(\d{3,})", base_name_no_ext) # Matches "001" from "001.jpg" or "001_13.jpg"
+                        if match:
+                            try:
+                                num = int(match.group(1))
+                                if num > highest_num:
+                                    highest_num = num
+                            except ValueError:
+                                continue
+            else:
+                self.log_signal.emit(f"ℹ️ Manga Date Mode: Scan directory '{series_scan_directory}' not found or is not a directory. Starting counter at 1.")
+            self.manga_date_file_counter_obj = [highest_num + 1, threading.Lock()] # [value, lock]
+            self.log_signal.emit(f"ℹ️ Manga Date Mode: Initialized file counter at {self.manga_date_file_counter_obj[0]}.")
         effective_num_post_workers = 1
         effective_num_file_threads_per_worker = 1
         
+        # Determine if multithreading for posts should be used
         if post_id_from_url:
+            # Single post URL: no post workers, but file threads can be > 1
             if use_multithreading_enabled_by_checkbox:
                 effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
         else:
-            if use_multithreading_enabled_by_checkbox:
-                effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS))
-                effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
+            # Creator feed
+            if manga_mode and self.manga_filename_style == STYLE_DATE_BASED:
+                # Force single post worker for date-based manga mode
+                effective_num_post_workers = 1
+                # File threads per worker can still be > 1 if user set it
+                effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER)) if use_multithreading_enabled_by_checkbox else 1
+            elif use_multithreading_enabled_by_checkbox: # Standard creator feed with multithreading enabled
+                effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS)) # For posts
+                effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER)) # For files within each post worker
 
 
         log_messages = ["="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"   URL: {api_url}"]
@@ -2389,7 +2511,12 @@ class DownloaderApp(QWidget):
             log_messages.append(f"     ↳ Manga Duplicates: Will be renamed with numeric suffix if names clash (e.g., _1, _2).")
 
         should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
-        log_messages.append(f"   Threading: {'Multi-threaded (posts)' if should_use_multithreading_for_posts else 'Single-threaded (posts)'}")
+        # Adjust log message if date-based manga mode forced single thread
+        if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not post_id_from_url:
+            log_messages.append(f"   Threading: Single-threaded (posts) - Enforced by Manga Date Mode")
+            should_use_multithreading_for_posts = False # Ensure this reflects the forced state
+        else:
+            log_messages.append(f"   Threading: {'Multi-threaded (posts)' if should_use_multithreading_for_posts else 'Single-threaded (posts)'}")
         if should_use_multithreading_for_posts:
             log_messages.append(f"   Number of Post Worker Threads: {effective_num_post_workers}")
         log_messages.append("="*40)
@@ -2432,9 +2559,10 @@ class DownloaderApp(QWidget):
             'manga_mode_active': manga_mode,
             'unwanted_keywords': unwanted_keywords_for_folders,
             'cancellation_event': self.cancellation_event,
-            'signals': self.worker_signals,
+            # 'emitter' will be set based on single/multi-thread mode below
             'manga_filename_style': self.manga_filename_style,
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
+            'manga_date_file_counter_ref': self.manga_date_file_counter_obj if manga_mode and self.manga_filename_style == STYLE_DATE_BASED else None,
             'allow_multipart_download': allow_multipart,
             # 'duplicate_file_mode' and session-wide tracking removed
         }
@@ -2442,9 +2570,11 @@ class DownloaderApp(QWidget):
         try:
             if should_use_multithreading_for_posts:
                 self.log_signal.emit(f"   Initializing multi-threaded {'link extraction' if extract_links_only else 'download'} with {effective_num_post_workers} post workers...")
+                args_template['emitter'] = self.worker_to_gui_queue # For multi-threaded, use the queue
                 self.start_multi_threaded_download(num_post_workers=effective_num_post_workers, **args_template)
             else:
                 self.log_signal.emit(f"   Initializing single-threaded {'link extraction' if extract_links_only else 'download'}...")
+                # For single-threaded, DownloadThread creates its own PostProcessorSignals and passes it as emitter.
                 dt_expected_keys = [
                     'api_url_input', 'output_dir', 'known_names_copy', 'cancellation_event',
                     'filter_character_list', 'filter_mode', 'skip_zip', 'skip_rar',
@@ -2454,7 +2584,8 @@ class DownloaderApp(QWidget):
                     'downloaded_files_lock', 'downloaded_file_hashes_lock',
                     'skip_words_list', 'skip_words_scope', 'char_filter_scope',
                     'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
-                    'start_page', 'end_page', 'target_post_id_from_initial_url', 'duplicate_file_mode',
+                    'start_page', 'end_page', 'target_post_id_from_initial_url',
+                    'manga_date_file_counter_ref', # Ensure this is passed for single thread mode
                     'manga_mode_active', 'unwanted_keywords', 'manga_filename_style',
                     'allow_multipart_download'
                 ]
@@ -2478,7 +2609,6 @@ class DownloaderApp(QWidget):
             if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.connect(self.handle_external_link_signal)
             if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.connect(self.update_file_progress_display)
             if hasattr(self.download_thread, 'missed_character_post_signal'): # New
-            
                 self.download_thread.missed_character_post_signal.connect(self.handle_missed_character_post)
             self.download_thread.start()
             self.log_signal.emit("✅ Single download thread (for posts) started.")
@@ -2513,9 +2643,10 @@ class DownloaderApp(QWidget):
         fetch_error_occurred = False
         manga_mode_active_for_fetch = worker_args_template.get('manga_mode_active', False)
 
-        signals_for_worker = worker_args_template.get('signals')
-        if not signals_for_worker:
-             self.log_signal.emit("❌ CRITICAL ERROR: Signals object missing for worker in _fetch_and_queue_posts.");
+        # In multi-threaded mode, the emitter is the queue.
+        emitter_for_worker = worker_args_template.get('emitter') # This should be self.worker_to_gui_queue
+        if not emitter_for_worker: # Should not happen if logic in start_download is correct
+             self.log_signal.emit("❌ CRITICAL ERROR: Emitter (queue) missing for worker in _fetch_and_queue_posts.");
              self.finished_signal.emit(0,0,True, []);
              return
 
@@ -2572,13 +2703,13 @@ class DownloaderApp(QWidget):
         ppw_expected_keys = [
             'post_data', 'download_root', 'known_names', 'filter_character_list', 'unwanted_keywords',
             'filter_mode', 'skip_zip', 'skip_rar', 'use_subfolders', 'use_post_subfolders',
-            'target_post_id_from_initial_url', 'custom_folder_name', 'compress_images',
+            'target_post_id_from_initial_url', 'custom_folder_name', 'compress_images', 'emitter',
             'download_thumbnails', 'service', 'user_id', 'api_url_input',
-            'cancellation_event', 'signals', 'downloaded_files', 'downloaded_file_hashes',
+            'cancellation_event', 'downloaded_files', 'downloaded_file_hashes',
             'downloaded_files_lock', 'downloaded_file_hashes_lock', 'remove_from_filename_words_list',
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
             'show_external_links', 'extract_links_only', 'allow_multipart_download',
-            'num_file_threads', 'skip_current_file_flag',
+            'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
             'manga_mode_active', 'manga_filename_style'
         ]
         # Ensure 'allow_multipart_download' is also considered for optional keys if it has a default in PostProcessorWorker
@@ -2586,7 +2717,7 @@ class DownloaderApp(QWidget):
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
             'show_external_links', 'extract_links_only', 'duplicate_file_mode', # Added duplicate_file_mode here
             'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style',
-            'processed_base_filenames_session_wide', 'processed_base_filenames_session_wide_lock' # Add these
+            'manga_date_file_counter_ref' # Add this
         }
         
         for post_data_item in all_posts_data:
@@ -2600,7 +2731,7 @@ class DownloaderApp(QWidget):
             for key in ppw_expected_keys:
                 if key == 'post_data': worker_init_args[key] = post_data_item
                 elif key == 'num_file_threads': worker_init_args[key] = num_file_dl_threads_for_each_worker
-                elif key == 'signals': worker_init_args[key] = signals_for_worker
+                elif key == 'emitter': worker_init_args[key] = emitter_for_worker # Pass the queue
                 elif key in worker_args_template: worker_init_args[key] = worker_args_template[key]
                 elif key in ppw_optional_keys_with_defaults: pass
                 else: missing_keys.append(key)
@@ -2777,7 +2908,6 @@ class DownloaderApp(QWidget):
         if kept_original_names_list is None:
             kept_original_names_list = []
 
-
         status_message = "Cancelled by user" if cancelled_by_user else "Finished"
 
         summary_log = "="*40
@@ -2801,10 +2931,6 @@ class DownloaderApp(QWidget):
             self.log_signal.emit(HTML_PREFIX + html_list_items)
             self.log_signal.emit("="*40)
 
-
-        self.progress_label.setText(f"{status_message}: {total_downloaded} downloaded, {total_skipped} skipped."); self.file_progress_label.setText("")
-        if not cancelled_by_user: self._try_process_next_external_link()
-
         if self.download_thread:
             try:
                 if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
@@ -2815,15 +2941,23 @@ class DownloaderApp(QWidget):
                 if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
                 if hasattr(self.download_thread, 'missed_character_post_signal'): # New
                     self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
-            except (TypeError, RuntimeError) as e: self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
-            # Ensure these are cleared if the download_finished is for the single download thread
-            if self.download_thread and not self.download_thread.isRunning(): # Check if it was this thread
-                self.download_thread = None
+            except (TypeError, RuntimeError) as e: 
+                self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
+            
+            if not self.download_thread.isRunning(): # Check if it was this thread
+                 self.download_thread = None
 
-        if self.thread_pool: self.log_signal.emit("   Ensuring worker thread pool is shut down..."); self.thread_pool.shutdown(wait=True, cancel_futures=True); self.thread_pool = None
+        self.progress_label.setText(f"{status_message}: {total_downloaded} downloaded, {total_skipped} skipped.")
+        self.file_progress_label.setText("")
+        if not cancelled_by_user: self._try_process_next_external_link()
+
+        if self.thread_pool:
+            self.log_signal.emit("   Ensuring worker thread pool is shut down...")
+            self.thread_pool.shutdown(wait=True, cancel_futures=True)
+            self.thread_pool = None
         self.active_futures = []
-
-        self.set_ui_enabled(True); self.cancel_btn.setEnabled(False)
+        self.set_ui_enabled(True)
+        self.cancel_btn.setEnabled(False)
 
     def toggle_active_log_view(self):
         if self.current_log_view == 'progress':
@@ -2888,8 +3022,6 @@ class DownloaderApp(QWidget):
         self.settings.sync()
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
-
-        self.log_signal.emit("✅ Application reset complete.")
 
     def _reset_ui_to_defaults(self):
         self.link_input.clear(); self.dir_input.clear(); self.custom_folder_input.clear(); self.character_input.clear();
@@ -3007,7 +3139,6 @@ class DownloaderApp(QWidget):
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
         self.log_signal.emit(f"ℹ️ Multi-part download set to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'}")
 
-
 if __name__ == '__main__':
     import traceback
     try:
@@ -3071,4 +3202,3 @@ if __name__ == '__main__':
         print(f"An unhandled exception occurred: {e}")
         traceback.print_exc()
         print("--- END CRITICAL ERROR ---")
-        sys.exit(1)
