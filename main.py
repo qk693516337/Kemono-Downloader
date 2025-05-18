@@ -549,7 +549,7 @@ class DownloaderApp(QWidget):
 
 
         self.load_known_names_from_util()
-        self.setWindowTitle("Kemono Downloader v3.2.0")
+        self.setWindowTitle("Kemono Downloader v3.4.0")
         # self.setGeometry(150, 150, 1050, 820) # Initial geometry will be set after showing
         self.setStyleSheet(self.get_dark_theme())
 
