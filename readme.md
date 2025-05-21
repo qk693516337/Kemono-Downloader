@@ -1,4 +1,10 @@
-# Kemono Downloader v3.4.0
+<h1 align="center">Kemono Downloader v3.4.0</h1>
+
+<div align="center">
+  <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
+</div>
+
+---
 
 A powerful, feature-rich GUI application for downloading content from **[Kemono.su](https://kemono.su)** and **[Coomer.party](https://coomer.party)**.  
 Built with **PyQt5**, this tool is ideal for users who want deep filtering, customizable folder structures, efficient downloads, and intelligent automation — all within a modern, user-friendly graphical interface.
@@ -8,8 +14,6 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 ## ✨ What's New in v3.4.0?
 
 This version brings significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
-
----
 
 ### 📖 Enhanced Manga/Comic Mode
 
@@ -29,7 +33,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 - Specify comma-separated words or phrases (case-insensitive) that will be automatically removed from filenames.
 
-- Example: `patreon, [HD], _final` transforms `AwesomeArt_patreon_[HD]_final.jpg` into `AwesomeArt.jpg`.
+- Example: `patreon, [HD], _final` transforms `AwesomeArt_patreon` `Hinata_Hd` into `AwesomeArt.jpg` `Hinata.jpg`.
 
 ---
 

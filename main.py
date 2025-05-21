@@ -8,6 +8,7 @@ import queue
 import hashlib
 import http.client
 import traceback
+import subprocess # Added for opening files cross-platform
 import random
 from collections import deque
 
@@ -20,11 +21,11 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton, QButtonGroup, QCheckBox, QSplitter,
-    QDialog, QStackedWidget,
+    QDialog, QStackedWidget, QScrollArea,
     QFrame,
     QAbstractButton
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QObject, QTimer, QSettings, QStandardPaths
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QObject, QTimer, QSettings, QStandardPaths, QCoreApplication
 from urllib.parse import urlparse
 
 try:
@@ -32,7 +33,7 @@ try:
 except ImportError:
     Image = None
 
-from io import BytesIO
+from io import BytesIO # Keep this if used elsewhere, though not directly in this diff
 
 try:
     print("Attempting to import from downloader_utils...")
@@ -50,7 +51,8 @@ try:
         CHAR_SCOPE_TITLE, # Added for completeness if used directly
         CHAR_SCOPE_FILES, # Ensure this is imported
         CHAR_SCOPE_BOTH, 
-        CHAR_SCOPE_COMMENTS
+        CHAR_SCOPE_COMMENTS,
+        FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER # Import the new status
     )
     print("Successfully imported names from downloader_utils.")
 except ImportError as e:
@@ -70,6 +72,7 @@ except ImportError as e:
     CHAR_SCOPE_FILES = "files"
     CHAR_SCOPE_BOTH = "both"
     CHAR_SCOPE_COMMENTS = "comments"
+    FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER = "failed_retry_later"
 
 except Exception as e:
     print(f"--- UNEXPECTED IMPORT ERROR ---")
@@ -82,6 +85,11 @@ except Exception as e:
 MAX_THREADS = 200
 RECOMMENDED_MAX_THREADS = 50
 MAX_FILE_THREADS_PER_POST_OR_WORKER = 10
+# New constants for batching high thread counts for post workers
+POST_WORKER_BATCH_THRESHOLD = 30
+POST_WORKER_NUM_BATCHES = 4
+SOFT_WARNING_THREAD_THRESHOLD = 40 # New constant for soft warning
+POST_WORKER_BATCH_DELAY_SECONDS = 2.5 # Seconds
 MAX_POST_WORKERS_WHEN_COMMENT_FILTERING = 3 # New constant
 
 HTML_PREFIX = "<!HTML!>"
@@ -111,17 +119,32 @@ class TourStepWidget(QWidget):
         title_label.setAlignment(Qt.AlignCenter)
         # Increased padding-bottom for more space below title
         title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E0E0; padding-bottom: 15px;")
+        layout.addWidget(title_label)
+
+        # Create QScrollArea for content
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True) # Important for the content_label to resize correctly
+        scroll_area.setFrameShape(QFrame.NoFrame) # Make it look seamless with the dialog
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff) # Content is word-wrapped
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded) # Show scrollbar only when needed
+        scroll_area.setStyleSheet("background-color: transparent;") # Match dialog background
 
         content_label = QLabel(content_text)
         content_label.setWordWrap(True)
-        content_label.setAlignment(Qt.AlignLeft)
+        # AlignTop ensures text starts from the top if it's shorter than the scroll area view
+        content_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         content_label.setTextFormat(Qt.RichText)
         # Adjusted line-height for bullet point readability
         content_label.setStyleSheet("font-size: 11pt; color: #C8C8C8; line-height: 1.8;")
 
-        layout.addWidget(title_label)
-        layout.addWidget(content_label)
-        layout.addStretch(1)
+        # Set the content_label as the widget for the scroll_area
+        scroll_area.setWidget(content_label)
+
+        # Add the scroll_area to the layout, allowing it to take available space
+        layout.addWidget(scroll_area, 1) # The '1' is a stretch factor
+
+        # Removed layout.addStretch(1) as the scroll_area now handles stretching.
+
 
 class TourDialog(QDialog):
     """
@@ -134,7 +157,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader" # Shared with main app for consistency if needed, but can be distinct
     CONFIG_APP_NAME_TOUR = "ApplicationTour"    # Specific QSettings group for tour
-    TOUR_SHOWN_KEY = "neverShowTourAgainV4"     # Updated key for new tour content
+    TOUR_SHOWN_KEY = "neverShowTourAgainV5"     # Updated key to re-show tour
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -213,7 +236,7 @@ class TourDialog(QDialog):
         step1_content = (
             "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates."
             "<ul>"
-            "<li>Our goal is to help you easily download content from Kemono and Coomer.</li>"
+            "<li>My goal is to help you easily download content from Kemono and Coomer.</li>"
             "<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li>"
             "<li>Click <b>Skip Tour</b> to close this guide at any time.</li>"
             "<li>Check <b>'Never show this tour again'</b> if you don't want to see this on future startups.</li>"
@@ -441,6 +464,23 @@ class TourDialog(QDialog):
             return QDialog.Rejected
 # --- End Tour Classes ---
 
+# Helper class to hold dynamic character filters
+class DynamicFilterHolder:
+    def __init__(self, initial_filters=None):
+        self.lock = threading.Lock()
+        # Store filters as a list of dicts, same as parsed_character_filter_objects
+        self._filters = initial_filters if initial_filters is not None else []
+
+    def get_filters(self):
+        with self.lock:
+            # Return a deep copy to prevent modification of the internal list by workers
+            # and to ensure thread safety if workers iterate over it while it's being set.
+            return [dict(f) for f in self._filters]
+
+    def set_filters(self, new_filters):
+        with self.lock:
+            # Store a deep copy, ensuring new_filters is a list of dicts
+            self._filters = [dict(f) for f in (new_filters if new_filters else [])]
 
 class DownloaderApp(QWidget):
     character_prompt_response_signal = pyqtSignal(bool)
@@ -457,37 +497,30 @@ class DownloaderApp(QWidget):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
 
-        # Determine path for Known.txt in user's app data directory
-        app_config_dir = ""
-        try:
-            # Use AppLocalDataLocation for user-specific, non-roaming data
-            app_data_root = QStandardPaths.writableLocation(QStandardPaths.AppLocalDataLocation)
-            if not app_data_root: # Fallback if somehow empty
-                app_data_root = QStandardPaths.writableLocation(QStandardPaths.GenericDataLocation)
-
-            if app_data_root and CONFIG_ORGANIZATION_NAME:
-                app_config_dir = os.path.join(app_data_root, CONFIG_ORGANIZATION_NAME)
-            elif app_data_root: # If no org name, use a generic app name folder
-                app_config_dir = os.path.join(app_data_root, "KemonoDownloaderAppData") # Fallback app name
-            else: # Absolute fallback: current working directory (less ideal for bundled app)
-                app_config_dir = os.getcwd()
-
-            if not os.path.exists(app_config_dir):
-                os.makedirs(app_config_dir, exist_ok=True)
-        except Exception as e_path:
-            print(f"Error setting up app_config_dir: {e_path}. Defaulting to CWD for Known.txt.")
-            app_config_dir = os.getcwd() # Fallback
-        self.config_file = os.path.join(app_config_dir, "Known.txt")
+        # Determine path for Known.txt in the application's directory
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Application is frozen (bundled with PyInstaller or similar)
+            # sys.executable is the path to the .exe file
+            app_base_dir = os.path.dirname(sys.executable)
+        else:
+            # Application is running as a script
+            # __file__ is the path to the script file
+            app_base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.config_file = os.path.join(app_base_dir, "Known.txt")
 
         self.download_thread = None
         self.thread_pool = None
         self.cancellation_event = threading.Event()
+        self.pause_event = threading.Event() # New event for pausing
         self.active_futures = []
         self.total_posts_to_process = 0
+        self.dynamic_character_filter_holder = DynamicFilterHolder() # For live character filter updates
         self.processed_posts_count = 0
         self.download_counter = 0
         self.skip_counter = 0
+        self.retryable_failed_files_info = [] # For storing info about files that failed but can be retried
 
+        self.is_paused = False # New state for pause functionality
         # For handling signals from worker threads via a queue
         self.worker_to_gui_queue = queue.Queue()
         self.gui_update_timer = QTimer(self)
@@ -549,7 +582,7 @@ class DownloaderApp(QWidget):
 
 
         self.load_known_names_from_util()
-        self.setWindowTitle("Kemono Downloader v3.4.0")
+        self.setWindowTitle("Kemono Downloader v3.5.0")
         # self.setGeometry(150, 150, 1050, 820) # Initial geometry will be set after showing
         self.setStyleSheet(self.get_dark_theme())
 
@@ -573,7 +606,9 @@ class DownloaderApp(QWidget):
         self.actual_gui_signals.missed_character_post_signal.connect(self.handle_missed_character_post)
         self.actual_gui_signals.external_link_signal.connect(self.handle_external_link_signal)
         self.actual_gui_signals.file_download_status_signal.connect(lambda status: None) # Placeholder if needed, or connect to UI
-
+        
+        if hasattr(self, 'character_input'): # Connect live update for character input
+            self.character_input.textChanged.connect(self._on_character_input_changed_live)
         # Timer for processing the worker queue
         self.gui_update_timer.timeout.connect(self._process_worker_queue)
         self.gui_update_timer.start(100) # Check queue every 100ms
@@ -585,6 +620,7 @@ class DownloaderApp(QWidget):
         self.overall_progress_signal.connect(self.update_progress_display)
         self.finished_signal.connect(self.download_finished)
         # self.external_link_signal.connect(self.handle_external_link_signal) # Covered by actual_gui_signals
+        # self.retryable_file_failed_signal will be connected in start_single_threaded_download
         # self.file_progress_signal.connect(self.update_file_progress_display) # Covered by actual_gui_signals
 
         # UI element connections
@@ -620,6 +656,59 @@ class DownloaderApp(QWidget):
         
         if hasattr(self, 'multipart_toggle_button'): self.multipart_toggle_button.clicked.connect(self._toggle_multipart_mode) # Keep this if it's separate
 
+        if hasattr(self, 'open_known_txt_button'): # Connect the new button
+            self.open_known_txt_button.clicked.connect(self._open_known_txt_file)
+
+    def _on_character_input_changed_live(self, text):
+        """
+        Called when the character input field text changes.
+        If a download is active (running or paused), this updates the dynamic filter holder.
+        """
+        if self._is_download_active(): # Only update if download is active/paused
+            # self.log_signal.emit("ℹ️ Character filter input changed during active session. Updating dynamic filters...")
+            # Use QCoreApplication.processEvents() to keep UI responsive during parsing if it's complex
+            QCoreApplication.processEvents()
+            raw_character_filters_text = self.character_input.text().strip()
+            parsed_filters = self._parse_character_filters(raw_character_filters_text)
+            
+            self.dynamic_character_filter_holder.set_filters(parsed_filters)
+            # Limit logging to avoid spamming if typing fast
+            # self.log_signal.emit(f"   Dynamic filters updated to: {', '.join(item['name'] for item in parsed_filters) if parsed_filters else 'None'}")
+
+    def _parse_character_filters(self, raw_text):
+        """Helper to parse character filter string into list of objects."""
+        parsed_character_filter_objects = []
+        if raw_text:
+            raw_parts = []
+            current_part_buffer = ""
+            in_group_parsing = False
+            for char_token in raw_text:
+                if char_token == '(':
+                    in_group_parsing = True
+                    current_part_buffer += char_token
+                elif char_token == ')':
+                    in_group_parsing = False
+                    current_part_buffer += char_token
+                elif char_token == ',' and not in_group_parsing:
+                    if current_part_buffer.strip(): raw_parts.append(current_part_buffer.strip())
+                    current_part_buffer = ""
+                else:
+                    current_part_buffer += char_token
+            if current_part_buffer.strip(): raw_parts.append(current_part_buffer.strip())
+
+            for part_str in raw_parts:
+                part_str = part_str.strip()
+                if not part_str: continue
+                if part_str.startswith("(") and part_str.endswith(")"):
+                    group_content_str = part_str[1:-1].strip()
+                    aliases_in_group = [alias.strip() for alias in group_content_str.split(',') if alias.strip()]
+                    if aliases_in_group:
+                        group_folder_name = " ".join(aliases_in_group)
+                        parsed_character_filter_objects.append({"name": group_folder_name, "is_group": True, "aliases": aliases_in_group})
+                else:
+                    parsed_character_filter_objects.append({"name": part_str, "is_group": False, "aliases": [part_str]})
+        return parsed_character_filter_objects
+
     def _process_worker_queue(self):
         """Processes messages from the worker queue and emits Qt signals from the GUI thread."""
         while not self.worker_to_gui_queue.empty():
@@ -649,35 +738,79 @@ class DownloaderApp(QWidget):
     def load_known_names_from_util(self):
         global KNOWN_NAMES
         if os.path.exists(self.config_file):
+            parsed_known_objects = []
             try:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
-                    raw_names = [line.strip() for line in f]
-                    KNOWN_NAMES[:] = sorted(list(set(filter(None, raw_names))))
-                log_msg = f"ℹ️ Loaded {len(KNOWN_NAMES)} known names from {self.config_file}"
+                    for line_num, line in enumerate(f, 1):
+                        line = line.strip()
+                        if not line: continue
+
+                        if line.startswith("(") and line.endswith(")"):
+                            content = line[1:-1].strip()
+                            parts = [p.strip() for p in content.split(',') if p.strip()]
+                            if parts:
+                                primary_name = parts[0]
+                                # Aliases include the primary name for matching convenience
+                                unique_aliases = sorted(list(set([primary_name] + parts)))
+                                parsed_known_objects.append({
+                                    "name": primary_name,
+                                    "is_group": True,
+                                    "aliases": unique_aliases
+                                })
+                            else:
+                                if hasattr(self, 'log_signal'): self.log_signal.emit(f"⚠️ Empty group found in Known.txt on line {line_num}: '{line}'")
+                        else:
+                            parsed_known_objects.append({
+                                "name": line,
+                                "is_group": False,
+                                "aliases": [line] # Simple entry, alias is itself
+                            })
+                
+                # Sort by primary name, case-insensitive
+                parsed_known_objects.sort(key=lambda x: x["name"].lower())
+                KNOWN_NAMES[:] = parsed_known_objects # Update global list
+                log_msg = f"ℹ️ Loaded {len(KNOWN_NAMES)} known entries from {self.config_file}"
             except Exception as e:
                 log_msg = f"❌ Error loading config '{self.config_file}': {e}"
                 QMessageBox.warning(self, "Config Load Error", f"Could not load list from {self.config_file}:\n{e}")
                 KNOWN_NAMES[:] = []
         else:
-            log_msg = f"ℹ️ Config file '{self.config_file}' not found. Starting empty."
+            log_msg = f"ℹ️ Config file '{self.config_file}' not found. Starting with default entries."
             KNOWN_NAMES[:] = []
-
+        
         if hasattr(self, 'log_signal'): self.log_signal.emit(log_msg)
         
         if hasattr(self, 'character_list'):
             self.character_list.clear()
-            self.character_list.addItems(KNOWN_NAMES)
+            # Display only the primary 'name' in the QListWidget
+
+            # Add default entries if the list is empty after loading (meaning file didn't exist)
+            if not KNOWN_NAMES:
+                default_entry = {
+                    "name": "Boa Hancock",
+                    "is_group": True,
+                    "aliases": sorted(list(set(["Boa Hancock", "Boa", "Hancock", "Snakequeen"]))) # Ensure unique and sorted aliases
+                }
+                KNOWN_NAMES.append(default_entry)
+                # Add more defaults here if needed
+                self.save_known_names() # Save to disk immediately if file was created with defaults
+                self.log_signal.emit("ℹ️ Added default entry for 'Boa Hancock'.")
+
+            self.character_list.addItems([entry["name"] for entry in KNOWN_NAMES])
 
     def save_known_names(self):
         global KNOWN_NAMES
         try:
-            unique_sorted_names = sorted(list(set(filter(None, KNOWN_NAMES))))
-            KNOWN_NAMES[:] = unique_sorted_names
-
+            # KNOWN_NAMES is already sorted by primary name during load/add
             with open(self.config_file, 'w', encoding='utf-8') as f:
-                for name in unique_sorted_names:
-                    f.write(name + '\n')
-            if hasattr(self, 'log_signal'): self.log_signal.emit(f"💾 Saved {len(unique_sorted_names)} known names to {self.config_file}")
+                for entry in KNOWN_NAMES:
+                    if entry["is_group"] and len(entry["aliases"]) > 1:
+                        # Join all aliases with ", " for readability
+                        joined_aliases = ", ".join(entry["aliases"])
+                        f.write(f"({joined_aliases})\n")
+                    else: # Simple entry or group with only one alias (the name itself)
+                        f.write(entry["name"] + '\n')
+            if hasattr(self, 'log_signal'): self.log_signal.emit(f"💾 Saved {len(KNOWN_NAMES)} known entries to {self.config_file}")
         except Exception as e:
             log_msg = f"❌ Error saving config '{self.config_file}': {e}"
             if hasattr(self, 'log_signal'): self.log_signal.emit(log_msg)
@@ -1004,8 +1137,9 @@ class DownloaderApp(QWidget):
         self.thread_count_input.setToolTip(
             f"Number of concurrent operations.\n"
             f"- Single Post: Concurrent file downloads (1-{MAX_FILE_THREADS_PER_POST_OR_WORKER} recommended).\n"
-            f"- Creator Feed: Concurrent post processing (1-{MAX_THREADS}).\n"
-            f"  File downloads per post worker also use this value (1-{MAX_FILE_THREADS_PER_POST_OR_WORKER} recommended)."
+            f"- Creator Feed URL: Number of posts to process simultaneously (1-{MAX_THREADS} recommended).\n"
+            f"  Files within each post are downloaded one by one by its worker.\n"
+            f"If 'Use Multithreading' is unchecked, 1 thread is used."
         )
         self.thread_count_input.setValidator(QIntValidator(1, MAX_THREADS))
         multithreading_layout.addWidget(self.thread_count_input)
@@ -1036,22 +1170,38 @@ class DownloaderApp(QWidget):
         self.download_btn.setStyleSheet("padding: 8px 15px; font-weight: bold;")
         self.download_btn.clicked.connect(self.start_download)
         self.cancel_btn = QPushButton("❌ Cancel & Reset UI") # Updated button text for clarity
+        self.pause_btn = QPushButton("⏸️ Pause Download")
+        self.pause_btn.setToolTip("Click to pause the ongoing download process.")
+        self.pause_btn.setEnabled(False)
+        self.pause_btn.clicked.connect(self._handle_pause_resume_action)
+
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.setToolTip("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
         self.cancel_btn.clicked.connect(self.cancel_download_button_action) # Changed connection
         btn_layout.addWidget(self.download_btn)
+        btn_layout.addWidget(self.pause_btn) # Add pause button in the middle
         btn_layout.addWidget(self.cancel_btn)
         left_layout.addLayout(btn_layout)
         left_layout.addSpacing(10)
 
+
         known_chars_label_layout = QHBoxLayout()
         known_chars_label_layout.setSpacing(10)
         self.known_chars_label = QLabel("🎭 Known Shows/Characters (for Folder Names):")
+        known_chars_label_layout.addWidget(self.known_chars_label) # Add label first
+
+        # Create and add the "Open Known.txt" button BEFORE the search input
+        self.open_known_txt_button = QPushButton("Open Known.txt")
+        self.open_known_txt_button.setToolTip("Open the 'Known.txt' file in your default text editor.\nThe file is located in the application's directory.")
+        self.open_known_txt_button.setStyleSheet("padding: 4px 8px;") # Consistent small button style
+        self.open_known_txt_button.setFixedWidth(120) # Adjust width as needed
+        known_chars_label_layout.addWidget(self.open_known_txt_button) # Add button second
+
+        # Then create and add the character search input, allowing it to stretch
         self.character_search_input = QLineEdit()
         self.character_search_input.setToolTip("Type here to filter the list of known shows/characters below.")
         self.character_search_input.setPlaceholderText("Search characters...")
-        known_chars_label_layout.addWidget(self.known_chars_label, 1)
-        known_chars_label_layout.addWidget(self.character_search_input)
+        known_chars_label_layout.addWidget(self.character_search_input, 1) # Added stretch factor of 1
         left_layout.addLayout(known_chars_label_layout)
 
         self.character_list = QListWidget()
@@ -1836,16 +1986,27 @@ class DownloaderApp(QWidget):
         if not name_to_add:
              QMessageBox.warning(self, "Input Error", "Name cannot be empty."); return False
 
-        name_lower = name_to_add.lower()
-        if any(existing.lower() == name_lower for existing in KNOWN_NAMES):
-             QMessageBox.warning(self, "Duplicate Name", f"The name '{name_to_add}' (case-insensitive) already exists."); return False
+        name_to_add_lower = name_to_add.lower()
+
+        # Check for duplicates (primary name or any alias)
+        for kn_entry in KNOWN_NAMES:
+            if kn_entry["name"].lower() == name_to_add_lower:
+                 QMessageBox.warning(self, "Duplicate Name", f"The name '{name_to_add}' already exists as a primary folder name."); return False
+            for alias in kn_entry["aliases"]:
+                if alias.lower() == name_to_add_lower:
+                    QMessageBox.warning(self, "Duplicate Alias", f"The name '{name_to_add}' already exists as an alias for '{kn_entry['name']}'."); return False
 
         similar_names_details = []
-        for existing_name in KNOWN_NAMES:
-            existing_name_lower = existing_name.lower()
-            if name_lower != existing_name_lower and (name_lower in existing_name_lower or existing_name_lower in name_lower):
-                similar_names_details.append((name_to_add, existing_name))
-
+        # Check for similarity with existing primary names or aliases
+        for kn_entry in KNOWN_NAMES:
+            for term_to_check_similarity_against in kn_entry["aliases"]: # Check against all aliases
+                term_lower = term_to_check_similarity_against.lower()
+                if name_to_add_lower != term_lower and \
+                   (name_to_add_lower in term_lower or term_lower in name_to_add_lower):
+                    # Warn about similarity with the primary name of the group
+                    similar_names_details.append((name_to_add, kn_entry["name"])) 
+                    break # Found a similarity for this entry, no need to check its other aliases
+        
         if similar_names_details:
             first_similar_new, first_similar_existing = similar_names_details[0]
             shorter, longer = sorted([first_similar_new, first_similar_existing], key=len)
@@ -1855,7 +2016,7 @@ class DownloaderApp(QWidget):
             msg_box.setWindowTitle("Potential Name Conflict")
             msg_box.setText(
                 f"The name '{first_similar_new}' is very similar to an existing name: '{first_similar_existing}'.\n\n"
-                f"This could lead to files being grouped into less specific folders (e.g., under '{clean_folder_name(shorter)}' instead of a more specific '{clean_folder_name(longer)}').\n\n"
+                f"This could lead to unexpected folder grouping (e.g., under '{clean_folder_name(shorter)}' instead of a more specific '{clean_folder_name(longer)}' or vice-versa).\n\n"
                 "Do you want to change the name you are adding, or proceed anyway?"
             )
             change_button = msg_box.addButton("Change Name", QMessageBox.RejectRole)
@@ -1865,16 +2026,22 @@ class DownloaderApp(QWidget):
             msg_box.exec_()
 
             if msg_box.clickedButton() == change_button:
-                self.log_signal.emit(f"ℹ️ User chose to change '{first_similar_new}' due to similarity with '{first_similar_existing}'.")
+                self.log_signal.emit(f"ℹ️ User chose to change '{first_similar_new}' due to similarity with an alias of '{first_similar_existing_primary}'.")
                 return False
 
-            self.log_signal.emit(f"⚠️ User proceeded with adding '{first_similar_new}' despite similarity with '{first_similar_existing}'.")
+            self.log_signal.emit(f"⚠️ User proceeded with adding '{first_similar_new}' despite similarity with an alias of '{first_similar_existing_primary}'.")
 
-        KNOWN_NAMES.append(name_to_add)
-        KNOWN_NAMES.sort(key=str.lower)
+        # Add as a simple (non-group) entry
+        new_entry = {
+            "name": name_to_add,
+            "is_group": False,
+            "aliases": [name_to_add]
+        }
+        KNOWN_NAMES.append(new_entry)
+        KNOWN_NAMES.sort(key=lambda x: x["name"].lower()) # Sort by primary name
 
         self.character_list.clear()
-        self.character_list.addItems(KNOWN_NAMES)
+        self.character_list.addItems([entry["name"] for entry in KNOWN_NAMES])
         self.filter_character_list(self.character_search_input.text())
 
         self.log_signal.emit(f"✅ Added '{name_to_add}' to known names list.")
@@ -1889,19 +2056,19 @@ class DownloaderApp(QWidget):
         if not selected_items:
              QMessageBox.warning(self, "Selection Error", "Please select one or more names to delete."); return
 
-        names_to_remove = {item.text() for item in selected_items}
+        primary_names_to_remove = {item.text() for item in selected_items}
         confirm = QMessageBox.question(self, "Confirm Deletion",
-                                       f"Are you sure you want to delete {len(names_to_remove)} name(s)?",
+                                       f"Are you sure you want to delete {len(primary_names_to_remove)} selected entry/entries (and their aliases)?",
                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if confirm == QMessageBox.Yes:
             original_count = len(KNOWN_NAMES)
-            KNOWN_NAMES[:] = [n for n in KNOWN_NAMES if n not in names_to_remove]
+            KNOWN_NAMES[:] = [entry for entry in KNOWN_NAMES if entry["name"] not in primary_names_to_remove]
             removed_count = original_count - len(KNOWN_NAMES)
 
             if removed_count > 0:
                  self.log_signal.emit(f"🗑️ Removed {removed_count} name(s).")
                  self.character_list.clear()
-                 self.character_list.addItems(KNOWN_NAMES)
+                 self.character_list.addItems([entry["name"] for entry in KNOWN_NAMES])
                  self.filter_character_list(self.character_search_input.text())
                  self.save_known_names()
             else:
@@ -2178,7 +2345,50 @@ class DownloaderApp(QWidget):
             QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
             self.set_ui_enabled(True)
             return
-            
+
+        if use_multithreading_enabled_by_checkbox:
+            # Hard Warning: Threads > MAX_THREADS (200)
+            if num_threads_from_gui > MAX_THREADS:
+                hard_warning_msg = (
+                    f"You've entered a thread count ({num_threads_from_gui}) exceeding the maximum of {MAX_THREADS}.\n\n"
+                    "Using an extremely high number of threads can lead to:\n"
+                    "  - Diminishing returns (no significant speed increase).\n"
+                    "  - Increased system instability or application crashes.\n"
+                    "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
+                    f"The thread count has been automatically capped to {MAX_THREADS} for stability."
+                )
+                QMessageBox.warning(self, "High Thread Count Warning", hard_warning_msg)
+                num_threads_from_gui = MAX_THREADS
+                self.thread_count_input.setText(str(MAX_THREADS)) # Update the input field
+                self.log_signal.emit(f"⚠️ User attempted {num_threads_from_gui} threads, capped to {MAX_THREADS}.")
+
+            # Soft Warning: SOFT_WARNING_THREAD_THRESHOLD < Threads <= MAX_THREADS
+            # This uses the potentially capped num_threads_from_gui from the hard warning
+            if SOFT_WARNING_THREAD_THRESHOLD < num_threads_from_gui <= MAX_THREADS:
+                soft_warning_msg_box = QMessageBox(self)
+                soft_warning_msg_box.setIcon(QMessageBox.Question)
+                soft_warning_msg_box.setWindowTitle("Thread Count Advisory")
+                soft_warning_msg_box.setText(
+                    f"You've set the thread count to {num_threads_from_gui}.\n\n"
+                    "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
+                    "  - Increased errors or failed file downloads.\n"
+                    "  - Connection issues with the server.\n"
+                    "  - Higher system resource usage.\n\n"
+                    "For most users and connections, 10-30 threads provide a good balance.\n\n"
+                    f"Do you want to proceed with {num_threads_from_gui} threads, or would you like to change the value?"
+                )
+                proceed_button = soft_warning_msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+                change_button = soft_warning_msg_box.addButton("Change Thread Value", QMessageBox.RejectRole)
+                soft_warning_msg_box.setDefaultButton(proceed_button)
+                soft_warning_msg_box.setEscapeButton(change_button)
+                soft_warning_msg_box.exec_()
+
+                if soft_warning_msg_box.clickedButton() == change_button:
+                    self.log_signal.emit(f"ℹ️ User opted to change thread count from {num_threads_from_gui} after advisory.")
+                    self.thread_count_input.setFocus()
+                    self.thread_count_input.selectAll()
+                    return # Exit start_download to allow user to change value
+
         raw_skip_words = self.skip_words_input.text().strip()
         skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
 
@@ -2241,48 +2451,8 @@ class DownloaderApp(QWidget):
         # Manga Mode specific duplicate handling is now managed entirely within downloader_utils.py
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
 
-        raw_character_filters_text = self.character_input.text().strip()
-        
-        # --- New parsing logic for character filters ---
-        parsed_character_filter_objects = []
-        if raw_character_filters_text:
-            raw_parts = []
-            current_part_buffer = ""
-            in_group_parsing = False
-            for char_token in raw_character_filters_text:
-                if char_token == '(':
-                    in_group_parsing = True
-                    current_part_buffer += char_token
-                elif char_token == ')':
-                    in_group_parsing = False
-                    current_part_buffer += char_token
-                elif char_token == ',' and not in_group_parsing:
-                    if current_part_buffer.strip(): raw_parts.append(current_part_buffer.strip())
-                    current_part_buffer = ""
-                else:
-                    current_part_buffer += char_token
-            if current_part_buffer.strip(): raw_parts.append(current_part_buffer.strip())
-
-            for part_str in raw_parts:
-                part_str = part_str.strip()
-                if not part_str: continue
-                if part_str.startswith("(") and part_str.endswith(")"):
-                    group_content_str = part_str[1:-1].strip()
-                    aliases_in_group = [alias.strip() for alias in group_content_str.split(',') if alias.strip()]
-                    if aliases_in_group:
-                        group_folder_name = " ".join(aliases_in_group)
-                        parsed_character_filter_objects.append({
-                            "name": group_folder_name, # This is the primary/folder name
-                            "is_group": True,
-                            "aliases": aliases_in_group # These are for matching
-                        })
-                else:
-                    parsed_character_filter_objects.append({
-                        "name": part_str, # Folder name and matching name are the same
-                        "is_group": False,
-                        "aliases": [part_str] 
-                    })
-        # --- End new parsing logic ---
+        raw_character_filters_text = self.character_input.text().strip() # Get current text
+        parsed_character_filter_objects = self._parse_character_filters(raw_character_filters_text) # Parse it
 
         filter_character_list_to_pass = None
         needs_folder_naming_validation = (use_subfolders or manga_mode) and not extract_links_only
@@ -2324,7 +2494,7 @@ class DownloaderApp(QWidget):
                 should_prompt_to_add_to_known_list = (
                     needs_folder_naming_validation and
                     not manga_mode and  # Do NOT prompt if Manga Mode is ON
-                    item_primary_name.lower() not in {kn.lower() for kn in KNOWN_NAMES}
+                    item_primary_name.lower() not in {kn_entry["name"].lower() for kn_entry in KNOWN_NAMES}
                 )
 
                 if should_prompt_to_add_to_known_list:
@@ -2344,7 +2514,7 @@ class DownloaderApp(QWidget):
                     # - OR Manga Mode is ON (filter is used without adding to Known.txt)
                     # - OR extract_links_only is true (folder naming validation is false)
                     valid_filters_for_backend.append(filter_item_obj)
-                    if manga_mode and needs_folder_naming_validation and item_primary_name.lower() not in {kn.lower() for kn in KNOWN_NAMES}:
+                    if manga_mode and needs_folder_naming_validation and item_primary_name.lower() not in {kn_entry["name"].lower() for kn_entry in KNOWN_NAMES}:
                         self.log_signal.emit(f"ℹ️ Manga Mode: Using filter '{item_primary_name}' for this session without adding to Known Names.")
 
             if user_cancelled_validation: return
@@ -2377,6 +2547,9 @@ class DownloaderApp(QWidget):
             else:
                 self.log_signal.emit("⚠️ Proceeding with Manga Mode without a specific title filter.")
 
+        # Set the dynamic filter holder with the filters determined for this run
+        # This ensures workers get the correct initial set if they start before any live changes.
+        self.dynamic_character_filter_holder.set_filters(filter_character_list_to_pass if filter_character_list_to_pass else [])
 
         custom_folder_name_cleaned = None
         if use_subfolders and post_id_from_url and self.custom_folder_widget and self.custom_folder_widget.isVisible() and not extract_links_only: 
@@ -2399,65 +2572,39 @@ class DownloaderApp(QWidget):
         self.total_posts_to_process = 0; self.processed_posts_count = 0; self.download_counter = 0; self.skip_counter = 0
         self.progress_label.setText("Progress: Initializing...")
 
-        
-        self.manga_date_file_counter_obj = [1, threading.Lock()] # Default: [value, lock]
+        self.retryable_failed_files_info.clear() # Clear previous retryable failures before new session
+        # Manga date file counter initialization is now moved into DownloadThread.run()
+        # We will pass None or a placeholder if needed, and DownloadThread will calculate it.
+        manga_date_file_counter_ref_for_thread = None
         if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not extract_links_only:
-            # Determine the directory to scan for existing numbered files for this series
-            # This path should be the "series" root, before any "per-post" subfolders.
-            series_scan_directory = output_dir # Base download location
-
-            if use_subfolders: # If 'Separate Folders by Name/Title' is ON
-                # Try to get folder name from character filter (manga series title)
-                if filter_character_list_to_pass and filter_character_list_to_pass[0] and filter_character_list_to_pass[0].get("name"):
-                    # Assuming the first filter is the series name for folder creation
-                    series_folder_name = clean_folder_name(filter_character_list_to_pass[0]["name"])
-                    series_scan_directory = os.path.join(series_scan_directory, series_folder_name)
-                elif service and user_id: # Fallback if no char filter, but subfolders are on
-                    # This might group multiple series from one creator if no distinct char filter is used.
-                    # The counter is per download operation, so this is consistent.
-                    creator_based_folder_name = clean_folder_name(user_id) # Or a more specific creator name convention
-                    series_scan_directory = os.path.join(series_scan_directory, creator_based_folder_name)
-                # If neither, series_scan_directory remains output_dir (files go directly there if use_subfolders is on but no name found)
-            # If use_subfolders is OFF, files go into output_dir. So, series_scan_directory remains output_dir.
-
-            highest_num = 0
-            if os.path.isdir(series_scan_directory):
-                self.log_signal.emit(f"ℹ️ Manga Date Mode: Scanning for existing numbered files in '{series_scan_directory}' and its subdirectories...")
-                for dirpath, _, filenames_in_dir in os.walk(series_scan_directory):
-                    for filename_to_check in filenames_in_dir:
-                        # Check the base name (without extension) for leading digits
-                        base_name_no_ext = os.path.splitext(filename_to_check)[0]
-                        match = re.match(r"(\d{3,})", base_name_no_ext) # Matches "001" from "001.jpg" or "001_13.jpg"
-                        if match:
-                            try:
-                                num = int(match.group(1))
-                                if num > highest_num:
-                                    highest_num = num
-                            except ValueError:
-                                continue
-            else:
-                self.log_signal.emit(f"ℹ️ Manga Date Mode: Scan directory '{series_scan_directory}' not found or is not a directory. Starting counter at 1.")
-            self.manga_date_file_counter_obj = [highest_num + 1, threading.Lock()] # [value, lock]
-            self.log_signal.emit(f"ℹ️ Manga Date Mode: Initialized file counter at {self.manga_date_file_counter_obj[0]}.")
+            # Pass None; DownloadThread will calculate if it's a single-threaded download.
+            # For multi-threaded, this ref needs to be created here and shared.
+            # However, with date_based manga mode forcing single post worker, this specific ref might only be used by that one worker.
+            # Let's keep it as None for now, assuming DownloadThread handles its init if it's the one doing sequential processing.
+            # If multi-threaded post processing were allowed with date-based, this would need careful shared state.
+            manga_date_file_counter_ref_for_thread = None
+            self.log_signal.emit(f"ℹ️ Manga Date Mode: File counter will be initialized by the download thread.")
         effective_num_post_workers = 1
-        effective_num_file_threads_per_worker = 1
-        
-        # Determine if multithreading for posts should be used
+        effective_num_file_threads_per_worker = 1 # Default to 1 for all cases initially
+
         if post_id_from_url:
-            # Single post URL: no post workers, but file threads can be > 1
+            # Single post URL: UI threads control concurrent file downloads for that post
             if use_multithreading_enabled_by_checkbox:
                 effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
+            # else: effective_num_file_threads_per_worker remains 1
+            # effective_num_post_workers remains 1 (not used for post thread pool)        
         else:
-            # Creator feed
+            # Creator feed URL
             if manga_mode and self.manga_filename_style == STYLE_DATE_BASED:
                 # Force single post worker for date-based manga mode
                 effective_num_post_workers = 1
                 # File threads per worker can still be > 1 if user set it
-                effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER)) if use_multithreading_enabled_by_checkbox else 1
+                effective_num_file_threads_per_worker = 1 # Files are sequential for this worker too
             elif use_multithreading_enabled_by_checkbox: # Standard creator feed with multithreading enabled
                 effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS)) # For posts
-                effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER)) # For files within each post worker
-
+                effective_num_file_threads_per_worker = 1 # Files within each post worker are sequential
+            # else (not multithreading for creator feed):
+            # effective_num_post_workers remains 1, effective_num_file_threads_per_worker remains 1
 
         log_messages = ["="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"   URL: {api_url}"]
         if not extract_links_only: log_messages.append(f"   Save Location: {output_dir}")
@@ -2559,10 +2706,12 @@ class DownloaderApp(QWidget):
             'manga_mode_active': manga_mode,
             'unwanted_keywords': unwanted_keywords_for_folders,
             'cancellation_event': self.cancellation_event,
+            'dynamic_character_filter_holder': self.dynamic_character_filter_holder, # Pass the holder
+            'pause_event': self.pause_event, # Explicitly add pause_event here
             # 'emitter' will be set based on single/multi-thread mode below
             'manga_filename_style': self.manga_filename_style,
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
-            'manga_date_file_counter_ref': self.manga_date_file_counter_obj if manga_mode and self.manga_filename_style == STYLE_DATE_BASED else None,
+            'manga_date_file_counter_ref': manga_date_file_counter_ref_for_thread,
             'allow_multipart_download': allow_multipart,
             # 'duplicate_file_mode' and session-wide tracking removed
         }
@@ -2580,8 +2729,8 @@ class DownloaderApp(QWidget):
                     'filter_character_list', 'filter_mode', 'skip_zip', 'skip_rar',
                     'use_subfolders', 'use_post_subfolders', 'custom_folder_name',
                     'compress_images', 'download_thumbnails', 'service', 'user_id',
-                    'downloaded_files', 'downloaded_file_hashes', 'remove_from_filename_words_list',
-                    'downloaded_files_lock', 'downloaded_file_hashes_lock',
+                    'downloaded_files', 'downloaded_file_hashes', 'pause_event', 'remove_from_filename_words_list', # Added pause_event
+                    'downloaded_files_lock', 'downloaded_file_hashes_lock', 'dynamic_character_filter_holder', # Added holder
                     'skip_words_list', 'skip_words_scope', 'char_filter_scope',
                     'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
@@ -2596,12 +2745,16 @@ class DownloaderApp(QWidget):
             self.log_signal.emit(f"❌ CRITICAL ERROR preparing download: {e}\n{traceback.format_exc()}")
             QMessageBox.critical(self, "Start Error", f"Failed to start process:\n{e}")
             self.download_finished(0,0,False, [])
+            if self.pause_event: self.pause_event.clear()
+            self.is_paused = False # Ensure pause state is reset on error
 
 
     def start_single_threaded_download(self, **kwargs):
         global BackendDownloadThread
         try:
             self.download_thread = BackendDownloadThread(**kwargs)
+            if self.pause_event: self.pause_event.clear() # Clear pause before starting
+            self.is_paused = False # Reset pause state
             if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.connect(self.handle_main_log)
             if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.connect(self.add_character_prompt_signal)
             if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.connect(self.download_finished)
@@ -2610,17 +2763,75 @@ class DownloaderApp(QWidget):
             if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.connect(self.update_file_progress_display)
             if hasattr(self.download_thread, 'missed_character_post_signal'): # New
                 self.download_thread.missed_character_post_signal.connect(self.handle_missed_character_post)
+            if hasattr(self.download_thread, 'retryable_file_failed_signal'): # New for retry
+                self.download_thread.retryable_file_failed_signal.connect(self._handle_retryable_file_failure)
             self.download_thread.start()
             self.log_signal.emit("✅ Single download thread (for posts) started.")
         except Exception as e:
             self.log_signal.emit(f"❌ CRITICAL ERROR starting single-thread: {e}\n{traceback.format_exc()}")
             QMessageBox.critical(self, "Thread Start Error", f"Failed to start download process: {e}")
-            self.download_finished(0,0,False, [])
+            if self.pause_event: self.pause_event.clear()            
+            self.is_paused = False # Ensure pause state is reset on error
 
+    def _handle_retryable_file_failure(self, list_of_retry_details):
+        """Appends details of files that failed but might be retryable later."""
+        if list_of_retry_details:
+            self.retryable_failed_files_info.extend(list_of_retry_details)
+    
+    def _submit_post_to_worker_pool(self, post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, ppw_optional_keys_with_defaults):
+        """Helper to prepare and submit a single post processing task to the thread pool."""
+        global PostProcessorWorker # Ensure PostProcessorWorker is accessible
+        if not isinstance(post_data_item, dict):
+            self.log_signal.emit(f"⚠️ Skipping invalid post data item (not a dict): {type(post_data_item)}");
+            # Note: This skip does not directly increment processed_posts_count here,
+            # as that counter is tied to future completion.
+            # The overall effect is that total_posts_to_process might be higher than actual futures.
+            return False # Indicate failure or skip
+
+        worker_init_args = {}
+        missing_keys = []
+        for key in ppw_expected_keys:
+            if key == 'post_data': worker_init_args[key] = post_data_item
+            elif key == 'num_file_threads': worker_init_args[key] = num_file_dl_threads_for_each_worker
+            elif key == 'emitter': worker_init_args[key] = emitter_for_worker
+            elif key in worker_args_template: worker_init_args[key] = worker_args_template[key]
+            elif key in ppw_optional_keys_with_defaults: pass # It has a default in PostProcessorWorker
+            else: missing_keys.append(key)
+
+        if missing_keys:
+            self.log_signal.emit(f"❌ CRITICAL ERROR: Missing keys for PostProcessorWorker: {', '.join(missing_keys)}");
+            self.cancellation_event.set()
+            return False
+
+        try:
+            worker_instance = PostProcessorWorker(**worker_init_args)
+            if self.thread_pool:
+                future = self.thread_pool.submit(worker_instance.process)
+                future.add_done_callback(self._handle_future_result)
+                self.active_futures.append(future)
+                return True # Indicate success
+            else:
+                self.log_signal.emit("⚠️ Thread pool not available. Cannot submit task.");
+                self.cancellation_event.set() # Signal cancellation as we can't proceed
+                return False
+        except TypeError as te:
+            self.log_signal.emit(f"❌ TypeError creating PostProcessorWorker: {te}\n   Passed Args: [{', '.join(sorted(worker_init_args.keys()))}]\n{traceback.format_exc(limit=5)}")
+            self.cancellation_event.set()
+            return False
+        except RuntimeError: # Pool likely shutting down
+            self.log_signal.emit(f"⚠️ RuntimeError submitting task (pool likely shutting down).")
+            self.cancellation_event.set()
+            return False
+        except Exception as e:
+            self.log_signal.emit(f"❌ Error submitting post {post_data_item.get('id','N/A')} to worker: {e}")
+            self.cancellation_event.set()
+            return False
 
     def start_multi_threaded_download(self, num_post_workers, **kwargs):
         global PostProcessorWorker
         if self.thread_pool is None:
+            if self.pause_event: self.pause_event.clear() # Clear pause before starting
+            self.is_paused = False # Reset pause state
             self.thread_pool = ThreadPoolExecutor(max_workers=num_post_workers, thread_name_prefix='PostWorker_')
         
         self.active_futures = []
@@ -2638,7 +2849,7 @@ class DownloaderApp(QWidget):
 
 
     def _fetch_and_queue_posts(self, api_url_input_for_fetcher, worker_args_template, num_post_workers):
-        global PostProcessorWorker, download_from_api
+        global PostProcessorWorker, download_from_api # Ensure PostProcessorWorker is in scope
         all_posts_data = []
         fetch_error_occurred = False
         manga_mode_active_for_fetch = worker_args_template.get('manga_mode_active', False)
@@ -2675,6 +2886,25 @@ class DownloaderApp(QWidget):
             if not fetch_error_occurred and not self.cancellation_event.is_set():
                 self.log_signal.emit(f"✅ Post fetching complete. Total posts to process: {self.total_posts_to_process}")
 
+            # --- De-duplicate posts by ID ---
+            unique_posts_dict = {}
+            for post in all_posts_data:
+                post_id = post.get('id')
+                if post_id is not None:
+                    # Keep the first occurrence of each post ID
+                    if post_id not in unique_posts_dict:
+                        unique_posts_dict[post_id] = post
+                else:
+                    self.log_signal.emit(f"⚠️ Skipping post with no ID: {post.get('title', 'Untitled')}")
+
+            all_posts_data = list(unique_posts_dict.values())
+            # --- End De-duplication ---
+
+            self.total_posts_to_process = len(all_posts_data)
+            self.log_signal.emit(f"   Processed {len(unique_posts_dict)} unique posts after de-duplication.")
+            if len(unique_posts_dict) < len(all_posts_data):
+                 self.log_signal.emit(f"   Note: {len(all_posts_data) - len(unique_posts_dict)} duplicate post IDs were removed.")
+
         except TypeError as te:
             self.log_signal.emit(f"❌ TypeError calling download_from_api: {te}\n   Check 'downloader_utils.py' signature.\n{traceback.format_exc(limit=2)}"); fetch_error_occurred = True
         except RuntimeError as re_err:
@@ -2689,13 +2919,13 @@ class DownloaderApp(QWidget):
             return
 
         if self.total_posts_to_process == 0:
-            self.log_signal.emit("😕 No posts found or fetched to process.");
-            self.finished_signal.emit(0,0,False, []);
+            self.log_signal.emit("😕 No posts found or fetched to process.")
+            self.finished_signal.emit(0,0,False, [])
             return
 
-        self.log_signal.emit(f"   Submitting {self.total_posts_to_process} post processing tasks to thread pool...")
+        self.log_signal.emit(f"   Preparing to submit {self.total_posts_to_process} post processing tasks to thread pool...")
         self.processed_posts_count = 0
-        self.overall_progress_signal.emit(self.total_posts_to_process, 0)
+        self.overall_progress_signal.emit(self.total_posts_to_process, 0) # Emit initial progress
         
         num_file_dl_threads_for_each_worker = worker_args_template.get('num_file_threads_for_worker', 1)
 
@@ -2703,10 +2933,10 @@ class DownloaderApp(QWidget):
         ppw_expected_keys = [
             'post_data', 'download_root', 'known_names', 'filter_character_list', 'unwanted_keywords',
             'filter_mode', 'skip_zip', 'skip_rar', 'use_subfolders', 'use_post_subfolders',
-            'target_post_id_from_initial_url', 'custom_folder_name', 'compress_images', 'emitter',
+            'target_post_id_from_initial_url', 'custom_folder_name', 'compress_images', 'emitter', 'pause_event', # Added pause_event
             'download_thumbnails', 'service', 'user_id', 'api_url_input',
             'cancellation_event', 'downloaded_files', 'downloaded_file_hashes',
-            'downloaded_files_lock', 'downloaded_file_hashes_lock', 'remove_from_filename_words_list',
+            'downloaded_files_lock', 'downloaded_file_hashes_lock', 'remove_from_filename_words_list', 'dynamic_character_filter_holder', # Added holder
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
             'show_external_links', 'extract_links_only', 'allow_multipart_download',
             'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
@@ -2720,40 +2950,72 @@ class DownloaderApp(QWidget):
             'manga_date_file_counter_ref' # Add this
         }
         
-        for post_data_item in all_posts_data:
-            if self.cancellation_event.is_set(): break
-            if not isinstance(post_data_item, dict):
-                self.log_signal.emit(f"⚠️ Skipping invalid post data item (not a dict): {type(post_data_item)}");
-                self.processed_posts_count += 1;
-                continue
+        # --- Batching Logic ---
+        if num_post_workers > POST_WORKER_BATCH_THRESHOLD and self.total_posts_to_process > POST_WORKER_NUM_BATCHES :
+            self.log_signal.emit(f"   High thread count ({num_post_workers}) detected. Batching post submissions into {POST_WORKER_NUM_BATCHES} parts.")
+            
+            import math # Moved import here
+            batch_size = math.ceil(self.total_posts_to_process / POST_WORKER_NUM_BATCHES)
+            submitted_count_in_batching = 0
 
-            worker_init_args = {}; missing_keys = []
-            for key in ppw_expected_keys:
-                if key == 'post_data': worker_init_args[key] = post_data_item
-                elif key == 'num_file_threads': worker_init_args[key] = num_file_dl_threads_for_each_worker
-                elif key == 'emitter': worker_init_args[key] = emitter_for_worker # Pass the queue
-                elif key in worker_args_template: worker_init_args[key] = worker_args_template[key]
-                elif key in ppw_optional_keys_with_defaults: pass
-                else: missing_keys.append(key)
+            for batch_num in range(POST_WORKER_NUM_BATCHES):
+                if self.cancellation_event.is_set(): break
+                
+                if self.pause_event and self.pause_event.is_set():
+                    self.log_signal.emit(f"   [Fetcher] Batch submission paused before batch {batch_num + 1}/{POST_WORKER_NUM_BATCHES}...")
+                    while self.pause_event.is_set():
+                        if self.cancellation_event.is_set():
+                            self.log_signal.emit("   [Fetcher] Batch submission cancelled while paused.")
+                            break
+                        time.sleep(0.5) 
+                    if self.cancellation_event.is_set(): break
+                    if not self.cancellation_event.is_set():
+                        self.log_signal.emit(f"   [Fetcher] Batch submission resumed. Processing batch {batch_num + 1}/{POST_WORKER_NUM_BATCHES}.")
+                
+                start_index = batch_num * batch_size
+                end_index = min((batch_num + 1) * batch_size, self.total_posts_to_process)
+                current_batch_posts = all_posts_data[start_index:end_index]
 
-            if missing_keys:
-                self.log_signal.emit(f"❌ CRITICAL ERROR: Missing keys for PostProcessorWorker: {', '.join(missing_keys)}");
-                self.cancellation_event.set(); break
+                if not current_batch_posts: continue
 
-            try:
-                worker_instance = PostProcessorWorker(**worker_init_args)
-                if self.thread_pool:
-                    future = self.thread_pool.submit(worker_instance.process)
-                    future.add_done_callback(self._handle_future_result)
-                    self.active_futures.append(future)
-                else:
-                    self.log_signal.emit("⚠️ Thread pool not available. Cannot submit more tasks."); break
-            except TypeError as te: self.log_signal.emit(f"❌ TypeError creating PostProcessorWorker: {te}\n   Passed Args: [{', '.join(sorted(worker_init_args.keys()))}]\n{traceback.format_exc(limit=5)}"); self.cancellation_event.set(); break
-            except RuntimeError: self.log_signal.emit("⚠️ Runtime error submitting task (pool likely shutting down)."); break
-            except Exception as e: self.log_signal.emit(f"❌ Error submitting post {post_data_item.get('id','N/A')} to worker: {e}"); break
+                self.log_signal.emit(f"   Submitting batch {batch_num + 1}/{POST_WORKER_NUM_BATCHES} ({len(current_batch_posts)} posts) to pool...")
+                for post_data_item in current_batch_posts:
+                    if self.cancellation_event.is_set(): break
+                    success = self._submit_post_to_worker_pool(post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, ppw_optional_keys_with_defaults)
+                    if success:
+                        submitted_count_in_batching += 1
+                    elif self.cancellation_event.is_set(): 
+                        break 
+                
+                if self.cancellation_event.is_set(): break
 
-        if not self.cancellation_event.is_set(): self.log_signal.emit(f"   {len(self.active_futures)} post processing tasks submitted to pool.")
-        else:
+                if batch_num < POST_WORKER_NUM_BATCHES - 1: 
+                    self.log_signal.emit(f"   Batch {batch_num + 1} submitted. Waiting {POST_WORKER_BATCH_DELAY_SECONDS}s before next batch...")
+                    delay_start_time = time.time()
+                    while time.time() - delay_start_time < POST_WORKER_BATCH_DELAY_SECONDS:
+                        if self.cancellation_event.is_set(): break
+                        time.sleep(0.1) 
+                    if self.cancellation_event.is_set(): break
+            
+            self.log_signal.emit(f"   All {POST_WORKER_NUM_BATCHES} batches ({submitted_count_in_batching} total tasks) submitted to pool via batching.")
+
+        else: # Standard submission (no batching)
+            self.log_signal.emit(f"   Submitting all {self.total_posts_to_process} tasks to pool directly...")
+            submitted_count_direct = 0
+            for post_data_item in all_posts_data:
+                if self.cancellation_event.is_set(): break
+                success = self._submit_post_to_worker_pool(post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, ppw_optional_keys_with_defaults)
+                if success:
+                    submitted_count_direct += 1
+                elif self.cancellation_event.is_set():
+                    break
+            
+            if not self.cancellation_event.is_set():
+                self.log_signal.emit(f"   All {submitted_count_direct} post processing tasks submitted directly to pool.")
+
+        if self.cancellation_event.is_set():
+            self.log_signal.emit("   Cancellation detected after/during task submission loop.")
+
             self.finished_signal.emit(self.download_counter, self.skip_counter, True, self.all_kept_original_filenames)
             if self.thread_pool: self.thread_pool.shutdown(wait=False, cancel_futures=True); self.thread_pool = None
 
@@ -2762,10 +3024,14 @@ class DownloaderApp(QWidget):
         downloaded_files_from_future, skipped_files_from_future = 0, 0
         kept_originals_from_future = []
         try:
-            if future.cancelled(): self.log_signal.emit("   A post processing task was cancelled.")
-            elif future.exception(): self.log_signal.emit(f"❌ Post processing worker error: {future.exception()}")
-            else:
-                downloaded_files_from_future, skipped_files_from_future, kept_originals_from_future = future.result()
+            if future.cancelled():
+                self.log_signal.emit("   A post processing task was cancelled.")
+            elif future.exception():
+                self.log_signal.emit(f"❌ Post processing worker error: {future.exception()}")
+            else: # Future completed successfully
+                downloaded_files_from_future, skipped_files_from_future, kept_originals_from_future, retryable_failures_from_post = future.result()
+                if retryable_failures_from_post:
+                    self.retryable_failed_files_info.extend(retryable_failures_from_post)
 
             with self.downloaded_files_lock:
                 self.download_counter += downloaded_files_from_future
@@ -2775,26 +3041,63 @@ class DownloaderApp(QWidget):
                 self.all_kept_original_filenames.extend(kept_originals_from_future)
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
-        except Exception as e: self.log_signal.emit(f"❌ Error in _handle_future_result callback: {e}\n{traceback.format_exc(limit=2)}")
+        except Exception as e:
+            self.log_signal.emit(f"❌ Error in _handle_future_result callback: {e}\n{traceback.format_exc(limit=2)}")
+            # If an error occurs, ensure we don't get stuck waiting for this future
+            if self.processed_posts_count < self.total_posts_to_process:
+                 self.processed_posts_count = self.total_posts_to_process # Mark as if all processed to allow finish
 
         if self.total_posts_to_process > 0 and self.processed_posts_count >= self.total_posts_to_process:
             if all(f.done() for f in self.active_futures):
                 QApplication.processEvents()
                 self.log_signal.emit("🏁 All submitted post tasks have completed or failed.")
                 self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
+    def _get_configurable_widgets_on_pause(self):
+        """Returns a list of widgets that should be re-enabled when paused."""
+        return [
+            self.dir_input, self.dir_button,
+            self.character_input, self.char_filter_scope_toggle_button,
+            self.skip_words_input, self.skip_scope_toggle_button,
+            self.remove_from_filename_input,
+            self.radio_all, self.radio_images, self.radio_videos, 
+            self.radio_only_archives, self.radio_only_links, # Radio buttons themselves
+            self.skip_zip_checkbox, self.skip_rar_checkbox,
+            self.download_thumbnails_checkbox, self.compress_images_checkbox,
+            self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
+            self.manga_mode_checkbox, 
+            self.manga_rename_toggle_button, # Visibility handled by update_ui_for_manga_mode
+            self.multipart_toggle_button,
+            self.external_links_checkbox
+        ]
 
     def set_ui_enabled(self, enabled):
-        widgets_to_toggle = [ self.download_btn, self.link_input, self.radio_all, self.radio_images, self.radio_videos, self.radio_only_links,
-            self.skip_zip_checkbox, self.skip_rar_checkbox, self.use_subfolders_checkbox, self.compress_images_checkbox,
-            self.download_thumbnails_checkbox, self.use_multithreading_checkbox, self.skip_words_input, self.character_search_input,
-            self.new_char_input, self.add_char_button, self.delete_char_button, self.char_filter_scope_toggle_button, # duplicate_file_mode_toggle_button removed
-            self.start_page_input, self.end_page_input, self.page_range_label, self.to_label, 
-            self.character_input, self.custom_folder_input, self.custom_folder_label, self.remove_from_filename_input,
-            self.reset_button, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.multipart_toggle_button, self.skip_scope_toggle_button
+        # This list contains all widgets whose enabled state might change.
+        all_potentially_toggleable_widgets = [
+            self.link_input, self.dir_input, self.dir_button,
+            self.page_range_label, self.start_page_input, self.to_label, self.end_page_input,
+            self.character_input, self.char_filter_scope_toggle_button,
+            self.custom_folder_label, self.custom_folder_input,
+            self.skip_words_input, self.skip_scope_toggle_button, self.remove_from_filename_input,
+            self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives, self.radio_only_links,
+            self.skip_zip_checkbox, self.skip_rar_checkbox, self.download_thumbnails_checkbox, self.compress_images_checkbox,
+            self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
+            self.use_multithreading_checkbox, self.thread_count_input, self.thread_count_label,
+            self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button,
+            self.multipart_toggle_button,
+            self.character_search_input, self.new_char_input, self.add_char_button, self.delete_char_button,
+            self.reset_button
         ]
         
-        for widget in widgets_to_toggle:
-            if widget: widget.setEnabled(enabled)
+        widgets_to_enable_on_pause = self._get_configurable_widgets_on_pause()
+        download_is_active_or_paused = not enabled # True if a download is running or paused
+
+        for widget in all_potentially_toggleable_widgets:
+            if not widget: continue
+
+            if self.is_paused and widget in widgets_to_enable_on_pause:
+                widget.setEnabled(True) # Re-enable specific widgets if paused
+            else:
+                widget.setEnabled(enabled) # Standard behavior: enable if idle, disable if running
         
         if enabled:
             self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
@@ -2802,24 +3105,60 @@ class DownloaderApp(QWidget):
         if self.external_links_checkbox:
             is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
             self.external_links_checkbox.setEnabled(enabled and not is_only_links)
+            if self.is_paused and not is_only_links: # Also re-enable if paused and not in link mode
+                self.external_links_checkbox.setEnabled(True)
 
         if self.log_verbosity_toggle_button: self.log_verbosity_toggle_button.setEnabled(True) # New button, always enabled
 
         multithreading_currently_on = self.use_multithreading_checkbox.isChecked()
-        self.thread_count_input.setEnabled(enabled and multithreading_currently_on)
-        self.thread_count_label.setEnabled(enabled and multithreading_currently_on)
+        # Thread count related widgets follow 'enabled' strictly (disabled if paused)
+        if self.thread_count_input: self.thread_count_input.setEnabled(enabled and multithreading_currently_on)
+        if self.thread_count_label: self.thread_count_label.setEnabled(enabled and multithreading_currently_on)
 
         subfolders_currently_on = self.use_subfolders_checkbox.isChecked()
-        self.use_subfolder_per_post_checkbox.setEnabled(enabled)
+        if self.use_subfolder_per_post_checkbox:
+            self.use_subfolder_per_post_checkbox.setEnabled(enabled or (self.is_paused and self.use_subfolder_per_post_checkbox in widgets_to_enable_on_pause))
 
-        self.cancel_btn.setEnabled(not enabled)
+        # --- Main Action Buttons ---
+        self.download_btn.setEnabled(enabled) # Start Download only enabled when fully idle
+        self.cancel_btn.setEnabled(download_is_active_or_paused) # Cancel enabled if running or paused
+
+        # Pause button logic
+        if self.pause_btn:
+            self.pause_btn.setEnabled(download_is_active_or_paused)
+            if download_is_active_or_paused:
+                self.pause_btn.setText("▶️ Resume Download" if self.is_paused else "⏸️ Pause Download")
+                self.pause_btn.setToolTip("Click to resume the download." if self.is_paused else "Click to pause the download.")
+            else: # Download not active
+                self.pause_btn.setText("⏸️ Pause Download")
+                self.pause_btn.setToolTip("Click to pause the ongoing download process.")
+                self.is_paused = False # Ensure pause state is reset if download finishes/cancels
 
         if enabled: # Ensure these are updated based on current (possibly reset) checkbox states
+                if self.pause_event: self.pause_event.clear()
+
+        # --- UI Updates based on current states ---
+        # These should run if UI is idle OR if paused (to reflect changes made during pause)
+        if enabled or self.is_paused:             
             self._handle_multithreading_toggle(multithreading_currently_on)
             self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
             self.update_custom_folder_visibility(self.link_input.text())
             self.update_page_range_enabled_state()
+            # Re-evaluate filter mode as radio buttons might have been changed during pause
+            if self.radio_group and self.radio_group.checkedButton():
+                 self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
+            self.update_ui_for_subfolders(subfolders_currently_on) # Re-evaluate subfolder UI
 
+    def _handle_pause_resume_action(self):
+        if self._is_download_active(): # Check if a download is actually running
+            self.is_paused = not self.is_paused
+            if self.is_paused:
+                if self.pause_event: self.pause_event.set()
+                self.log_signal.emit("ℹ️ Download paused by user. Some settings can now be changed for subsequent operations.")
+            else:
+                if self.pause_event: self.pause_event.clear()
+                self.log_signal.emit("ℹ️ Download resumed by user.")
+            self.set_ui_enabled(False) # Re-evaluate UI state (buttons will update)
 
     def _perform_soft_ui_reset(self, preserve_url=None, preserve_dir=None):
         """Resets UI elements and some state to app defaults, then applies preserved inputs."""
@@ -2860,9 +3199,11 @@ class DownloaderApp(QWidget):
         # 4. Reset operational state variables (but not session-based downloaded_files/hashes)
         self.external_link_queue.clear(); self.extracted_links_cache = []
         self._is_processing_external_link_queue = False; self._current_link_post_title = None
+        if self.pause_event: self.pause_event.clear()        
         self.total_posts_to_process = 0; self.processed_posts_count = 0
         self.download_counter = 0; self.skip_counter = 0
         self.all_kept_original_filenames = []
+        self.is_paused = False # Reset pause state on soft reset
 
         # 5. Update UI based on new (default or preserved) states
         self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
@@ -2900,7 +3241,14 @@ class DownloaderApp(QWidget):
 
         self.progress_label.setText("Progress: Cancelled. Ready for new task.")
         self.file_progress_label.setText("")
+        if self.pause_event: self.pause_event.clear()        
         self.log_signal.emit("ℹ️ UI reset. Ready for new operation. Background tasks are being terminated.")
+        self.is_paused = False # Ensure pause state is reset
+        
+        # Also clear retryable files on a manual cancel, as the context is lost.
+        if self.retryable_failed_files_info:
+            self.log_signal.emit(f"   Discarding {len(self.retryable_failed_files_info)} pending retryable file(s) due to cancellation.")
+            self.retryable_failed_files_info.clear()
 
     def download_finished(self, total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list=None):
         if kept_original_names_list is None:
@@ -2909,6 +3257,11 @@ class DownloaderApp(QWidget):
             kept_original_names_list = []
 
         status_message = "Cancelled by user" if cancelled_by_user else "Finished"
+
+        # If cancelled, don't offer retry for this session's failures
+        if cancelled_by_user and self.retryable_failed_files_info:
+            self.log_signal.emit(f"   Download cancelled, discarding {len(self.retryable_failed_files_info)} file(s) that were pending retry.")
+            self.retryable_failed_files_info.clear()
 
         summary_log = "="*40
         summary_log += f"\n🏁 Download {status_message}!\n   Summary: Downloaded Files={total_downloaded}, Skipped Files={total_skipped}\n"
@@ -2941,6 +3294,8 @@ class DownloaderApp(QWidget):
                 if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
                 if hasattr(self.download_thread, 'missed_character_post_signal'): # New
                     self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
+                if hasattr(self.download_thread, 'retryable_file_failed_signal'): # New
+                    self.download_thread.retryable_file_failed_signal.disconnect(self._handle_retryable_file_failure)
             except (TypeError, RuntimeError) as e: 
                 self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
             
@@ -2955,9 +3310,166 @@ class DownloaderApp(QWidget):
             self.log_signal.emit("   Ensuring worker thread pool is shut down...")
             self.thread_pool.shutdown(wait=True, cancel_futures=True)
             self.thread_pool = None
+        
         self.active_futures = []
-        self.set_ui_enabled(True)
+        if self.pause_event: self.pause_event.clear()
         self.cancel_btn.setEnabled(False)
+        self.is_paused = False # Reset pause state when download finishes
+
+        # Offer to retry failed files if any were collected and not cancelled
+        if not cancelled_by_user and self.retryable_failed_files_info:
+            num_failed = len(self.retryable_failed_files_info)
+            reply = QMessageBox.question(self, "Retry Failed Downloads?",
+                                         f"{num_failed} file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
+                                         "Would you like to attempt to download these failed files again?",
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply == QMessageBox.Yes:
+                self._start_failed_files_retry_session()
+                return # Don't fully reset UI if retrying
+            else:
+                self.log_signal.emit("ℹ️ User chose not to retry failed files.")
+                self.retryable_failed_files_info.clear() # Clear if not retrying
+
+        self.set_ui_enabled(True) # Full UI reset if not retrying
+
+    def _start_failed_files_retry_session(self):
+        self.log_signal.emit(f"🔄 Starting retry session for {len(self.retryable_failed_files_info)} file(s)...")
+        self.set_ui_enabled(False) # Disable UI, but cancel button will be enabled
+        if self.cancel_btn: self.cancel_btn.setText("❌ Cancel Retry")
+
+        self.files_for_current_retry_session = list(self.retryable_failed_files_info)
+        self.retryable_failed_files_info.clear() # Clear original list
+
+        self.active_retry_futures = []
+        self.processed_retry_count = 0
+        self.succeeded_retry_count = 0
+        self.failed_retry_count_in_session = 0 # Renamed to avoid clash
+        self.total_files_for_retry = len(self.files_for_current_retry_session)
+
+        self.progress_label.setText(f"Retrying 0 / {self.total_files_for_retry} files...")
+        self.cancellation_event.clear() # Clear main cancellation for retry session
+
+        num_retry_threads = 1
+        try:
+            num_threads_from_gui = int(self.thread_count_input.text().strip())
+            num_retry_threads = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER, self.total_files_for_retry if self.total_files_for_retry > 0 else 1))
+        except ValueError:
+            num_retry_threads = 1 # Default to 1 if input is bad
+
+        self.retry_thread_pool = ThreadPoolExecutor(max_workers=num_retry_threads, thread_name_prefix='RetryFile_')
+
+        # Prepare common arguments for PostProcessorWorker instances during retry
+        common_ppw_args_for_retry = {
+            'download_root': self.dir_input.text().strip(),
+            'known_names': list(KNOWN_NAMES),
+            'emitter': self.worker_to_gui_queue, # Use main queue for progress
+            'unwanted_keywords': {'spicy', 'hd', 'nsfw', '4k', 'preview', 'teaser', 'clip'},
+            'filter_mode': self.get_filter_mode(), # Use current filter mode
+            'skip_zip': self.skip_zip_checkbox.isChecked(),
+            'skip_rar': self.skip_rar_checkbox.isChecked(),
+            'use_subfolders': self.use_subfolders_checkbox.isChecked(),
+            'use_post_subfolders': self.use_subfolder_per_post_checkbox.isChecked(),
+            'compress_images': self.compress_images_checkbox.isChecked(),
+            'download_thumbnails': self.download_thumbnails_checkbox.isChecked(),
+            'pause_event': self.pause_event,
+            'cancellation_event': self.cancellation_event,
+            'downloaded_files': self.downloaded_files, # Share session's downloaded sets
+            'downloaded_file_hashes': self.downloaded_file_hashes,
+            'downloaded_files_lock': self.downloaded_files_lock,
+            'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
+            'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
+            'skip_words_scope': self.get_skip_words_scope(),
+            'char_filter_scope': self.get_char_filter_scope(),
+            'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()] if hasattr(self, 'remove_from_filename_input') else [],
+            'allow_multipart_download': self.allow_multipart_download_setting,
+            # These are not strictly needed for retry of a single file if path is fixed, but good to pass
+            'filter_character_list': None, 
+            'dynamic_character_filter_holder': None,
+            'target_post_id_from_initial_url': None, # Not relevant for file retry
+            'custom_folder_name': None, # Path is already determined
+            'num_file_threads': 1, # Each retry task is one file, multipart handled by _download_single_file
+            'manga_date_file_counter_ref': None, # Filename is forced
+        }
+
+        for job_details in self.files_for_current_retry_session:
+            future = self.retry_thread_pool.submit(self._execute_single_file_retry, job_details, common_ppw_args_for_retry)
+            future.add_done_callback(self._handle_retry_future_result)
+            self.active_retry_futures.append(future)
+
+    def _execute_single_file_retry(self, job_details, common_args):
+        """Executes a single file download retry attempt."""
+        # Construct a dummy post_data, service, user_id, api_url_input for PPW init
+        dummy_post_data = {'id': job_details['original_post_id_for_log'], 'title': job_details['post_title']}
+        # Extract service/user from a known URL or pass them if available in job_details
+        # For simplicity, assuming we might not have original service/user easily.
+        # This might affect some logging or minor details in PPW if it relies on them beyond post_id.
+        # Let's assume job_details can store 'service' and 'user_id' from the original post.
+        
+        ppw_init_args = {
+            **common_args,
+            'post_data': dummy_post_data,
+            'service': job_details.get('service', 'unknown_service'), # Get from job_details or default
+            'user_id': job_details.get('user_id', 'unknown_user'),   # Get from job_details or default
+            'api_url_input': job_details.get('api_url_input', ''), # Original post's API URL
+            'manga_mode_active': job_details.get('manga_mode_active_for_file', False),
+            'manga_filename_style': job_details.get('manga_filename_style_for_file', STYLE_POST_TITLE),
+        }
+        worker = PostProcessorWorker(**ppw_init_args)
+        
+        dl_count, skip_count, filename_saved, original_kept, status, _ = worker._download_single_file(
+            file_info=job_details['file_info'],
+            target_folder_path=job_details['target_folder_path'],
+            headers=job_details['headers'],
+            original_post_id_for_log=job_details['original_post_id_for_log'],
+            skip_event=None, # No individual skip for retry items
+            post_title=job_details['post_title'],
+            file_index_in_post=job_details['file_index_in_post'],
+            num_files_in_this_post=job_details['num_files_in_this_post'],
+            forced_filename_override=job_details.get('forced_filename_override')
+        )
+        return dl_count > 0 # True if successful, False otherwise
+
+    def _handle_retry_future_result(self, future):
+        self.processed_retry_count += 1
+        was_successful = False
+        try:
+            if future.cancelled():
+                self.log_signal.emit("   A retry task was cancelled.")
+            elif future.exception():
+                self.log_signal.emit(f"❌ Retry task worker error: {future.exception()}")
+            else:
+                was_successful = future.result()
+                if was_successful:
+                    self.succeeded_retry_count += 1
+                else:
+                    self.failed_retry_count_in_session += 1
+        except Exception as e:
+            self.log_signal.emit(f"❌ Error in _handle_retry_future_result: {e}")
+            self.failed_retry_count_in_session +=1
+
+        self.progress_label.setText(f"Retrying {self.processed_retry_count} / {self.total_files_for_retry} files... (Succeeded: {self.succeeded_retry_count}, Failed: {self.failed_retry_count_in_session})")
+
+        if self.processed_retry_count >= self.total_files_for_retry:
+            if all(f.done() for f in self.active_retry_futures):
+                self._retry_session_finished()
+
+    def _retry_session_finished(self):
+        self.log_signal.emit("🏁 Retry session finished.")
+        self.log_signal.emit(f"   Summary: {self.succeeded_retry_count} Succeeded, {self.failed_retry_count_in_session} Failed.")
+        
+        if self.retry_thread_pool:
+            self.retry_thread_pool.shutdown(wait=True)
+            self.retry_thread_pool = None
+        
+        self.active_retry_futures.clear()
+        self.files_for_current_retry_session.clear()
+        
+        self.set_ui_enabled(True) # Re-enable UI
+        if self.cancel_btn: self.cancel_btn.setText("❌ Cancel & Reset UI") # Reset cancel button text
+        self.progress_label.setText(f"Retry Finished. Succeeded: {self.succeeded_retry_count}, Failed: {self.failed_retry_count_in_session}. Ready for new task.")
+        self.file_progress_label.setText("")
+        if self.pause_event: self.pause_event.clear()
+        self.is_paused = False
 
     def toggle_active_log_view(self):
         if self.current_log_view == 'progress':
@@ -3008,6 +3520,8 @@ class DownloaderApp(QWidget):
         self.total_posts_to_process = 0; self.processed_posts_count = 0; self.download_counter = 0; self.skip_counter = 0
         self.all_kept_original_filenames = []
         self.cancellation_event.clear()
+        if self.pause_event: self.pause_event.clear()
+        self.is_paused = False # Reset pause state on full reset
         self.manga_filename_style = STYLE_POST_TITLE
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
         
@@ -3039,6 +3553,8 @@ class DownloaderApp(QWidget):
         self.missed_title_key_terms_examples.clear()
         self.logged_summary_for_key_term.clear()
         self.already_logged_bold_key_terms.clear()
+        if self.pause_event: self.pause_event.clear()
+        self.is_paused = False # Reset pause state
         self.missed_key_terms_buffer.clear()
         if self.missed_character_log_output: self.missed_character_log_output.clear()
 
@@ -3138,6 +3654,29 @@ class DownloaderApp(QWidget):
         self._update_multipart_toggle_button_text()
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
         self.log_signal.emit(f"ℹ️ Multi-part download set to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'}")
+
+    def _open_known_txt_file(self):
+        if not os.path.exists(self.config_file):
+            QMessageBox.warning(self, "File Not Found",
+                                f"The file 'Known.txt' was not found at:\n{self.config_file}\n\n"
+                                "It will be created automatically when you add a known name or close the application.")
+            self.log_signal.emit(f"ℹ️ 'Known.txt' not found at {self.config_file}. It will be created later.")
+            return
+
+        try:
+            if sys.platform == "win32":
+                os.startfile(self.config_file)
+            elif sys.platform == "darwin":  # macOS
+                subprocess.call(['open', self.config_file])
+            else:  # Linux and other Unix-like
+                subprocess.call(['xdg-open', self.config_file])
+            self.log_signal.emit(f"ℹ️ Attempted to open '{os.path.basename(self.config_file)}' with the default editor.")
+        except FileNotFoundError: # Should be caught by os.path.exists, but as a fallback
+            QMessageBox.critical(self, "Error", f"Could not find '{os.path.basename(self.config_file)}' at {self.config_file} to open it.")
+            self.log_signal.emit(f"❌ Error: '{os.path.basename(self.config_file)}' not found at {self.config_file} when trying to open.")
+        except Exception as e:
+            QMessageBox.critical(self, "Error Opening File", f"Could not open '{os.path.basename(self.config_file)}':\n{e}")
+            self.log_signal.emit(f"❌ Error opening '{os.path.basename(self.config_file)}': {e}")
 
 if __name__ == '__main__':
     import traceback

@@ -13,7 +13,7 @@ DOWNLOAD_CHUNK_SIZE_ITER = 1024 * 256  # 256KB for iter_content within a chunk d
 
 
 def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, headers,
-                               part_num, total_parts, progress_data, cancellation_event, skip_event,
+                               part_num, total_parts, progress_data, cancellation_event, skip_event, pause_event, global_emit_time_ref, # Added global_emit_time_ref
                                logger_func, emitter=None, api_original_filename=None): # Renamed logger, signals to emitter
     """Downloads a single chunk of a file and writes it to the temp file."""
     if cancellation_event and cancellation_event.is_set():
@@ -22,6 +22,15 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
     if skip_event and skip_event.is_set():
         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Skip event triggered before start.")
         return 0, False
+
+    if pause_event and pause_event.is_set():
+        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download paused before start...")
+        while pause_event.is_set():
+            if cancellation_event and cancellation_event.is_set():
+                logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download cancelled while paused.")
+                return 0, False
+            time.sleep(0.2) # Shorter sleep for responsive resume
+        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download resumed.")
 
     chunk_headers = headers.copy()
     # end_byte can be -1 for 0-byte files, meaning download from start_byte to end of file (which is start_byte itself)
@@ -38,7 +47,7 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
 
 
     bytes_this_chunk = 0
-    last_progress_emit_time_for_chunk = time.time()
+    # last_progress_emit_time_for_chunk = time.time() # Replaced by global_emit_time_ref logic
     last_speed_calc_time = time.time()
     bytes_at_last_speed_calc = 0
 
@@ -49,6 +58,14 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
         if skip_event and skip_event.is_set():
             logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Skip event during retry loop.")
             return bytes_this_chunk, False
+        if pause_event and pause_event.is_set():
+            logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Paused during retry loop...")
+            while pause_event.is_set():
+                if cancellation_event and cancellation_event.is_set():
+                    logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Cancelled while paused in retry loop.")
+                    return bytes_this_chunk, False
+                time.sleep(0.2)
+            logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Resumed from retry loop pause.")
 
         try:
             if attempt > 0:
@@ -82,6 +99,14 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
                     if skip_event and skip_event.is_set():
                         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Skip event during data iteration.")
                         return bytes_this_chunk, False
+                    if pause_event and pause_event.is_set():
+                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Paused during data iteration...")
+                        while pause_event.is_set():
+                            if cancellation_event and cancellation_event.is_set():
+                                logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Cancelled while paused in data iteration.")
+                                return bytes_this_chunk, False
+                            time.sleep(0.2)
+                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Resumed from data iteration pause.")
                     if data_segment:
                         f.write(data_segment)
                         bytes_this_chunk += len(data_segment)
@@ -99,19 +124,19 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
                                 current_speed_bps = (bytes_delta * 8) / time_delta_speed if time_delta_speed > 0 else 0
                                 progress_data['chunks_status'][part_num]['speed_bps'] = current_speed_bps
                                 last_speed_calc_time = current_time
-                                bytes_at_last_speed_calc = bytes_this_chunk
+                                bytes_at_last_speed_calc = bytes_this_chunk                            
 
-                            # Emit progress more frequently from within the chunk download
-                            if current_time - last_progress_emit_time_for_chunk > 0.1: # Emit up to 10 times/sec per chunk
-                                if emitter:
+                            # Throttle emissions globally for this file download
+                            if emitter and (current_time - global_emit_time_ref[0] > 0.25): # Max ~4Hz for the whole file
+                                global_emit_time_ref[0] = current_time # Update shared last emit time
+                                
+                                # Prepare and emit the status_list_copy
+                                status_list_copy = [dict(s) for s in progress_data['chunks_status']] # Make a deep enough copy
+                                if isinstance(emitter, queue.Queue):
+                                    emitter.put({'type': 'file_progress', 'payload': (api_original_filename, status_list_copy)})
+                                elif hasattr(emitter, 'file_progress_signal'): # PostProcessorSignals-like
                                     # Ensure we read the latest total downloaded from progress_data
-                                    # Send a copy of the chunks_status list
-                                    status_list_copy = [dict(s) for s in progress_data['chunks_status']] # Make a deep enough copy
-                                    if isinstance(emitter, queue.Queue):
-                                        emitter.put({'type': 'file_progress', 'payload': (api_original_filename, status_list_copy)})
-                                    elif hasattr(emitter, 'file_progress_signal'): # PostProcessorSignals-like
-                                        emitter.file_progress_signal.emit(api_original_filename, status_list_copy)
-                                last_progress_emit_time_for_chunk = current_time
+                                    emitter.file_progress_signal.emit(api_original_filename, status_list_copy)
             return bytes_this_chunk, True
 
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
@@ -134,7 +159,7 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
 
 
 def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, api_original_filename,
-                           emitter_for_multipart, cancellation_event, skip_event, logger_func): # Renamed signals, logger
+                           emitter_for_multipart, cancellation_event, skip_event, logger_func, pause_event): # Added pause_event
     """
     Downloads a file in multiple parts concurrently.
     Returns: (download_successful_flag, downloaded_bytes, calculated_file_hash, temp_file_handle_or_None)
@@ -181,7 +206,8 @@ def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, 
             {'id': i, 'downloaded': 0, 'total': chunk_actual_sizes[i] if i < len(chunk_actual_sizes) else 0, 'active': False, 'speed_bps': 0.0}
             for i in range(num_parts)
         ],
-        'lock': threading.Lock()
+        'lock': threading.Lock(),
+        'last_global_emit_time': [time.time()] # Shared mutable for global throttling timestamp
     }
 
     chunk_futures = []
@@ -194,8 +220,8 @@ def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, 
             chunk_futures.append(chunk_pool.submit(
                 _download_individual_chunk, chunk_url=file_url, temp_file_path=temp_file_path,
                 start_byte=start, end_byte=end, headers=headers, part_num=i, total_parts=num_parts,
-                progress_data=progress_data, cancellation_event=cancellation_event, skip_event=skip_event,
-                logger_func=logger_func, emitter=emitter_for_multipart, # Pass emitter
+                progress_data=progress_data, cancellation_event=cancellation_event, skip_event=skip_event, global_emit_time_ref=progress_data['last_global_emit_time'],
+                pause_event=pause_event, logger_func=logger_func, emitter=emitter_for_multipart, # Pass pause_event and emitter
                 api_original_filename=api_original_filename
             ))
 
