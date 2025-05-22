@@ -236,10 +236,11 @@ class TourDialog(QDialog):
 
         # --- Define Tour Steps with Updated Content ---
         step1_content = (
-            "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates."
+            "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie management."
             "<ul>"
             "<li>My goal is to help you easily download content from Kemono and Coomer.</li>"
             "<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li>"
+            "<li>Many options have tooltips if you hover over them for more details.</li>"
             "<li>Click <b>Skip Tour</b> to close this guide at any time.</li>"
             "<li>Check <b>'Never show this tour again'</b> if you don't want to see this on future startups.</li>"
             "</ul>"
@@ -256,7 +257,7 @@ class TourDialog(QDialog):
             "   Click 'Browse...' to choose a folder on your computer where all downloaded files will be saved. "
             "This is required unless you are using 'Only Links' mode.</li><br>"
             "<li><b>📄 Page Range (Creator URLs only):</b><br>"
-            "   If downloading from a creator's page, you can specify a range of pages (e.g., pages 2 to 5). "
+            "   If downloading from a creator's page, you can specify a range of pages to fetch (e.g., pages 2 to 5). "
             "Leave blank for all pages. This is disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>"
             "</ul>"
         )
@@ -268,11 +269,11 @@ class TourDialog(QDialog):
             "<li><b>🎯 Filter by Character(s):</b><br>"
             "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2)</i> becomes folder 'alias1 alias2'.<br>"
             "   The <b>'Filter: [Scope]'</b> button next to this input controls how this filter is applied:"
-            "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded.</li>"
-            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded.</li>"
-            "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded.</li>"
-            "       <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a match, all files are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests).</li></ul>"
-            "   This filter also influences folder naming if 'Separate Folders' is enabled.</li><br>"
+            "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename.</li>"
+            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>"
+            "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li>"
+            "       <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li></ul>"
+            "   This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled.</li><br>"
             "<li><b>🚫 Skip with Words:</b><br>"
             "   Enter words, comma-separated (e.g., <i>WIP, sketch, preview</i>). "
             "   The <b>'Scope: [Type]'</b> button (next to this input) cycles how this filter applies:"
@@ -295,14 +296,18 @@ class TourDialog(QDialog):
             "More options to customize your downloads:"
             "<ul>"
             "<li><b>Skip .zip / Skip .rar:</b> Check these to avoid downloading these archive file types. "
-            "   <i>(Note: These are disabled and ignored if '📦 Only Archives' mode is selected).</i></li><br>"
+            "   <i>(Note: These are disabled and ignored if '📦 Only Archives' filter mode is selected).</i></li><br>"
             "<li><b>✂️ Remove Words from name:</b><br>"
             "   Enter words, comma-separated (e.g., <i>patreon, [HD]</i>), to remove from downloaded filenames (case-insensitive).</li><br>"
             "<li><b>Download Thumbnails Only:</b> Downloads small preview images instead of full-sized files (if available).</li><br>"
             "<li><b>Compress Large Images:</b> If the 'Pillow' library is installed, images larger than 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li><br>"
             "<li><b>🗄️ Custom Folder Name (Single Post Only):</b><br>"
             "   If you are downloading a single specific post URL AND 'Separate Folders by Name/Title' is enabled, "
-            "you can enter a custom name here for that post's download folder.</li>"
+            "you can enter a custom name here for that post's download folder.</li><br>"
+            "<li><b>🍪 Use Cookie:</b> Check this to use cookies for requests. You can either:"
+            "   <ul><li>Enter a cookie string directly into the text field (e.g., <i>name1=value1; name2=value2</i>).</li>"
+            "       <li>Click 'Browse...' to select a <i>cookies.txt</i> file (Netscape format). The path will appear in the text field.</li></ul>"
+            "   This is useful for accessing content that requires login. The text field takes precedence if filled.</li>"
             "</ul>"
         )
         self.step4 = TourStepWidget("③ Fine-Tuning Downloads", step4_content)
@@ -312,25 +317,36 @@ class TourDialog(QDialog):
             "<ul>"
             "<li><b>⚙️ Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the 'Known Shows/Characters' list as a fallback for folder names).</li><br>"
             "<li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li><br>"
-            "<li><b>🚀 Use Multithreading (Threads):</b> Enables faster downloads for creator pages by processing multiple posts or files concurrently. The number of threads can be adjusted. Single post URLs are processed using a single thread for post data but can use multiple threads for file downloads within that post.</li><br>"
+            "<li><b>🚀 Use Multithreading (Threads):</b> Enables faster operations. The number in 'Threads' input means:"
+            "   <ul><li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li>"
+            "       <li>For <b>Single Post URLs:</b> Number of files to download concurrently from that single post.</li></ul>"
+            "   If unchecked, 1 thread is used. High thread counts (e.g., >40) may show an advisory.</li><br>"
             "<li><b>Multi-part Download Toggle (Top-right of log area):</b><br>"
             "   The <b>'Multi-part: [ON/OFF]'</b> button allows enabling/disabling multi-segment downloads for individual large files. "
-            "   <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling.</li>"
+            "   <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling. If a multi-part download fails, it retries as single-stream.</li>"
             "       <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li></ul>"
             "   This is disabled if 'Only Links' or 'Only Archives' mode is active.</li><br>"
             "<li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content."
             "   <ul>"
             "   <li>Downloads posts from <b>oldest to newest</b>.</li>"
             "   <li>The 'Page Range' input is disabled as all posts are fetched.</li>"
-            "   <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title' or 'Name: Original File') appears in the top-right of the log area when this mode is active for a creator feed. Click it to change naming:"
+            "   <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:"
             "       <ul>"
-            "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's title (e.g., <i>MyMangaChapter1.jpg</i>). Subsequent files in the <i>same post</i> (if any) will retain their original filenames.</li>"
-            "       <li><b><i>Name: Original File:</i></b> All files will attempt to keep their original filenames as provided by the site (e.g., <i>001.jpg, page_02.png</i>). You'll see a recommendation to use 'Post Title' style if you choose this.</li>"
+            "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's title. Subsequent files in the same post keep original names.</li>"
+            "       <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames.</li>"
+            "       <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>"
             "       </ul>"
             "   </li>"
-            "   <li>For best results with 'Name: Post Title' style, use the 'Filter by Character(s)' field with the manga/series title.</li>"
+            "   <li>For best results with 'Name: Post Title' or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>"
             "   </ul></li><br>"
-            "<li><b>🎭 Known Shows/Characters:</b> Add names here (e.g., <i>Game Title, Series Name, Character Full Name</i>). These are used for automatic folder creation when 'Separate Folders' is on and no specific 'Filter by Character(s)' is provided for a post.</li>"
+            "<li><b>🎭 Known.txt for Smart Folder Organization:</b><br>"
+            "   Fine-grained control over automatic folder organization using a personalized list in <b>Known.txt</b>."
+            "   <ul>"
+            "       <li><b>Primary Names & Aliases:</b> Define a main folder name and link multiple aliases. For example, an entry like <code>([Power], powwr, pwr, Blood devil)</code> ensures any post matching \"Power\", \"powwr\", etc. (based on your filter scope) gets saved into a \"Power\" folder. Simple entries like <code>My Series</code> are also supported. The primary name for the folder is the one in <code>[]</code> brackets, or the first one if no brackets.</li>"
+            "       <li><b>Intelligent Fallback:</b> When 'Separate Folders by Name/Title' is active, and if a post doesn't match any specific 'Filter by Character(s)' input, the downloader consults <code>Known.txt</code> to find a matching primary name for folder creation.</li>"
+            "       <li><b>User-Friendly Management:</b> Add or remove primary names directly through the UI list below. For advanced editing (like setting up aliases or defining the primary name for a group), click <b>'Open Known.txt'</b> to edit the file directly.</li>"
+            "   </ul>"
+            "</li>"
             "</ul>"
         )
         self.step5 = TourStepWidget("④ Organization & Performance", step5_content)
@@ -345,7 +361,8 @@ class TourDialog(QDialog):
             "   <ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li>"
             "       <li><b>🙈 Missed Character Log:</b> Displays a summarized list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>"
             "<li><b>🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li><br>"
-            "<li><b>⬇️ Start Download / 🔗 Extract Links / ❌ Cancel:</b> These buttons initiate or stop the current download/extraction process. The 'Cancel' button also performs a soft UI reset, preserving your URL and Directory inputs.</li>"
+            "<li><b>⬇️ Start Download / 🔗 Extract Links / ⏸️ Pause / ❌ Cancel:</b> These buttons control the process. 'Cancel & Reset UI' stops the current operation and performs a soft UI reset, preserving your URL and Directory inputs. 'Pause/Resume' allows temporarily halting and continuing.</li><br>"
+            "<li>If some files fail with recoverable errors (like 'IncompleteRead'), you might be prompted to retry them at the end of a session.</li>"
             "</ul>"
             "<br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader."
         )
@@ -358,7 +375,7 @@ class TourDialog(QDialog):
 
         bottom_controls_layout = QVBoxLayout()
         bottom_controls_layout.setContentsMargins(15, 10, 15, 15) # Adjusted margins
-        bottom_controls_layout.setSpacing(10)
+        bottom_controls_layout.setSpacing(12) # Slightly more spacing
 
         self.never_show_again_checkbox = QCheckBox("Never show this tour again")
         bottom_controls_layout.addWidget(self.never_show_again_checkbox, 0, Qt.AlignLeft)

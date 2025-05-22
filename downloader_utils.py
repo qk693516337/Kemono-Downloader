@@ -1347,6 +1347,7 @@ class PostProcessorWorker:
                 unique_links_data = {} 
                 for match in link_pattern.finditer(post_content_html):
                     link_url = match.group(1).strip()
+                    link_url = html.unescape(link_url) # Decode HTML entities in the URL
                     link_inner_text = match.group(2) 
 
                     if not any(ext in link_url.lower() for ext in ['.css', '.js', '.ico', '.xml', '.svg']) \
