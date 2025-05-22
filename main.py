@@ -103,6 +103,8 @@ STYLE_DATE_BASED = "date_based" # New style for date-based naming
 SKIP_WORDS_SCOPE_KEY = "skipWordsScopeV1"
 ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 
+USE_COOKIE_KEY = "useCookieV1" # New setting key
+COOKIE_TEXT_KEY = "cookieTextV1" # New setting key for cookie text
 CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
 # CHAR_SCOPE_TITLE, CHAR_SCOPE_FILES, CHAR_SCOPE_BOTH, CHAR_SCOPE_COMMENTS are already defined or imported
 
@@ -503,6 +505,7 @@ class DownloaderApp(QWidget):
             # sys.executable is the path to the .exe file
             app_base_dir = os.path.dirname(sys.executable)
         else:
+            # This is the directory where main.py (and thus potentially cookies.txt) resides
             # Application is running as a script
             # __file__ is the path to the script file
             app_base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -518,6 +521,7 @@ class DownloaderApp(QWidget):
         self.processed_posts_count = 0
         self.download_counter = 0
         self.skip_counter = 0
+        self.selected_cookie_filepath = None # For storing path from browse button
         self.retryable_failed_files_info = [] # For storing info about files that failed but can be retried
 
         self.is_paused = False # New state for pause functionality
@@ -578,6 +582,11 @@ class DownloaderApp(QWidget):
         self.char_filter_scope = self.settings.value(CHAR_FILTER_SCOPE_KEY, CHAR_SCOPE_FILES, type=str) # Default to Files
         # Always default multi-part download to OFF on launch, ignoring any saved setting.
         self.allow_multipart_download_setting = False 
+
+        # Ensure "Use Cookie" is unchecked and text is empty by default on every launch
+        self.use_cookie_setting = False # Always default to False on launch
+        self.cookie_text_setting = ""   # Always default to empty on launch
+
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
 
@@ -597,6 +606,8 @@ class DownloaderApp(QWidget):
         self.log_signal.emit(f"ℹ️ Skip words scope loaded: '{self.skip_words_scope}'")
         self.log_signal.emit(f"ℹ️ Character filter scope loaded: '{self.char_filter_scope}'")
         self.log_signal.emit(f"ℹ️ Multi-part download defaults to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'} on launch")
+        self.log_signal.emit(f"ℹ️ Cookie text defaults to: Empty on launch")
+        self.log_signal.emit(f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
 
 
     def _connect_signals(self):
@@ -610,6 +621,12 @@ class DownloaderApp(QWidget):
         if hasattr(self, 'character_input'): # Connect live update for character input
             self.character_input.textChanged.connect(self._on_character_input_changed_live)
         # Timer for processing the worker queue
+        if hasattr(self, 'use_cookie_checkbox'): 
+            self.use_cookie_checkbox.toggled.connect(self._update_cookie_input_visibility)
+        if hasattr(self, 'cookie_browse_button'): # Connect the new browse button
+            self.cookie_browse_button.clicked.connect(self._browse_cookie_file)
+        if hasattr(self, 'cookie_text_input'): # Connect text changed for manual clear detection
+            self.cookie_text_input.textChanged.connect(self._handle_cookie_text_manual_change)
         self.gui_update_timer.timeout.connect(self._process_worker_queue)
         self.gui_update_timer.start(100) # Check queue every 100ms
 
@@ -749,14 +766,41 @@ class DownloaderApp(QWidget):
                             content = line[1:-1].strip()
                             parts = [p.strip() for p in content.split(',') if p.strip()]
                             if parts:
-                                primary_name = parts[0]
-                                # Aliases include the primary name for matching convenience
-                                unique_aliases = sorted(list(set([primary_name] + parts)))
-                                parsed_known_objects.append({
-                                    "name": primary_name,
-                                    "is_group": True,
-                                    "aliases": unique_aliases
-                                })
+                                potential_primary_name = None
+                                all_aliases_in_line = []
+                                remaining_parts = list(parts) # Create a mutable copy
+
+                                # First, find and process the bracketed primary name
+                                for i, part_check_brackets in enumerate(parts):
+                                    if part_check_brackets.startswith('[') and part_check_brackets.endswith(']'):
+                                        potential_primary_name = part_check_brackets[1:-1].strip()
+                                        if potential_primary_name:
+                                            all_aliases_in_line.append(potential_primary_name)
+                                            remaining_parts.pop(i) # Remove the processed primary name part
+                                        break # Found the bracketed name
+
+                                # If no bracketed name was found, use the first part as primary (fallback)
+                                if not potential_primary_name and parts:
+                                    potential_primary_name = parts[0].strip()
+                                    all_aliases_in_line.append(potential_primary_name)
+                                    if remaining_parts and remaining_parts[0] == potential_primary_name: # Avoid double-adding if it was the first
+                                        remaining_parts.pop(0)
+
+                                # Add remaining parts as unique aliases
+                                for part in remaining_parts:
+                                    cleaned_part = part.strip()
+                                    if cleaned_part and cleaned_part not in all_aliases_in_line:
+                                        all_aliases_in_line.append(cleaned_part)
+
+                                if not potential_primary_name: # Should not happen if parts is not empty
+                                    if hasattr(self, 'log_signal'): self.log_signal.emit(f"⚠️ Could not determine primary name in Known.txt on line {line_num}: '{line}'")
+                                    continue
+                                else: # This is the 'else' statement from the error
+                                    parsed_known_objects.append({ # This block needs to be indented
+                                        "name": potential_primary_name,
+                                        "is_group": True,
+                                        "aliases": all_aliases_in_line # Already unique and primary is first
+                                    })
                             else:
                                 if hasattr(self, 'log_signal'): self.log_signal.emit(f"⚠️ Empty group found in Known.txt on line {line_num}: '{line}'")
                         else:
@@ -787,14 +831,14 @@ class DownloaderApp(QWidget):
             # Add default entries if the list is empty after loading (meaning file didn't exist)
             if not KNOWN_NAMES:
                 default_entry = {
-                    "name": "Boa Hancock",
+                    "name": "Yor",
                     "is_group": True,
-                    "aliases": sorted(list(set(["Boa Hancock", "Boa", "Hancock", "Snakequeen"]))) # Ensure unique and sorted aliases
+                    "aliases": sorted(list(set(["Yor Forger", "Yor", "Yor Briar"]))) # Ensure unique and sorted aliases
                 }
                 KNOWN_NAMES.append(default_entry)
                 # Add more defaults here if needed
                 self.save_known_names() # Save to disk immediately if file was created with defaults
-                self.log_signal.emit("ℹ️ Added default entry for 'Boa Hancock'.")
+                self.log_signal.emit("ℹ️ Added default entry for 'Yor Forger'.")
 
             self.character_list.addItems([entry["name"] for entry in KNOWN_NAMES])
 
@@ -805,11 +849,15 @@ class DownloaderApp(QWidget):
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 for entry in KNOWN_NAMES:
                     if entry["is_group"] and len(entry["aliases"]) > 1:
-                        # Join all aliases with ", " for readability
-                        joined_aliases = ", ".join(entry["aliases"])
-                        f.write(f"({joined_aliases})\n")
+                        # New format: Mark primary name (first alias) with brackets
+                        primary_name = entry['aliases'][0]
+                        other_aliases = entry['aliases'][1:]
+                        formatted_aliases_for_file = [f"[{primary_name}]"] + other_aliases
+                        f.write(f"({', '.join(formatted_aliases_for_file)})\n")
+                    elif entry["is_group"] and len(entry["aliases"]) == 1: # Group with only one name (the primary)
+                        f.write(f"([{entry['aliases'][0]}])\n") # Save as ([PrimaryName])
                     else: # Simple entry or group with only one alias (the name itself)
-                        f.write(entry["name"] + '\n')
+                        f.write(entry["name"] + '\n') # Non-grouped items are saved as plain names
             if hasattr(self, 'log_signal'): self.log_signal.emit(f"💾 Saved {len(KNOWN_NAMES)} known entries to {self.config_file}")
         except Exception as e:
             log_msg = f"❌ Error saving config '{self.config_file}': {e}"
@@ -822,6 +870,8 @@ class DownloaderApp(QWidget):
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
+        self.settings.setValue(COOKIE_TEXT_KEY, self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "")
+        self.settings.setValue(USE_COOKIE_KEY, self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False)
         self.settings.sync()
 
         should_exit = True
@@ -1113,6 +1163,30 @@ class DownloaderApp(QWidget):
         )
         self.use_subfolder_per_post_checkbox.toggled.connect(self.update_ui_for_subfolders)
         advanced_row1_layout.addWidget(self.use_subfolder_per_post_checkbox)
+
+        self.use_cookie_checkbox = QCheckBox("Use Cookie")
+        self.use_cookie_checkbox.setToolTip("If checked, will attempt to use cookies from 'cookies.txt' (Netscape format)\n"
+                                            "in the application directory for requests.\n"
+                                            "Useful for accessing content that requires login on Kemono/Coomer.")
+        self.use_cookie_checkbox.setChecked(self.use_cookie_setting) # Set from loaded setting
+        
+        self.cookie_text_input = QLineEdit()
+        self.cookie_text_input.setPlaceholderText("if no Select cookies.txt)")
+        self.cookie_text_input.setMinimumHeight(28) # Slightly increase height for better visibility
+        self.cookie_text_input.setToolTip("Enter your cookie string directly.\n"
+                                          "This will be used if 'Use Cookie' is checked AND 'cookies.txt' is not found or this field is not empty.\n"
+                                          "The format depends on how the backend will parse it (e.g., 'name1=value1; name2=value2').")
+        self.cookie_text_input.setText(self.cookie_text_setting) # Set from loaded setting
+        
+        advanced_row1_layout.addWidget(self.use_cookie_checkbox)
+        advanced_row1_layout.addWidget(self.cookie_text_input, 2) # Stretch factor 2
+
+        self.cookie_browse_button = QPushButton("Browse...")
+        self.cookie_browse_button.setToolTip("Browse for a cookie file (Netscape format, typically cookies.txt).\nThis will be used if 'Use Cookie' is checked and the text field above is empty.")
+        self.cookie_browse_button.setFixedWidth(80) # Make it a bit compact
+        self.cookie_browse_button.setStyleSheet("padding: 4px 8px;")
+        advanced_row1_layout.addWidget(self.cookie_browse_button)
+
         advanced_row1_layout.addStretch(1)
         checkboxes_group_layout.addLayout(advanced_row1_layout)
 
@@ -1354,6 +1428,7 @@ class DownloaderApp(QWidget):
             self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
         if hasattr(self, 'link_input'): self.link_input.textChanged.connect(lambda: self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)) # Also trigger manga UI update
         self.load_known_names_from_util()
+        self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False) # Initial visibility
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         if hasattr(self, 'radio_group') and self.radio_group.checkedButton():
             self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
@@ -1362,9 +1437,28 @@ class DownloaderApp(QWidget):
         self._update_char_filter_scope_button_text()
         self._update_multithreading_for_date_mode() # Ensure correct initial state
         
+    def _browse_cookie_file(self):
+        """Opens a file dialog to select a cookie file."""
+        # Start in the user's documents directory or current app dir if not available
+        start_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        if not start_dir:
+            start_dir = os.path.dirname(self.config_file) # App directory
+
+        filepath, _ = QFileDialog.getOpenFileName(self, "Select Cookie File", start_dir, "Text files (*.txt);;All files (*)")
+        if filepath:
+            self.selected_cookie_filepath = filepath
+            self.log_signal.emit(f"ℹ️ Selected cookie file: {filepath}")
+            if hasattr(self, 'cookie_text_input'):
+                # Block signals temporarily to prevent textChanged handler from misinterpreting this programmatic change
+                self.cookie_text_input.blockSignals(True)
+                self.cookie_text_input.setText(filepath)
+                self.cookie_text_input.setReadOnly(True)
+                self.cookie_text_input.setPlaceholderText("") # No placeholder when showing a path
+                self.cookie_text_input.blockSignals(False)
+
     def _center_on_screen(self):
         """Centers the widget on the screen."""
-        # Updated to use availableGeometry and center more reliably
+        # Updated to use availableGeometry and center more reliably        
         try:
             primary_screen = QApplication.primaryScreen()
             if not primary_screen:
@@ -1381,6 +1475,19 @@ class DownloaderApp(QWidget):
         except Exception as e:
             self.log_signal.emit(f"⚠️ Error centering window: {e}")
             
+    def _handle_cookie_text_manual_change(self, text):
+        """Handles manual changes to the cookie text input, especially clearing a browsed path."""
+        if not hasattr(self, 'cookie_text_input') or not hasattr(self, 'use_cookie_checkbox'):
+            return
+
+        # If a file was selected AND the text field is now empty (user deleted the path)
+        if self.selected_cookie_filepath and not text.strip() and self.use_cookie_checkbox.isChecked():
+            self.selected_cookie_filepath = None
+            self.cookie_text_input.setReadOnly(False)
+            self.cookie_text_input.setPlaceholderText("Cookie string (if no cookies.txt)")
+            self.log_signal.emit("ℹ️ Browsed cookie file path cleared from input. Switched to manual cookie string mode.")
+
+
     def get_dark_theme(self):
         return """
         QWidget { background-color: #2E2E2E; color: #E0E0E0; font-family: Segoe UI, Arial, sans-serif; font-size: 10pt; }
@@ -2105,6 +2212,10 @@ class DownloaderApp(QWidget):
         if self.use_subfolder_per_post_checkbox:
             self.use_subfolder_per_post_checkbox.setEnabled(not is_only_links and not is_only_archives)
 
+        if hasattr(self, 'use_cookie_checkbox'):
+            self.use_cookie_checkbox.setEnabled(not is_only_links) # Cookies might be relevant for archives
+
+
         enable_character_filter_related_widgets = checked and not is_only_links and not is_only_archives
  
 
@@ -2117,6 +2228,38 @@ class DownloaderApp(QWidget):
                 if self.char_filter_scope_toggle_button: self.char_filter_scope_toggle_button.setEnabled(True)
         
         self.update_custom_folder_visibility()
+
+
+    def _update_cookie_input_visibility(self, checked):
+        cookie_text_input_exists = hasattr(self, 'cookie_text_input')
+        cookie_browse_button_exists = hasattr(self, 'cookie_browse_button')
+
+        if cookie_text_input_exists or cookie_browse_button_exists:
+            is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
+            
+            # Cookie text input and browse button are visible if "Use Cookie" is checked
+            if cookie_text_input_exists: self.cookie_text_input.setVisible(checked)
+            if cookie_browse_button_exists: self.cookie_browse_button.setVisible(checked)
+            
+            can_enable_cookie_text = checked and not is_only_links
+            enable_state_for_fields = can_enable_cookie_text and (self.download_btn.isEnabled() or self.is_paused)
+
+            if cookie_text_input_exists:
+                # Text input is always enabled if its parent "Use Cookie" is checked and conditions met,
+                # unless a file path is displayed (then it's read-only).
+                self.cookie_text_input.setEnabled(enable_state_for_fields)
+                if self.selected_cookie_filepath and checked: # If a file is selected and "Use Cookie" is on
+                    self.cookie_text_input.setText(self.selected_cookie_filepath)
+                    self.cookie_text_input.setReadOnly(True)
+                    self.cookie_text_input.setPlaceholderText("")
+                elif checked: # "Use Cookie" is on, but no file selected
+                    self.cookie_text_input.setReadOnly(False)
+                    self.cookie_text_input.setPlaceholderText("Cookie string (if no cookies.txt)")
+
+            if cookie_browse_button_exists: self.cookie_browse_button.setEnabled(enable_state_for_fields)
+
+            if not checked: # If "Use Cookie" is unchecked, clear the selected file path
+                self.selected_cookie_filepath = None
 
 
     def update_page_range_enabled_state(self):
@@ -2339,6 +2482,7 @@ class DownloaderApp(QWidget):
         
         use_multithreading_enabled_by_checkbox = self.use_multithreading_checkbox.isChecked()
         try:
+            # num_threads_from_gui is used for post workers or file workers depending on context
             num_threads_from_gui = int(self.thread_count_input.text().strip())
             if num_threads_from_gui < 1: num_threads_from_gui = 1
         except ValueError:
@@ -2395,6 +2539,10 @@ class DownloaderApp(QWidget):
         raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
         allow_multipart = self.allow_multipart_download_setting # Use the internal setting
         remove_from_filename_words_list = [word.strip() for word in raw_remove_filename_words.split(',') if word.strip()]
+        use_cookie_from_checkbox = self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False
+        app_base_dir_for_cookies = os.path.dirname(self.config_file) # Directory of Known.txt
+        cookie_text_from_input = self.cookie_text_input.text().strip() if hasattr(self, 'cookie_text_input') and use_cookie_from_checkbox else ""
+        selected_cookie_file_path_for_backend = self.selected_cookie_filepath if use_cookie_from_checkbox and self.selected_cookie_filepath else None
         current_skip_words_scope = self.get_skip_words_scope()
         current_char_filter_scope = self.get_char_filter_scope()
         manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
@@ -2402,6 +2550,10 @@ class DownloaderApp(QWidget):
         extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
         backend_filter_mode = self.get_filter_mode()
         user_selected_filter_text = self.radio_group.checkedButton().text() if self.radio_group.checkedButton() else "All"
+
+        # If a file path is selected, cookie_text_from_input should be considered empty for backend logic
+        if selected_cookie_file_path_for_backend:
+            cookie_text_from_input = ""
 
         if backend_filter_mode == 'archive':
             effective_skip_zip = False
@@ -2646,6 +2798,7 @@ class DownloaderApp(QWidget):
                 f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}" # Removed duplicate file handling log
             ])
         else:
+            # If only_links, cookie might still be relevant for accessing the page
             log_messages.append(f"   Mode: Extracting Links Only")
 
         log_messages.append(f"   Show External Links: {'Enabled' if self.show_external_links and not extract_links_only and backend_filter_mode != 'archive' else 'Disabled'}")
@@ -2657,6 +2810,11 @@ class DownloaderApp(QWidget):
                  log_messages.append(f"     ↳ Manga Character Filter (for naming/folder): {', '.join(item['name'] for item in filter_character_list_to_pass)}")
             log_messages.append(f"     ↳ Manga Duplicates: Will be renamed with numeric suffix if names clash (e.g., _1, _2).")
 
+        log_messages.append(f"   Use Cookie ('cookies.txt'): {'Enabled' if use_cookie_from_checkbox else 'Disabled'}")
+        if use_cookie_from_checkbox and cookie_text_from_input:
+            log_messages.append(f"     ↳ Cookie Text Provided: Yes (length: {len(cookie_text_from_input)})")
+        elif use_cookie_from_checkbox and selected_cookie_file_path_for_backend:
+            log_messages.append(f"     ↳ Cookie File Selected: {os.path.basename(selected_cookie_file_path_for_backend)}")
         should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
         # Adjust log message if date-based manga mode forced single thread
         if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not post_id_from_url:
@@ -2713,6 +2871,10 @@ class DownloaderApp(QWidget):
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
             'manga_date_file_counter_ref': manga_date_file_counter_ref_for_thread,
             'allow_multipart_download': allow_multipart,
+            'cookie_text': cookie_text_from_input, # Pass cookie text
+            'selected_cookie_file': selected_cookie_file_path_for_backend, # Pass selected cookie file
+            'app_base_dir': app_base_dir_for_cookies, # Pass app base dir
+            'use_cookie': use_cookie_from_checkbox, # Pass cookie setting
             # 'duplicate_file_mode' and session-wide tracking removed
         }
 
@@ -2736,7 +2898,7 @@ class DownloaderApp(QWidget):
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
                     'manga_date_file_counter_ref', # Ensure this is passed for single thread mode
                     'manga_mode_active', 'unwanted_keywords', 'manga_filename_style',
-                    'allow_multipart_download'
+                    'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
                 ]
                 args_template['skip_current_file_flag'] = None
                 single_thread_args = {key: args_template[key] for key in dt_expected_keys if key in args_template}
@@ -2938,7 +3100,7 @@ class DownloaderApp(QWidget):
             'cancellation_event', 'downloaded_files', 'downloaded_file_hashes',
             'downloaded_files_lock', 'downloaded_file_hashes_lock', 'remove_from_filename_words_list', 'dynamic_character_filter_holder', # Added holder
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
-            'show_external_links', 'extract_links_only', 'allow_multipart_download',
+            'show_external_links', 'extract_links_only', 'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', # Added selected_cookie_file
             'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
             'manga_mode_active', 'manga_filename_style'
         ]
@@ -2947,7 +3109,7 @@ class DownloaderApp(QWidget):
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
             'show_external_links', 'extract_links_only', 'duplicate_file_mode', # Added duplicate_file_mode here
             'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style',
-            'manga_date_file_counter_ref' # Add this
+            'manga_date_file_counter_ref', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
         }
         
         # --- Batching Logic ---
@@ -3066,7 +3228,10 @@ class DownloaderApp(QWidget):
             self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
             self.manga_mode_checkbox, 
             self.manga_rename_toggle_button, # Visibility handled by update_ui_for_manga_mode
+            self.cookie_browse_button, # Add cookie browse button
             self.multipart_toggle_button,
+            self.cookie_text_input, # Add cookie text input
+            self.use_cookie_checkbox, # Add cookie checkbox here
             self.external_links_checkbox
         ]
 
@@ -3082,7 +3247,7 @@ class DownloaderApp(QWidget):
             self.skip_zip_checkbox, self.skip_rar_checkbox, self.download_thumbnails_checkbox, self.compress_images_checkbox,
             self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
             self.use_multithreading_checkbox, self.thread_count_input, self.thread_count_label,
-            self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button,
+            self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.use_cookie_checkbox, self.cookie_text_input, self.cookie_browse_button,
             self.multipart_toggle_button,
             self.character_search_input, self.new_char_input, self.add_char_button, self.delete_char_button,
             self.reset_button
@@ -3104,9 +3269,18 @@ class DownloaderApp(QWidget):
         
         if self.external_links_checkbox:
             is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
-            self.external_links_checkbox.setEnabled(enabled and not is_only_links)
-            if self.is_paused and not is_only_links: # Also re-enable if paused and not in link mode
+            is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
+            can_enable_ext_links = enabled and not is_only_links and not is_only_archives
+            self.external_links_checkbox.setEnabled(can_enable_ext_links)
+            if self.is_paused and not is_only_links and not is_only_archives:
                 self.external_links_checkbox.setEnabled(True)
+
+        # Handle "Use Cookie" checkbox and text input
+        if hasattr(self, 'use_cookie_checkbox'):
+            self.use_cookie_checkbox.setEnabled(enabled or self.is_paused)
+            self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked()) # This will handle cookie_text_input's enabled state
+
+        if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setEnabled(enabled or self.is_paused)
 
         if self.log_verbosity_toggle_button: self.log_verbosity_toggle_button.setEnabled(True) # New button, always enabled
 
@@ -3176,6 +3350,13 @@ class DownloaderApp(QWidget):
         self.use_subfolder_per_post_checkbox.setChecked(False); self.use_multithreading_checkbox.setChecked(True);
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox: self.manga_mode_checkbox.setChecked(False)
+        if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setChecked(self.use_cookie_setting) # Reset to loaded or False
+        
+        # For soft reset, if a cookie file was selected, keep it displayed if "Use Cookie" remains checked.
+        # Otherwise, clear it. The _update_cookie_input_visibility will handle the display.
+        if not (hasattr(self, 'use_cookie_checkbox') and self.use_cookie_checkbox.isChecked()):
+            self.selected_cookie_filepath = None 
+        if hasattr(self, 'cookie_text_input'): self.cookie_text_input.setText(self.cookie_text_setting if self.use_cookie_setting else "") # Reset to loaded or empty
 
         # 2. Reset internal state for UI-managed settings to app defaults (not from QSettings)
         self.allow_multipart_download_setting = False # Default to OFF
@@ -3215,6 +3396,7 @@ class DownloaderApp(QWidget):
         # Explicitly call these to ensure they reflect changes from preserved inputs
         self.update_custom_folder_visibility(self.link_input.text())
         self.update_page_range_enabled_state()
+        self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False)
         # update_ui_for_manga_mode is called within set_ui_enabled
 
         self.log_signal.emit("✅ Soft UI reset complete. Preserved URL and Directory (if provided).")
@@ -3547,6 +3729,12 @@ class DownloaderApp(QWidget):
         self.use_subfolder_per_post_checkbox.setChecked(False); self.use_multithreading_checkbox.setChecked(True);
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox: self.manga_mode_checkbox.setChecked(False)        
+        if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setChecked(False) # Default to False on full reset
+        
+        # On full reset, always clear the selected cookie file path
+        self.selected_cookie_filepath = None
+
+        if hasattr(self, 'cookie_text_input'): self.cookie_text_input.clear() # Clear cookie text on full reset
 
         # Reset old summarization state (if any remnants) and new bold list state
         self.missed_title_key_terms_count.clear()
@@ -3567,6 +3755,7 @@ class DownloaderApp(QWidget):
         self._update_char_filter_scope_button_text()
 
         self.current_log_view = 'progress' # Reset to progress log view
+        self._update_cookie_input_visibility(False) # Hide cookie text input on full reset
         if self.log_view_stack: self.log_view_stack.setCurrentIndex(0)
         if self.progress_log_label: self.progress_log_label.setText("📜 Progress Log:")
 

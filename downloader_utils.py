@@ -63,6 +63,49 @@ ARCHIVE_EXTENSIONS = {
     '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'
 }
 
+# --- Cookie Helper Functions ---
+def parse_cookie_string(cookie_string):
+    """Parses a 'name=value; name2=value2' cookie string into a dict."""
+    cookies = {}
+    if cookie_string:
+        for item in cookie_string.split(';'):
+            parts = item.split('=', 1)
+            if len(parts) == 2:
+                name = parts[0].strip()
+                value = parts[1].strip()
+                if name: # Ensure name is not empty
+                    cookies[name] = value
+    return cookies if cookies else None
+
+def load_cookies_from_netscape_file(filepath, logger_func):
+    """Loads cookies from a Netscape-formatted cookies.txt file."""
+    cookies = {}
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split('\t')
+                if len(parts) == 7:
+                    # Netscape format: domain, flag, path, secure, expiration, name, value
+                    name = parts[5]
+                    value = parts[6]
+                    if name: # Ensure name is not empty
+                        cookies[name] = value
+                # else:
+                    # logger_func(f"   🍪 Cookie file line {line_num} malformed (expected 7 tab-separated parts): '{line[:50]}...'")
+        logger_func(f"   🍪 Loaded {len(cookies)} cookies from '{os.path.basename(filepath)}'.")
+        return cookies if cookies else None
+    except FileNotFoundError:
+        logger_func(f"   🍪 Cookie file '{os.path.basename(filepath)}' not found at expected location.")
+        return None
+    except Exception as e:
+        logger_func(f"   🍪 Error parsing cookie file '{os.path.basename(filepath)}': {e}")
+        return None
+
+# --- End Cookie Helper Functions ---
+
 def is_title_match_for_character(post_title, character_name_filter):
     if not post_title or not character_name_filter:
         return False
@@ -231,12 +274,31 @@ def extract_post_info(url_string):
     return None, None, None
 
 
-def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None):
+def prepare_cookies_for_request(use_cookie_flag, cookie_text_input, selected_cookie_file_path, app_base_dir, logger_func):
+    """Prepares a cookie dictionary from text input or cookies.txt file."""
+    if not use_cookie_flag:
+        return None
+
+    if cookie_text_input:
+        logger_func("   🍪 Using cookies from UI text input.")
+        return parse_cookie_string(cookie_text_input)
+    elif selected_cookie_file_path:
+        logger_func(f"   🍪 Attempting to load cookies from selected file: '{os.path.basename(selected_cookie_file_path)}'...")
+        return load_cookies_from_netscape_file(selected_cookie_file_path, logger_func)
+    elif app_base_dir:
+        cookies_filepath = os.path.join(app_base_dir, "cookies.txt")
+        logger_func(f"   🍪 No UI text or specific file selected. Attempting to load default '{os.path.basename(cookies_filepath)}' from app directory...")
+        return load_cookies_from_netscape_file(cookies_filepath, logger_func)
+    else:
+        logger_func("   🍪 Cookie usage enabled, but no text input, specific file, or app base directory provided for cookies.txt.")
+        return None
+
+def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None):    
     if cancellation_event and cancellation_event.is_set():
         logger("   Fetch cancelled before request.")
         raise RuntimeError("Fetch operation cancelled by user.")
 
-    if pause_event and pause_event.is_set():
+    if pause_event and pause_event.is_set(): # type: ignore        
         logger("   Post fetching paused...")
         while pause_event.is_set():
             if cancellation_event and cancellation_event.is_set():
@@ -248,7 +310,7 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
     paginated_url = f'{api_url_base}?o={offset}'
     logger(f"   Fetching: {paginated_url} (Page approx. {offset // 50 + 1})")
     try:
-        response = requests.get(paginated_url, headers=headers, timeout=(10, 60))
+        response = requests.get(paginated_url, headers=headers, timeout=(10, 60), cookies=cookies_dict)
         response.raise_for_status()
         if 'application/json' not in response.headers.get('Content-Type', '').lower():
             logger(f"⚠️ Unexpected content type from API: {response.headers.get('Content-Type')}. Body: {response.text[:200]}")
@@ -266,12 +328,12 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
     except Exception as e:
         raise RuntimeError(f"Unexpected error fetching offset {offset} ({paginated_url}): {e}")
 
-def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, cancellation_event=None, pause_event=None):
+def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, cancellation_event=None, pause_event=None, cookies_dict=None):
     if cancellation_event and cancellation_event.is_set():
         logger("   Comment fetch cancelled before request.")
         raise RuntimeError("Comment fetch operation cancelled by user.")
 
-    if pause_event and pause_event.is_set():
+    if pause_event and pause_event.is_set(): # type: ignore
         logger("   Comment fetching paused...")
         while pause_event.is_set():
             if cancellation_event and cancellation_event.is_set():
@@ -283,7 +345,7 @@ def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, 
     comments_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}/comments"
     logger(f"   Fetching comments: {comments_api_url}")
     try:
-        response = requests.get(comments_api_url, headers=headers, timeout=(10, 30)) # Shorter timeout for comments
+        response = requests.get(comments_api_url, headers=headers, timeout=(10, 30), cookies=cookies_dict)
         response.raise_for_status()
         if 'application/json' not in response.headers.get('Content-Type', '').lower():
             logger(f"⚠️ Unexpected content type from comments API: {response.headers.get('Content-Type')}. Body: {response.text[:200]}")
@@ -301,7 +363,8 @@ def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, 
     except Exception as e:
         raise RuntimeError(f"Unexpected error fetching comments for post {post_id} ({comments_api_url}): {e}")
 
-def download_from_api(api_url_input, logger=print, start_page=None, end_page=None, manga_mode=False, cancellation_event=None, pause_event=None):
+def download_from_api(api_url_input, logger=print, start_page=None, end_page=None, manga_mode=False,
+                      cancellation_event=None, pause_event=None, use_cookie=False, cookie_text="", selected_cookie_file=None, app_base_dir=None):
     headers = {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'}
     service, user_id, target_post_id = extract_post_info(api_url_input)
 
@@ -326,6 +389,11 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
         api_domain = "kemono.su"
 
     api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
+    
+    cookies_for_api = None
+    if use_cookie and app_base_dir: # app_base_dir is needed for cookies.txt path
+        cookies_for_api = prepare_cookies_for_request(use_cookie, cookie_text, selected_cookie_file, app_base_dir, logger)
+
     page_size = 50
 
     if is_creator_feed_for_manga:
@@ -334,7 +402,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
         current_offset_manga = 0
         while True:
             if pause_event and pause_event.is_set():
-                logger("   Manga mode post fetching paused...")
+                logger("   Manga mode post fetching paused...") # type: ignor
                 while pause_event.is_set():
                     if cancellation_event and cancellation_event.is_set():
                         logger("   Manga mode post fetching cancelled while paused.")
@@ -345,7 +413,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
                 logger("   Manga mode post fetching cancelled.")
                 break
             try:
-                posts_batch_manga = fetch_posts_paginated(api_base_url, headers, current_offset_manga, logger, cancellation_event, pause_event)
+                posts_batch_manga = fetch_posts_paginated(api_base_url, headers, current_offset_manga, logger, cancellation_event, pause_event, cookies_dict=cookies_for_api)
                 if not isinstance(posts_batch_manga, list):
                     logger(f"❌ API Error (Manga Mode): Expected list of posts, got {type(posts_batch_manga)}.")
                     break
@@ -413,7 +481,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
 
     while True:
         if pause_event and pause_event.is_set():
-            logger("   Post fetching loop paused...")
+            logger("   Post fetching loop paused...") # type: ignore
             while pause_event.is_set():
                 if cancellation_event and cancellation_event.is_set():
                     logger("   Post fetching loop cancelled while paused.")
@@ -432,7 +500,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
             break
 
         try:
-            posts_batch = fetch_posts_paginated(api_base_url, headers, current_offset, logger, cancellation_event, pause_event)
+            posts_batch = fetch_posts_paginated(api_base_url, headers, current_offset, logger, cancellation_event, pause_event, cookies_dict=cookies_for_api)
             if not isinstance(posts_batch, list):
                 logger(f"❌ API Error: Expected list of posts, got {type(posts_batch)} at page {current_page_num} (offset {current_offset}).")
                 break
@@ -529,6 +597,10 @@ class PostProcessorWorker:
                  char_filter_scope=CHAR_SCOPE_FILES,
                  remove_from_filename_words_list=None,
                  allow_multipart_download=True,
+                 cookie_text="", # Added missing parameter
+                 use_cookie=False, # Added missing parameter
+                 selected_cookie_file=None, # Added missing parameter
+                 app_base_dir=None, # New parameter for app's base directory
                  manga_date_file_counter_ref=None, # New parameter for date-based manga naming
                  ):
         self.post = post_data
@@ -574,7 +646,11 @@ class PostProcessorWorker:
         self.remove_from_filename_words_list = remove_from_filename_words_list if remove_from_filename_words_list is not None else []
         self.allow_multipart_download = allow_multipart_download
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store the reference
-        
+        self.selected_cookie_file = selected_cookie_file # Store selected cookie file path       
+        self.app_base_dir = app_base_dir # Store app base dir        
+        self.cookie_text = cookie_text # Store cookie text
+        self.use_cookie = use_cookie # Store cookie setting
+
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
@@ -636,6 +712,9 @@ class PostProcessorWorker:
         if self.check_cancel() or (skip_event and skip_event.is_set()): return 0, 1, "", False
 
         file_url = file_info.get('url')
+        cookies_to_use_for_file = None
+        if self.use_cookie: # This flag comes from the checkbox
+            cookies_to_use_for_file = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger)
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
         
         # This is the ideal name for the file if it were to be saved in the main target_folder_path.
@@ -777,7 +856,7 @@ class PostProcessorWorker:
 
                 self._emit_signal('file_download_status', True)
                 
-                response = requests.get(file_url, headers=headers, timeout=(15, 300), stream=True)
+                response = requests.get(file_url, headers=headers, timeout=(15, 300), stream=True, cookies=cookies_to_use_for_file)
                 response.raise_for_status()
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
 
@@ -795,7 +874,7 @@ class PostProcessorWorker:
                     mp_save_path_base_for_part = os.path.join(target_folder_path, filename_to_save_in_main_path)
                     mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
                         file_url, mp_save_path_base_for_part, total_size_bytes, num_parts_for_file, headers, api_original_filename,
-                        emitter_for_multipart=self.emitter, # Pass the worker's emitter
+                        emitter_for_multipart=self.emitter, cookies_for_chunk_session=cookies_to_use_for_file, # Pass cookies
                         cancellation_event=self.cancellation_event, skip_event=skip_event, logger_func=self.logger,
                         pause_event=self.pause_event # Pass pause_event
                     )
@@ -1140,7 +1219,10 @@ class PostProcessorWorker:
 
                     comments_data = fetch_post_comments(
                         api_domain_for_comments, self.service, self.user_id, post_id,
-                        headers, self.logger, self.cancellation_event, self.pause_event # Pass pause_event
+                        headers, self.logger, self.cancellation_event, self.pause_event, # Pass pause_event
+                        cookies_dict=prepare_cookies_for_request( # Prepare cookies for this API call
+                            self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger
+                        )
                     )
                     if comments_data:
                         self.logger(f"     Fetched {len(comments_data)} comments for post {post_id}.")
@@ -1536,6 +1618,8 @@ class DownloadThread(QThread):
                  char_filter_scope=CHAR_SCOPE_FILES, # manga_date_file_counter_ref removed from here
                  remove_from_filename_words_list=None,
                  allow_multipart_download=True,
+                 selected_cookie_file=None, # New parameter for selected cookie file
+                 app_base_dir=None, # New parameter
                  manga_date_file_counter_ref=None, # New parameter
                  ):
         super().__init__()
@@ -1580,6 +1664,10 @@ class DownloadThread(QThread):
         self.char_filter_scope = char_filter_scope
         self.remove_from_filename_words_list = remove_from_filename_words_list
         self.allow_multipart_download = allow_multipart_download
+        self.selected_cookie_file = selected_cookie_file # Store selected cookie file
+        self.app_base_dir = app_base_dir # Store app base dir
+        self.cookie_text = cookie_text # Store cookie text
+        self.use_cookie = use_cookie # Store cookie setting
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker by DownloadThread
         # self.manga_date_scan_dir = manga_date_scan_dir # Store scan directory
         if self.compress_images and Image is None:
@@ -1660,8 +1748,12 @@ class DownloadThread(QThread):
                 start_page=self.start_page,
                 end_page=self.end_page,
                 manga_mode=self.manga_mode_active,
-                cancellation_event=self.cancellation_event,
-                pause_event=self.pause_event # Pass pause_event
+                cancellation_event=self.cancellation_event, # type: ignore
+                pause_event=self.pause_event, # Pass pause_event
+                use_cookie=self.use_cookie, # Pass cookie settings for API calls
+                cookie_text=self.cookie_text,
+                selected_cookie_file=self.selected_cookie_file,
+                app_base_dir=self.app_base_dir
             )
 
             for posts_batch_data in post_generator:
@@ -1704,6 +1796,10 @@ class DownloadThread(QThread):
                          char_filter_scope=self.char_filter_scope,
                          remove_from_filename_words_list=self.remove_from_filename_words_list,
                          allow_multipart_download=self.allow_multipart_download,
+                         selected_cookie_file=self.selected_cookie_file, # Pass selected cookie file
+                         app_base_dir=self.app_base_dir, # Pass app_base_dir
+                         cookie_text=self.cookie_text, # Pass cookie text
+                         use_cookie=self.use_cookie, # Pass cookie setting to worker
                          manga_date_file_counter_ref=current_manga_date_file_counter_ref, # Pass the calculated or passed-in ref
                          )
                     try:

@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v3.4.0</h1>
+<h1 align="center">Kemono Downloader v3.5.0</h1>
 
 <div align="center">
   <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
@@ -11,8 +11,31 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-## ✨ What's New in v3.4.0?
+## ✨ What's New in v3.5.0?
 
+Version 3.5.0 focuses on enhancing access to content and providing even smarter organization:
+
+### 🍪 Enhanced Cookie Management
+
+- **Access Restricted Content:** Seamlessly download from Kemono/Coomer as if you were logged in by using your browser's cookies.
+- **Flexible Input:**
+  - Directly paste your cookie string (e.g., `name1=value1; name2=value2`).
+  - Browse and load cookies from a `cookies.txt` file (Netscape format).
+  - Automatic fallback to a `cookies.txt` file in the application directory if "Use Cookie" is enabled and no other source is specified.
+- **Easy Activation:** A simple "Use Cookie" checkbox in the UI controls this feature.
+- *Important Note: Cookie settings (text, file path, and enabled state) are configured per session and are not saved when the application is closed. You will need to re-apply them on each launch if needed.*
+
+---
+
+### 🗂️ Advanced `Known.txt` for Smart Folder Organization
+
+- **Fine-Grained Control:** Take your automatic folder organization to the next level with a personalized list of names, series titles, and keywords in `Known.txt`.
+- **Primary Names & Aliases:** Define a main folder name and link multiple aliases to it. For example, `([Power], powwr, pwr, Blood devil)` ensures any post matching "Power" or "powwr" (in title or filename, depending on settings) gets saved into a "Power" folder. Simple entries like `My Series` are also supported.
+- **Intelligent Fallback:** When "Separate Folders by Name/Title" is active, and if a post doesn't match any specific "Filter by Character(s)" input, the downloader consults `Known.txt` to find a matching primary name for folder creation.
+- **User-Friendly Management:** Add or remove primary names directly through the UI, or click "Open Known.txt" for advanced editing (e.g., setting up aliases).
+
+---
+## ✨ What's in v3.4.0? (Previous Update)
 This version brings significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
 
 ### 📖 Enhanced Manga/Comic Mode
@@ -185,9 +208,12 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ### 🗃️ Config System
 
-- **Known.txt:**
-  - Stores names for smart folder suggestions
-  - Supports aliases via `(alias1, alias2)`
+- **`Known.txt` for Smart Folder Naming:**
+  - A user-editable file (`Known.txt`) stores a list of preferred names, series titles, or keywords.
+  - Used as a fallback for folder creation when "Separate Folders by Name/Title" is enabled, helping to group content logically even without explicit character filters.
+  - **Supports primary names and aliases:**
+    - Simple entries: `My Favorite Series`
+    - Grouped entries with a primary name for the folder: `([Primary Name], alias1, alias2)`
 
 - **Stored in Standard App Data Path**
 
@@ -234,7 +260,7 @@ pyinstaller --name "Kemono Downloader" --onefile --windowed --icon="Kemono.ico" 
 ## **🗂 Config Files**
 
 - `Known.txt` — character/show names used for folder organization
-- Supports grouped names in format: `(Name1, Name2)`
+- Supports simple names (e.g., `My Series`) and grouped names with a primary folder name and aliases (e.g., `([Primary Folder Name], alias1, alias2)`).
 
 ***
 

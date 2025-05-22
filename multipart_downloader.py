@@ -13,7 +13,7 @@ DOWNLOAD_CHUNK_SIZE_ITER = 1024 * 256  # 256KB for iter_content within a chunk d
 
 
 def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, headers,
-                               part_num, total_parts, progress_data, cancellation_event, skip_event, pause_event, global_emit_time_ref, # Added global_emit_time_ref
+                               part_num, total_parts, progress_data, cancellation_event, skip_event, pause_event, global_emit_time_ref, cookies_for_chunk, # Added cookies_for_chunk
                                logger_func, emitter=None, api_original_filename=None): # Renamed logger, signals to emitter
     """Downloads a single chunk of a file and writes it to the temp file."""
     if cancellation_event and cancellation_event.is_set():
@@ -78,8 +78,8 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
             # Enhanced log message for chunk start
             log_msg = f"   🚀 [Chunk {part_num + 1}/{total_parts}] Starting download: bytes {start_byte}-{end_byte if end_byte != -1 else 'EOF'}"
             logger_func(log_msg)
-            print(f"DEBUG_MULTIPART: {log_msg}") # Direct console print for debugging
-            response = requests.get(chunk_url, headers=chunk_headers, timeout=(10, 120), stream=True)
+            # print(f"DEBUG_MULTIPART: {log_msg}") # Direct console print for debugging
+            response = requests.get(chunk_url, headers=chunk_headers, timeout=(10, 120), stream=True, cookies=cookies_for_chunk)
             response.raise_for_status()
 
             # For 0-byte files, if end_byte was -1, we expect 0 content.
@@ -159,7 +159,8 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
 
 
 def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, api_original_filename,
-                           emitter_for_multipart, cancellation_event, skip_event, logger_func, pause_event): # Added pause_event
+                           emitter_for_multipart, cookies_for_chunk_session, # Added cookies_for_chunk_session
+                           cancellation_event, skip_event, logger_func, pause_event):
     """
     Downloads a file in multiple parts concurrently.
     Returns: (download_successful_flag, downloaded_bytes, calculated_file_hash, temp_file_handle_or_None)
@@ -221,7 +222,7 @@ def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, 
                 _download_individual_chunk, chunk_url=file_url, temp_file_path=temp_file_path,
                 start_byte=start, end_byte=end, headers=headers, part_num=i, total_parts=num_parts,
                 progress_data=progress_data, cancellation_event=cancellation_event, skip_event=skip_event, global_emit_time_ref=progress_data['last_global_emit_time'],
-                pause_event=pause_event, logger_func=logger_func, emitter=emitter_for_multipart, # Pass pause_event and emitter
+                pause_event=pause_event, cookies_for_chunk=cookies_for_chunk_session, logger_func=logger_func, emitter=emitter_for_multipart,
                 api_original_filename=api_original_filename
             ))
 
