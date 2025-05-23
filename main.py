@@ -703,9 +703,8 @@ class DownloaderApp(QWidget):
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
-
-        self.load_known_names_from_util()
         self.setWindowTitle("Kemono Downloader v4.0.0")
+        # self.load_known_names_from_util() # This call is premature and causes the error.
         self.setStyleSheet(self.get_dark_theme())
 
         self.init_ui()
@@ -3819,6 +3818,17 @@ class DownloaderApp(QWidget):
 
 if __name__ == '__main__':
     import traceback
+    import sys # Ensure sys is imported here if not already
+    import os  # Ensure os is imported here
+    import time # For timestamping errors
+
+    def log_error_to_file(exc_info_tuple):
+        # Log file will be next to the .exe or main.py
+        log_file_path = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__), "critical_error_log.txt")
+        with open(log_file_path, "a", encoding="utf-8") as f:
+            f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            traceback.print_exception(*exc_info_tuple, file=f)
+            f.write("-" * 80 + "\n\n")
     try:
         qt_app = QApplication(sys.argv)
         if getattr(sys, 'frozen', False): base_dir = sys._MEIPASS

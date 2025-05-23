@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v3.5.0</h1>
+<h1 align="center">Kemono Downloader v4.0.0</h1>
 
 <div align="center">
   <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
@@ -11,7 +11,7 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-##  What's New in v3.5.0?
+##  What's New in v4.0.0?
 
 Version 3.5.0 focuses on enhancing access to content and providing even smarter organization:
 
@@ -39,11 +39,6 @@ The `Known.txt` file and the "Filter by Character(s)" input field work together 
 - **Simple Entries:**
   - A line like `My Awesome Series` or `Nami`.
   - **Behavior:** Content matching this term will be saved into a folder named "My Awesome Series" or "Nami" respectively (if "Separate Folders" is enabled).
-- **Grouped Alias Entries (for a single character/entity):**
-  - Format: `(PrimaryFolderName, alias1, alias2, ...)`
-  - **Example:** `(Boa Hancock, Boa, Hancock)`
-  - **Behavior:** Content matching "Boa Hancock", "Boa", OR "Hancock" will be saved into a folder named "Boa Hancock". The first item in the parentheses is the primary folder name; all items are matching aliases.
-  - **Example:** `(Power, powwr, pwr, Blood Devil)` creates a folder "Power" for content matching any of those terms.
 
 **2. "Filter by Character(s)" UI Input Field:**
 
@@ -58,7 +53,7 @@ This field allows for dynamic filtering for the current download session and pro
   - Input: `(Boa, Hancock)~`
   - Meaning: "Boa" and "Hancock" are different names/aliases for the *same character*. The names are listed within parentheses separated by commas (e.g., `name1, alias1, alias2`), and the entire group is followed by a `~` symbol. This is useful when a creator uses different names for the same character.
   - Session Behavior: Filters for "Boa" OR "Hancock". If "Separate Folders" is on, creates a single folder named "Boa Hancock".
-  - `Known.txt` Addition: If this group is new and selected for addition, it's added to `Known.txt` as a grouped alias entry, typically `(Boa Hancock, Boa, Hancock)`. The first name in the `Known.txt` entry (e.g., "Boa Hancock") becomes the primary folder name.
+  - `Known.txt` Addition: If this group is new and selected for addition, it's added to `Known.txt` as a grouped alias entry, typically `(Boa Hancock)`. The first name in the `Known.txt` entry (e.g., "Boa Hancock") becomes the primary folder name.
 
 - **Combined Folder for Distinct Characters (using `(...)` syntax):**
   - Input: `(Vivi, Uta)`
@@ -78,7 +73,7 @@ This field allows for dynamic filtering for the current download session and pro
 - **Direct Management:** You can add simple entries directly to `Known.txt` using the list and "Add" button in the UI's `Known.txt` management section. For creating or modifying complex grouped alias entries directly in the file, or for bulk edits, click the "Open Known.txt" button. The application reloads `Known.txt` on startup or before a download process begins.
 
 ---
-##  What's in v3.4.0? (Previous Update)
+##  What's in v3.5.0? (Previous Update)
 This version brings significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
 
 ###  Enhanced Manga/Comic Mode
@@ -135,7 +130,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ###  Updated Onboarding Tour
 
-- Improved guide for new users, covering v3.4.0 features and existing core functions.
+- Improved guide for new users, covering v4.0.0 features and existing core functions.
 
 ---
 
@@ -172,7 +167,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
   - Flexible input for current session and for adding to `Known.txt`.
   - Examples:
     - `Nami` (simple character)
-    - `(Boa ~ Hancock)` (aliases for one character, session folder "Boa Hancock", adds `(Boa Hancock, Boa, Hancock)` to `Known.txt`)
+    - `(Boa Hancock)~` (aliases for one character, session folder "Boa Hancock", adds `(Boa Hancock)` to `Known.txt`)
     - `(Vivi, Uta)` (distinct characters, session folder "Vivi Uta", adds `Vivi` and `Uta` separately to `Known.txt`)
   - See "Advanced `Known.txt` and Character Filtering" for full details.
   - **Filter Scopes:**
