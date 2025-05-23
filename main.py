@@ -705,7 +705,7 @@ class DownloaderApp(QWidget):
 
 
         self.load_known_names_from_util()
-        self.setWindowTitle("Kemono Downloader v3.5.0")
+        self.setWindowTitle("Kemono Downloader v4.0.0")
         self.setStyleSheet(self.get_dark_theme())
 
         self.init_ui()
