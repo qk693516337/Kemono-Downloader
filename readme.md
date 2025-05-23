@@ -11,13 +11,13 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-## ✨ What's New in v3.5.0?
+##  What's New in v3.5.0?
 
 Version 3.5.0 focuses on enhancing access to content and providing even smarter organization:
 
-### 🍪 Enhanced Cookie Management
+###  Cookie Management
 
-- **Access Restricted Content:** Seamlessly download from Kemono/Coomer as if you were logged in by using your browser's cookies.
+- **Access Content:** Seamlessly download from Kemono/Coomer as if you were logged in by using your browser's cookies.
 - **Flexible Input:**
   - Directly paste your cookie string (e.g., `name1=value1; name2=value2`).
   - Browse and load cookies from a `cookies.txt` file (Netscape format).
@@ -27,7 +27,7 @@ Version 3.5.0 focuses on enhancing access to content and providing even smarter 
 
 ---
 
-### 🗂️ Advanced `Known.txt` for Smart Folder Organization
+###  Advanced `Known.txt` for Smart Folder Organization
 
 - **Fine-Grained Control:** Take your automatic folder organization to the next level with a personalized list of names, series titles, and keywords in `Known.txt`.
 - **Primary Names & Aliases:** Define a main folder name and link multiple aliases to it. For example, `([Power], powwr, pwr, Blood devil)` ensures any post matching "Power" or "powwr" (in title or filename, depending on settings) gets saved into a "Power" folder. Simple entries like `My Series` are also supported.
@@ -35,10 +35,10 @@ Version 3.5.0 focuses on enhancing access to content and providing even smarter 
 - **User-Friendly Management:** Add or remove primary names directly through the UI, or click "Open Known.txt" for advanced editing (e.g., setting up aliases).
 
 ---
-## ✨ What's in v3.4.0? (Previous Update)
+##  What's in v3.4.0? (Previous Update)
 This version brings significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
 
-### 📖 Enhanced Manga/Comic Mode
+###  Enhanced Manga/Comic Mode
 
 - **New "Date Based" Filename Style:**
 
@@ -52,7 +52,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### ✂️ "Remove Words from Filename" Feature
+###  "Remove Words from Filename" Feature
 
 - Specify comma-separated words or phrases (case-insensitive) that will be automatically removed from filenames.
 
@@ -60,7 +60,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 📦 New "Only Archives" File Filter Mode
+###  New "Only Archives" File Filter Mode
 
 - Exclusively downloads `.zip` and `.rar` files.
 
@@ -68,7 +68,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 🗣️ Improved Character Filter Scope - "Comments (Beta)"
+###  Improved Character Filter Scope - "Comments (Beta)"
 
 - **File-First Check:** Prioritizes matching filenames before checking post comments for character names.
 
@@ -76,7 +76,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 🧐 Refined "Missed Character Log"
+###  Refined "Missed Character Log"
 
 - Displays a capitalized, alphabetized list of key terms from skipped post titles.
 
@@ -84,25 +84,25 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 🚀 Enhanced Multi-part Download Progress
+###  Enhanced Multi-part Download Progress
 
 - Granular visibility into active chunk downloads and combined speed for large files.
 
 ---
 
-### 🗺️ Updated Onboarding Tour
+###  Updated Onboarding Tour
 
 - Improved guide for new users, covering v3.4.0 features and existing core functions.
 
 ---
 
-### 🛡️ Robust Configuration Path
+###  Robust Configuration Path
 
-- Settings and `Known.txt` are now stored in the system-standard application data folder (e.g., `AppData`, `~/.local/share`).
+- Settings and `Known.txt` are now stored in the same folder as app.
 
 ---
 
-## 🖥️ Core Features
+##  Core Features
 
 ---
 
@@ -122,7 +122,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 🧠 Smart Filtering
+###  Smart Filtering
 
 - **Character Name Filtering:**
   - Use `Tifa, Aerith` or group `(Boa, Hancock)` → folder `Boa Hancock`
@@ -149,7 +149,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 📚 Manga/Comic Mode (Creator Feeds Only)
+### Manga/Comic Mode (Creator Feeds Only)
 
 - **Chronological Processing** — Oldest posts first
 
@@ -162,7 +162,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 📁 Folder Structure & Naming
+### Folder Structure & Naming
 
 - **Subfolders:**
   - Auto-created based on character name, post title, or `Known.txt`
@@ -173,7 +173,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 🖼️ Thumbnail & Compression Tools
+### Thumbnail & Compression Tools
 
 - **Download Thumbnails Only**
 
@@ -182,7 +182,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### ⚙️ Performance Features
+###  Performance Features
 
 - **Multithreading:**
   - For both post processing and file downloading
@@ -194,7 +194,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 📋 Logging & Progress
+### Logging & Progress
 
 - **Real-time Logs:** Activity, errors, skipped posts
 
@@ -206,7 +206,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-### 🗃️ Config System
+###  Config System
 
 - **`Known.txt` for Smart Folder Naming:**
   - A user-editable file (`Known.txt`) stores a list of preferred names, series titles, or keywords.
@@ -221,7 +221,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ---
 
-## 💻 Installation
+## Installation
 
 ---
 
@@ -241,7 +241,7 @@ pip install PyQt5 requests Pillow
 
 ***
 
-## **🛠️ Build a Standalone Executable (Optional)**
+## ** Build a Standalone Executable (Optional)**
 
 1. Install PyInstaller:
 ```bash
@@ -257,14 +257,14 @@ pyinstaller --name "Kemono Downloader" --onefile --windowed --icon="Kemono.ico" 
 
 ***
 
-## **🗂 Config Files**
+## ** Config Files**
 
 - `Known.txt` — character/show names used for folder organization
 - Supports simple names (e.g., `My Series`) and grouped names with a primary folder name and aliases (e.g., `([Primary Folder Name], alias1, alias2)`).
 
 ***
 
-## **💬 Feedback & Support**
+## ** Feedback & Support**
 
 Issues? Suggestions?  
 Open an issue on the [GitHub repository](https://github.com/Yuvi9587/kemono-downloader) or join our community.

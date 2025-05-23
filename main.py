@@ -21,7 +21,8 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton, QButtonGroup, QCheckBox, QSplitter,
-    QDialog, QStackedWidget, QScrollArea,
+    QDialog, QStackedWidget, QScrollArea, 
+    QAbstractItemView, # Added for QListWidget.NoSelection
     QFrame,
     QAbstractButton
 )
@@ -85,7 +86,6 @@ except Exception as e:
 MAX_THREADS = 200
 RECOMMENDED_MAX_THREADS = 50
 MAX_FILE_THREADS_PER_POST_OR_WORKER = 10
-# New constants for batching high thread counts for post workers
 POST_WORKER_BATCH_THRESHOLD = 30
 POST_WORKER_NUM_BATCHES = 4
 SOFT_WARNING_THREAD_THRESHOLD = 40 # New constant for soft warning
@@ -106,9 +106,75 @@ ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 USE_COOKIE_KEY = "useCookieV1" # New setting key
 COOKIE_TEXT_KEY = "cookieTextV1" # New setting key for cookie text
 CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
-# CHAR_SCOPE_TITLE, CHAR_SCOPE_FILES, CHAR_SCOPE_BOTH, CHAR_SCOPE_COMMENTS are already defined or imported
 
-# --- Tour Classes (Moved from tour.py) ---
+# Custom dialog result constants for ConfirmAddAllDialog
+CONFIRM_ADD_ALL_ACCEPTED = 1
+CONFIRM_ADD_ALL_SKIP_ADDING = 2
+CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3
+
+class ConfirmAddAllDialog(QDialog):
+    """A dialog to confirm adding multiple new names to Known.txt."""
+    def __init__(self, new_names_list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Confirm Adding New Names")
+        self.setModal(True)
+        self.new_names_list = new_names_list
+        self.user_choice = CONFIRM_ADD_ALL_CANCEL_DOWNLOAD # Default to cancel if closed
+
+        main_layout = QVBoxLayout(self)
+
+        info_label = QLabel(
+            "The following new names/groups from your 'Filter by Character(s)' input are not in 'Known.txt'.\n"
+            "Adding them can improve folder organization for future downloads.\n\n"
+            "Review the list and choose an action:"
+        )
+        info_label.setWordWrap(True)
+        main_layout.addWidget(info_label)
+
+        self.names_list_widget = QListWidget()
+        self.names_list_widget.addItems(self.new_names_list)
+        self.names_list_widget.setSelectionMode(QAbstractItemView.NoSelection) # Just for display
+        main_layout.addWidget(self.names_list_widget)
+
+        buttons_layout = QHBoxLayout()
+        
+        self.add_all_button = QPushButton("Add All to Known.txt")
+        self.add_all_button.clicked.connect(self._accept_add_all)
+        buttons_layout.addWidget(self.add_all_button)
+
+        self.skip_adding_button = QPushButton("Skip Adding These")
+        self.skip_adding_button.clicked.connect(self._reject_skip_adding)
+        buttons_layout.addWidget(self.skip_adding_button)
+
+        buttons_layout.addStretch()
+
+        self.cancel_download_button = QPushButton("Cancel Download")
+        self.cancel_download_button.clicked.connect(self._reject_cancel_download)
+        buttons_layout.addWidget(self.cancel_download_button)
+        
+        main_layout.addLayout(buttons_layout)
+
+        self.setMinimumWidth(480)
+        self.setMinimumHeight(350)
+        if parent and hasattr(parent, 'get_dark_theme'):
+            self.setStyleSheet(parent.get_dark_theme())
+        self.add_all_button.setDefault(True)
+
+    def _accept_add_all(self):
+        self.user_choice = CONFIRM_ADD_ALL_ACCEPTED
+        self.accept()
+
+    def _reject_skip_adding(self):
+        self.user_choice = CONFIRM_ADD_ALL_SKIP_ADDING
+        self.reject() # QDialog.reject() is fine, we check user_choice
+
+    def _reject_cancel_download(self):
+        self.user_choice = CONFIRM_ADD_ALL_CANCEL_DOWNLOAD
+        self.reject() # QDialog.reject() is fine, we check user_choice
+
+    def exec_(self):
+        super().exec_()
+        return self.user_choice
 class TourStepWidget(QWidget):
     """A single step/page in the tour."""
     def __init__(self, title_text, content_text, parent=None):
@@ -119,11 +185,8 @@ class TourStepWidget(QWidget):
 
         title_label = QLabel(title_text)
         title_label.setAlignment(Qt.AlignCenter)
-        # Increased padding-bottom for more space below title
         title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E0E0; padding-bottom: 15px;")
         layout.addWidget(title_label)
-
-        # Create QScrollArea for content
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True) # Important for the content_label to resize correctly
         scroll_area.setFrameShape(QFrame.NoFrame) # Make it look seamless with the dialog
@@ -133,19 +196,11 @@ class TourStepWidget(QWidget):
 
         content_label = QLabel(content_text)
         content_label.setWordWrap(True)
-        # AlignTop ensures text starts from the top if it's shorter than the scroll area view
         content_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         content_label.setTextFormat(Qt.RichText)
-        # Adjusted line-height for bullet point readability
         content_label.setStyleSheet("font-size: 11pt; color: #C8C8C8; line-height: 1.8;")
-
-        # Set the content_label as the widget for the scroll_area
         scroll_area.setWidget(content_label)
-
-        # Add the scroll_area to the layout, allowing it to take available space
         layout.addWidget(scroll_area, 1) # The '1' is a stretch factor
-
-        # Removed layout.addStretch(1) as the scroll_area now handles stretching.
 
 
 class TourDialog(QDialog):
@@ -168,7 +223,6 @@ class TourDialog(QDialog):
 
         self.setWindowTitle("Welcome to Kemono Downloader!")
         self.setModal(True)
-        # Set fixed square size, smaller than main window
         self.setFixedSize(600, 620) # Slightly adjusted for potentially more text
         self.setStyleSheet("""
             QDialog {
@@ -208,7 +262,6 @@ class TourDialog(QDialog):
 
     def _center_on_screen(self):
         """Centers the dialog on the screen."""
-        # Updated to use availableGeometry and center more reliably
         try:
             primary_screen = QApplication.primaryScreen()
             if not primary_screen:
@@ -233,8 +286,6 @@ class TourDialog(QDialog):
 
         self.stacked_widget = QStackedWidget()
         main_layout.addWidget(self.stacked_widget, 1)
-
-        # --- Define Tour Steps with Updated Content ---
         step1_content = (
             "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie management."
             "<ul>"
@@ -268,7 +319,7 @@ class TourDialog(QDialog):
             "<ul>"
             "<li><b>🎯 Filter by Character(s):</b><br>"
             "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2)</i> becomes folder 'alias1 alias2'.<br>"
-            "   The <b>'Filter: [Scope]'</b> button next to this input controls how this filter is applied:"
+            "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3' (after cleaning).\nAll names in the group are used as aliases for matching.\n"
             "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename.</li>"
             "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>"
             "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li>"
@@ -342,7 +393,7 @@ class TourDialog(QDialog):
             "<li><b>🎭 Known.txt for Smart Folder Organization:</b><br>"
             "   Fine-grained control over automatic folder organization using a personalized list in <b>Known.txt</b>."
             "   <ul>"
-            "       <li><b>Primary Names & Aliases:</b> Define a main folder name and link multiple aliases. For example, an entry like <code>([Power], powwr, pwr, Blood devil)</code> ensures any post matching \"Power\", \"powwr\", etc. (based on your filter scope) gets saved into a \"Power\" folder. Simple entries like <code>My Series</code> are also supported. The primary name for the folder is the one in <code>[]</code> brackets, or the first one if no brackets.</li>"
+            "       <li><b>Grouped Entries (Aliases):</b> Define a set of aliases that should all map to a single folder name. For example, an entry like <code>(Power, powwr, pwr, Blood devil)</code> in Known.txt means any post matching \"Power\", \"powwr\", etc. (based on your filter scope) will be saved into a folder named \"Power powwr pwr Blood devil\" (after cleaning). Simple entries like <code>My Series</code> are also supported. The folder name for a group is derived from the *entire content* inside the parentheses, with commas replaced by spaces before cleaning.</li>"
             "       <li><b>Intelligent Fallback:</b> When 'Separate Folders by Name/Title' is active, and if a post doesn't match any specific 'Filter by Character(s)' input, the downloader consults <code>Known.txt</code> to find a matching primary name for folder creation.</li>"
             "       <li><b>User-Friendly Management:</b> Add or remove primary names directly through the UI list below. For advanced editing (like setting up aliases or defining the primary name for a group), click <b>'Open Known.txt'</b> to edit the file directly.</li>"
             "   </ul>"
@@ -408,8 +459,6 @@ class TourDialog(QDialog):
         if self.never_show_again_checkbox.isChecked():
             self.settings.setValue(self.TOUR_SHOWN_KEY, True)
             self.settings.sync()
-        # else:
-            # print(f"[Tour] '{self.TOUR_SHOWN_KEY}' setting not set to True (checkbox was unchecked on exit).")
 
 
     def _next_step_action(self):
@@ -456,12 +505,8 @@ class TourDialog(QDialog):
             if primary_screen:
                 available_geo = primary_screen.availableGeometry()
                 screen_w, screen_h = available_geo.width(), available_geo.height()
-
-                # Calculate preferred size for tour dialog (e.g., 50% width, 60% height)
                 pref_w = int(screen_w * 0.50)
                 pref_h = int(screen_h * 0.60)
-
-                # Apply constraints (min/max)
                 min_w, max_w = 550, 700
                 min_h, max_h = 580, 750
                 
@@ -479,26 +524,18 @@ class TourDialog(QDialog):
 
         except Exception as e:
             print(f"[Tour] CRITICAL ERROR in run_tour_if_needed: {e}")
-            # traceback.print_exc() # Keep console cleaner for this specific case
             return QDialog.Rejected
-# --- End Tour Classes ---
-
-# Helper class to hold dynamic character filters
 class DynamicFilterHolder:
     def __init__(self, initial_filters=None):
         self.lock = threading.Lock()
-        # Store filters as a list of dicts, same as parsed_character_filter_objects
         self._filters = initial_filters if initial_filters is not None else []
 
     def get_filters(self):
         with self.lock:
-            # Return a deep copy to prevent modification of the internal list by workers
-            # and to ensure thread safety if workers iterate over it while it's being set.
             return [dict(f) for f in self._filters]
 
     def set_filters(self, new_filters):
         with self.lock:
-            # Store a deep copy, ensuring new_filters is a list of dicts
             self._filters = [dict(f) for f in (new_filters if new_filters else [])]
 
 class DownloaderApp(QWidget):
@@ -508,23 +545,15 @@ class DownloaderApp(QWidget):
     overall_progress_signal = pyqtSignal(int, int)
     finished_signal = pyqtSignal(int, int, bool, list)
     external_link_signal = pyqtSignal(str, str, str, str)
-    # Changed to object to handle both (int, int) for single stream and list for multipart
     file_progress_signal = pyqtSignal(str, object)
 
 
     def __init__(self):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
-
-        # Determine path for Known.txt in the application's directory
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Application is frozen (bundled with PyInstaller or similar)
-            # sys.executable is the path to the .exe file
             app_base_dir = os.path.dirname(sys.executable)
         else:
-            # This is the directory where main.py (and thus potentially cookies.txt) resides
-            # Application is running as a script
-            # __file__ is the path to the script file
             app_base_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_file = os.path.join(app_base_dir, "Known.txt")
 
@@ -537,12 +566,16 @@ class DownloaderApp(QWidget):
         self.dynamic_character_filter_holder = DynamicFilterHolder() # For live character filter updates
         self.processed_posts_count = 0
         self.download_counter = 0
-        self.skip_counter = 0
+        self.skip_counter = 0        
+        self.all_kept_original_filenames = [] # Initialize this attribute
+
+        # Ensure these are initialized even if UI elements aren't fully ready
+        self.manga_mode_checkbox = None 
+
         self.selected_cookie_filepath = None # For storing path from browse button
         self.retryable_failed_files_info = [] # For storing info about files that failed but can be retried
 
         self.is_paused = False # New state for pause functionality
-        # For handling signals from worker threads via a queue
         self.worker_to_gui_queue = queue.Queue()
         self.gui_update_timer = QTimer(self)
         self.actual_gui_signals = PostProcessorSignals() # Renamed from self.worker_signals
@@ -561,9 +594,6 @@ class DownloaderApp(QWidget):
         self._is_processing_external_link_queue = False
         self._current_link_post_title = None
         self.extracted_links_cache = []
-        
-        # self.basic_log_mode = False # No longer used with this button
-        # self.log_verbosity_button = None # Old text button, already removed
         self.manga_rename_toggle_button = None
         
         self.main_log_output = None
@@ -583,12 +613,9 @@ class DownloaderApp(QWidget):
         self.export_links_button = None # For exporting links
         self.radio_only_links = None
         self.radio_only_archives = None
-
-        # For Missed Character Log summarization
         self.missed_title_key_terms_count = {}
         self.missed_title_key_terms_examples = {}
         self.logged_summary_for_key_term = set()
-        # self.missed_character_log_threshold = 4 # No longer needed for new style
         self.STOP_WORDS = set(["a", "an", "the", "is", "was", "were", "of", "for", "with", "in", "on", "at", "by", "to", "and", "or", "but", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its", "our", "their", "com", "net", "org", "www"])
         self.already_logged_bold_key_terms = set() # For the new simple bolded list
         self.missed_key_terms_buffer = [] # To store terms for alphabetical sorting
@@ -597,10 +624,7 @@ class DownloaderApp(QWidget):
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
         self.skip_words_scope = self.settings.value(SKIP_WORDS_SCOPE_KEY, SKIP_SCOPE_POSTS, type=str)
         self.char_filter_scope = self.settings.value(CHAR_FILTER_SCOPE_KEY, CHAR_SCOPE_FILES, type=str) # Default to Files
-        # Always default multi-part download to OFF on launch, ignoring any saved setting.
         self.allow_multipart_download_setting = False 
-
-        # Ensure "Use Cookie" is unchecked and text is empty by default on every launch
         self.use_cookie_setting = False # Always default to False on launch
         self.cookie_text_setting = ""   # Always default to empty on launch
 
@@ -609,7 +633,6 @@ class DownloaderApp(QWidget):
 
         self.load_known_names_from_util()
         self.setWindowTitle("Kemono Downloader v3.5.0")
-        # self.setGeometry(150, 150, 1050, 820) # Initial geometry will be set after showing
         self.setStyleSheet(self.get_dark_theme())
 
         self.init_ui()
@@ -618,7 +641,7 @@ class DownloaderApp(QWidget):
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
         self.log_signal.emit("ℹ️ 'Skip Current File' button has been removed.")
         if hasattr(self, 'character_input'):
-            self.character_input.setToolTip("Names, comma-separated. Group aliases: (alias1, alias2) for combined folder name 'alias1 alias2'. E.g., yor, (Boa, Hancock)")
+            self.character_input.setToolTip("Names, comma-separated. Group aliases: (alias1, alias2, alias3) becomes folder name 'alias1 alias2 alias3' (after cleaning).\nAll names in the group are used as aliases for matching.\nE.g., yor, (Boa, Hancock, Snake Princess)")
         self.log_signal.emit(f"ℹ️ Manga filename style loaded: '{self.manga_filename_style}'")
         self.log_signal.emit(f"ℹ️ Skip words scope loaded: '{self.skip_words_scope}'")
         self.log_signal.emit(f"ℹ️ Character filter scope loaded: '{self.char_filter_scope}'")
@@ -626,9 +649,15 @@ class DownloaderApp(QWidget):
         self.log_signal.emit(f"ℹ️ Cookie text defaults to: Empty on launch")
         self.log_signal.emit(f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
 
-
+    def _get_tooltip_for_character_input(self):
+        return (
+            "Names, comma-separated.\n"
+            "- Individual names: `Tifa`, `Aerith`\n"
+            "- Group for separate folders: `(Vivi, Ulti, Uta)` -> creates separate Known.txt entries & folders for Vivi, Ulti, Uta.\n"
+            "- Group for a single shared folder: `(Yuffie, Sonon)~` (note the `~`) -> creates one Known.txt entry for folder 'Yuffie Sonon', with Yuffie and Sonon as aliases.\n"
+            "All names in any group type are used as aliases for matching content."
+        )
     def _connect_signals(self):
-        # Signals from the GUI's perspective (emitted by _process_worker_queue or directly)
         self.actual_gui_signals.progress_signal.connect(self.handle_main_log)
         self.actual_gui_signals.file_progress_signal.connect(self.update_file_progress_display)
         self.actual_gui_signals.missed_character_post_signal.connect(self.handle_missed_character_post)
@@ -637,7 +666,6 @@ class DownloaderApp(QWidget):
         
         if hasattr(self, 'character_input'): # Connect live update for character input
             self.character_input.textChanged.connect(self._on_character_input_changed_live)
-        # Timer for processing the worker queue
         if hasattr(self, 'use_cookie_checkbox'): 
             self.use_cookie_checkbox.toggled.connect(self._update_cookie_input_visibility)
         if hasattr(self, 'cookie_browse_button'): # Connect the new browse button
@@ -646,18 +674,11 @@ class DownloaderApp(QWidget):
             self.cookie_text_input.textChanged.connect(self._handle_cookie_text_manual_change)
         self.gui_update_timer.timeout.connect(self._process_worker_queue)
         self.gui_update_timer.start(100) # Check queue every 100ms
-
-        # Direct GUI signals
         self.log_signal.connect(self.handle_main_log)
         self.add_character_prompt_signal.connect(self.prompt_add_character)
         self.character_prompt_response_signal.connect(self.receive_add_character_result)
         self.overall_progress_signal.connect(self.update_progress_display)
         self.finished_signal.connect(self.download_finished)
-        # self.external_link_signal.connect(self.handle_external_link_signal) # Covered by actual_gui_signals
-        # self.retryable_file_failed_signal will be connected in start_single_threaded_download
-        # self.file_progress_signal.connect(self.update_file_progress_display) # Covered by actual_gui_signals
-
-        # UI element connections
         if hasattr(self, 'character_search_input'): self.character_search_input.textChanged.connect(self.filter_character_list)
         if hasattr(self, 'external_links_checkbox'): self.external_links_checkbox.toggled.connect(self.update_external_links_setting)
         if hasattr(self, 'thread_count_input'): self.thread_count_input.textChanged.connect(self.update_multithreading_label)
@@ -699,15 +720,11 @@ class DownloaderApp(QWidget):
         If a download is active (running or paused), this updates the dynamic filter holder.
         """
         if self._is_download_active(): # Only update if download is active/paused
-            # self.log_signal.emit("ℹ️ Character filter input changed during active session. Updating dynamic filters...")
-            # Use QCoreApplication.processEvents() to keep UI responsive during parsing if it's complex
             QCoreApplication.processEvents()
             raw_character_filters_text = self.character_input.text().strip()
             parsed_filters = self._parse_character_filters(raw_character_filters_text)
             
             self.dynamic_character_filter_holder.set_filters(parsed_filters)
-            # Limit logging to avoid spamming if typing fast
-            # self.log_signal.emit(f"   Dynamic filters updated to: {', '.join(item['name'] for item in parsed_filters) if parsed_filters else 'None'}")
 
     def _parse_character_filters(self, raw_text):
         """Helper to parse character filter string into list of objects."""
@@ -717,10 +734,11 @@ class DownloaderApp(QWidget):
             current_part_buffer = ""
             in_group_parsing = False
             for char_token in raw_text:
-                if char_token == '(':
+                if char_token == '(' and not in_group_parsing: # Only start group if not already in one
                     in_group_parsing = True
                     current_part_buffer += char_token
-                elif char_token == ')':
+                elif char_token == ')' and in_group_parsing: # Only end group if currently in one
+                    # Check for tilde immediately after closing parenthesis
                     in_group_parsing = False
                     current_part_buffer += char_token
                 elif char_token == ',' and not in_group_parsing:
@@ -733,14 +751,25 @@ class DownloaderApp(QWidget):
             for part_str in raw_parts:
                 part_str = part_str.strip()
                 if not part_str: continue
-                if part_str.startswith("(") and part_str.endswith(")"):
+
+                is_tilde_group = part_str.startswith("(") and part_str.endswith(")~")
+                is_standard_group_for_splitting = part_str.startswith("(") and part_str.endswith(")") and not is_tilde_group
+
+                if is_tilde_group:
+                    group_content_str = part_str[1:-2].strip() # Remove ( ) and ~
+                    aliases_in_group = [alias.strip() for alias in group_content_str.split(',') if alias.strip()]
+                    if aliases_in_group:
+                        group_folder_name = " ".join(aliases_in_group) # Folder name from all aliases
+                        parsed_character_filter_objects.append({"name": group_folder_name, "is_group": True, "aliases": aliases_in_group})
+                elif is_standard_group_for_splitting:
                     group_content_str = part_str[1:-1].strip()
                     aliases_in_group = [alias.strip() for alias in group_content_str.split(',') if alias.strip()]
                     if aliases_in_group:
-                        group_folder_name = " ".join(aliases_in_group)
-                        parsed_character_filter_objects.append({"name": group_folder_name, "is_group": True, "aliases": aliases_in_group})
+                        # Create separate entries for each item in a non-tilde group
+                        for alias_item in aliases_in_group:
+                            parsed_character_filter_objects.append({"name": alias_item, "is_group": False, "aliases": [alias_item]})
                 else:
-                    parsed_character_filter_objects.append({"name": part_str, "is_group": False, "aliases": [part_str]})
+                    parsed_character_filter_objects.append({"name": part_str, "is_group": False, "aliases": [part_str]}) # Standard single entry
         return parsed_character_filter_objects
 
     def _process_worker_queue(self):
@@ -779,45 +808,27 @@ class DownloaderApp(QWidget):
                         line = line.strip()
                         if not line: continue
 
-                        if line.startswith("(") and line.endswith(")"):
+                        if line.startswith("(") and line.endswith(")"): # Grouped entry
                             content = line[1:-1].strip()
                             parts = [p.strip() for p in content.split(',') if p.strip()]
                             if parts:
-                                potential_primary_name = None
-                                all_aliases_in_line = []
-                                remaining_parts = list(parts) # Create a mutable copy
+                                # The folder name is the cleaned version of the full content inside parentheses
+                                folder_name_raw = content.replace(',', ' ') # Replace commas with spaces for cleaning
+                                folder_name_cleaned = clean_folder_name(folder_name_raw)
 
-                                # First, find and process the bracketed primary name
-                                for i, part_check_brackets in enumerate(parts):
-                                    if part_check_brackets.startswith('[') and part_check_brackets.endswith(']'):
-                                        potential_primary_name = part_check_brackets[1:-1].strip()
-                                        if potential_primary_name:
-                                            all_aliases_in_line.append(potential_primary_name)
-                                            remaining_parts.pop(i) # Remove the processed primary name part
-                                        break # Found the bracketed name
+                                # The aliases are the individual parts for matching
+                                unique_aliases_set = {p for p in parts} # parts are already stripped
+                                final_aliases_list = sorted(list(unique_aliases_set), key=str.lower) # Sort all aliases alphabetically
 
-                                # If no bracketed name was found, use the first part as primary (fallback)
-                                if not potential_primary_name and parts:
-                                    potential_primary_name = parts[0].strip()
-                                    all_aliases_in_line.append(potential_primary_name)
-                                    if remaining_parts and remaining_parts[0] == potential_primary_name: # Avoid double-adding if it was the first
-                                        remaining_parts.pop(0)
+                                if not folder_name_cleaned:
+                                     if hasattr(self, 'log_signal'): self.log_signal.emit(f"⚠️ Group resulted in empty folder name after cleaning in Known.txt on line {line_num}: '{line}'. Skipping entry.")
+                                     continue
 
-                                # Add remaining parts as unique aliases
-                                for part in remaining_parts:
-                                    cleaned_part = part.strip()
-                                    if cleaned_part and cleaned_part not in all_aliases_in_line:
-                                        all_aliases_in_line.append(cleaned_part)
-
-                                if not potential_primary_name: # Should not happen if parts is not empty
-                                    if hasattr(self, 'log_signal'): self.log_signal.emit(f"⚠️ Could not determine primary name in Known.txt on line {line_num}: '{line}'")
-                                    continue
-                                else: # This is the 'else' statement from the error
-                                    parsed_known_objects.append({ # This block needs to be indented
-                                        "name": potential_primary_name,
-                                        "is_group": True,
-                                        "aliases": all_aliases_in_line # Already unique and primary is first
-                                    })
+                                parsed_known_objects.append({
+                                    "name": folder_name_cleaned, # This is the new folder name derived from full content
+                                    "is_group": True,
+                                    "aliases": final_aliases_list # These are used for matching in text
+                                })
                             else:
                                 if hasattr(self, 'log_signal'): self.log_signal.emit(f"⚠️ Empty group found in Known.txt on line {line_num}: '{line}'")
                         else:
@@ -826,9 +837,7 @@ class DownloaderApp(QWidget):
                                 "is_group": False,
                                 "aliases": [line] # Simple entry, alias is itself
                             })
-                
-                # Sort by primary name, case-insensitive
-                parsed_known_objects.sort(key=lambda x: x["name"].lower())
+                parsed_known_objects.sort(key=lambda x: x["name"].lower()) # Sort by primary name
                 KNOWN_NAMES[:] = parsed_known_objects # Update global list
                 log_msg = f"ℹ️ Loaded {len(KNOWN_NAMES)} known entries from {self.config_file}"
             except Exception as e:
@@ -836,44 +845,33 @@ class DownloaderApp(QWidget):
                 QMessageBox.warning(self, "Config Load Error", f"Could not load list from {self.config_file}:\n{e}")
                 KNOWN_NAMES[:] = []
         else:
-            log_msg = f"ℹ️ Config file '{self.config_file}' not found. Starting with default entries."
-            KNOWN_NAMES[:] = []
+            self.character_input.setToolTip("Names, comma-separated. Group aliases: (alias1, alias2, alias3) becomes folder name 'alias1 alias2 alias3' (after cleaning).\nAll names in the group are used as aliases for matching.\nE.g., yor, (Boa, Hancock, Snake Princess)")
+            log_msg = f"ℹ️ Config file '{self.config_file}' not found. It will be created on save."
+            KNOWN_NAMES[:] = [] # Ensure it's empty if file doesn't exist
         
         if hasattr(self, 'log_signal'): self.log_signal.emit(log_msg)
         
         if hasattr(self, 'character_list'):
             self.character_list.clear()
-            # Display only the primary 'name' in the QListWidget
-
-            # Add default entries if the list is empty after loading (meaning file didn't exist)
             if not KNOWN_NAMES:
-                default_entry = {
-                    "name": "Yor",
-                    "is_group": True,
-                    "aliases": sorted(list(set(["Yor Forger", "Yor", "Yor Briar"]))) # Ensure unique and sorted aliases
-                }
-                KNOWN_NAMES.append(default_entry)
-                # Add more defaults here if needed
-                self.save_known_names() # Save to disk immediately if file was created with defaults
-                self.log_signal.emit("ℹ️ Added default entry for 'Yor Forger'.")
+                # Previously, a default entry was added here if KNOWN_NAMES was empty
+                # (i.e., if Known.txt didn't exist or was empty).
+                # Now, we do nothing, so KNOWN_NAMES remains empty,
+                # and Known.txt will be created empty if it doesn't exist when save_known_names() is called.
+                self.log_signal.emit("ℹ️ 'Known.txt' is empty or was not found. No default entries will be added.")
 
             self.character_list.addItems([entry["name"] for entry in KNOWN_NAMES])
 
     def save_known_names(self):
         global KNOWN_NAMES
         try:
-            # KNOWN_NAMES is already sorted by primary name during load/add
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 for entry in KNOWN_NAMES:
-                    if entry["is_group"] and len(entry["aliases"]) > 1:
-                        # New format: Mark primary name (first alias) with brackets
-                        primary_name = entry['aliases'][0]
-                        other_aliases = entry['aliases'][1:]
-                        formatted_aliases_for_file = [f"[{primary_name}]"] + other_aliases
-                        f.write(f"({', '.join(formatted_aliases_for_file)})\n")
-                    elif entry["is_group"] and len(entry["aliases"]) == 1: # Group with only one name (the primary)
-                        f.write(f"([{entry['aliases'][0]}])\n") # Save as ([PrimaryName])
-                    else: # Simple entry or group with only one alias (the name itself)
+                    if entry["is_group"]:
+                        # Save the original aliases list back to the file format (Name1, Name2, ...)
+                        # The 'name' field (the folder name) is NOT written back directly.
+                        f.write(f"({', '.join(sorted(entry['aliases'], key=str.lower))})\n") # Save sorted aliases
+                    else: # Non-group entry
                         f.write(entry["name"] + '\n') # Non-grouped items are saved as plain names
             if hasattr(self, 'log_signal'): self.log_signal.emit(f"💾 Saved {len(KNOWN_NAMES)} known entries to {self.config_file}")
         except Exception as e:
@@ -900,14 +898,10 @@ class DownloaderApp(QWidget):
                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
              if reply == QMessageBox.Yes:
                  self.log_signal.emit("⚠️ Cancelling active download due to application exit...")
-                 
-                 # Direct cancellation for exit - different from button cancel
                  self.cancellation_event.set()
                  if self.download_thread and self.download_thread.isRunning():
                      self.download_thread.requestInterruption()
                      self.log_signal.emit("   Signaled single download thread to interrupt.")
-                 
-                 # For thread pool, we want to wait on exit.
                  if self.download_thread and self.download_thread.isRunning():
                      self.log_signal.emit("   Waiting for single download thread to finish...")
                      self.download_thread.wait(3000)
@@ -1009,16 +1003,11 @@ class DownloaderApp(QWidget):
         self.character_input = QLineEdit()
         self.character_input.setPlaceholderText("e.g., Tifa, Aerith, (Cloud, Zack)")
         self.character_input.setToolTip(
-            "Filter by character/series names (comma-separated, e.g., Tifa, Aerith).\n"
-            "The behavior of this filter (Files, Title, Both, or Comments) is controlled by the 'Filter: [Scope]' button next to this input.\n"
-            "Also used for folder naming if 'Separate Folders' is enabled.\n"
-            "Group aliases for a combined folder name: (alias1, alias2) -> folder 'alias1 alias2'.\n"
-            "Example: yor, Tifa, (Boa, Hancock)")
+            self._get_tooltip_for_character_input() # Use dynamic tooltip
+        )
         char_input_and_button_layout.addWidget(self.character_input, 3)
 
         self.char_filter_scope_toggle_button = QPushButton()
-        # Initial text and tooltip will be set by calling _update_char_filter_scope_button_text()
-        # at the end of init_ui or when the scope is first set.
         self._update_char_filter_scope_button_text()
         self.char_filter_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
         self.char_filter_scope_toggle_button.setMinimumWidth(100)
@@ -1046,15 +1035,10 @@ class DownloaderApp(QWidget):
         filters_and_custom_folder_layout.addWidget(self.custom_folder_widget, 1)
 
         left_layout.addWidget(self.filters_and_custom_folder_container_widget)
-
-
-        # --- Word Manipulation Section (Skip Words & Remove from Filename) ---
         word_manipulation_container_widget = QWidget()
         word_manipulation_outer_layout = QHBoxLayout(word_manipulation_container_widget)
         word_manipulation_outer_layout.setContentsMargins(0,0,0,0) # No margins for the outer container
         word_manipulation_outer_layout.setSpacing(15) # Spacing between the two vertical groups
-
-        # Group 1: Skip Words (Left, ~70% space)
         skip_words_widget = QWidget()
         skip_words_vertical_layout = QVBoxLayout(skip_words_widget)
         skip_words_vertical_layout.setContentsMargins(0,0,0,0) # No margins for the inner group
@@ -1082,8 +1066,6 @@ class DownloaderApp(QWidget):
         skip_input_and_button_layout.addWidget(self.skip_scope_toggle_button, 0) # Button takes its minimum
         skip_words_vertical_layout.addLayout(skip_input_and_button_layout)
         word_manipulation_outer_layout.addWidget(skip_words_widget, 7) # 70% stretch for left group
-
-        # Group 2: Remove Words from name (Right, ~30% space)
         remove_words_widget = QWidget()
         remove_words_vertical_layout = QVBoxLayout(remove_words_widget)
         remove_words_vertical_layout.setContentsMargins(0,0,0,0) # No margins for the inner group
@@ -1101,7 +1083,6 @@ class DownloaderApp(QWidget):
         word_manipulation_outer_layout.addWidget(remove_words_widget, 3) # 30% stretch for right group
 
         left_layout.addWidget(word_manipulation_container_widget)
-        # --- End Word Manipulation Section ---
 
 
         file_filter_layout = QVBoxLayout()
@@ -1149,7 +1130,6 @@ class DownloaderApp(QWidget):
         self.skip_rar_checkbox.setChecked(True)
         row1_layout.addWidget(self.skip_rar_checkbox)
         self.download_thumbnails_checkbox = QCheckBox("Download Thumbnails Only")
-        # Tooltip already exists for download_thumbnails_checkbox
         self.download_thumbnails_checkbox.setChecked(False)
         self.download_thumbnails_checkbox.setToolTip("Thumbnail download functionality is currently limited without the API.")
         row1_layout.addWidget(self.download_thumbnails_checkbox)
@@ -1213,7 +1193,6 @@ class DownloaderApp(QWidget):
         multithreading_layout = QHBoxLayout()
         multithreading_layout.setContentsMargins(0,0,0,0)
         self.use_multithreading_checkbox = QCheckBox("Use Multithreading")
-        # Tooltip already exists for use_multithreading_checkbox
         self.use_multithreading_checkbox.setChecked(True)
         self.use_multithreading_checkbox.setToolTip(
             "Enables concurrent operations. See 'Threads' input for details."
@@ -1222,7 +1201,6 @@ class DownloaderApp(QWidget):
         self.thread_count_label = QLabel("Threads:")
         multithreading_layout.addWidget(self.thread_count_label)
         self.thread_count_input = QLineEdit()
-        # Tooltip already exists for thread_count_input
         self.thread_count_input.setFixedWidth(40)
         self.thread_count_input.setText("4")
         self.thread_count_input.setToolTip(
@@ -1244,7 +1222,6 @@ class DownloaderApp(QWidget):
         advanced_row2_layout.addWidget(self.external_links_checkbox)
 
         self.manga_mode_checkbox = QCheckBox("Manga/Comic Mode")
-        # Tooltip already exists for manga_mode_checkbox
         self.manga_mode_checkbox.setToolTip("Downloads posts from oldest to newest and renames files based on post title (for creator feeds only).")
         self.manga_mode_checkbox.setChecked(False)
         advanced_row2_layout.addWidget(self.manga_mode_checkbox) # Keep manga mode checkbox here
@@ -1280,15 +1257,11 @@ class DownloaderApp(QWidget):
         known_chars_label_layout.setSpacing(10)
         self.known_chars_label = QLabel("🎭 Known Shows/Characters (for Folder Names):")
         known_chars_label_layout.addWidget(self.known_chars_label) # Add label first
-
-        # Create and add the "Open Known.txt" button BEFORE the search input
         self.open_known_txt_button = QPushButton("Open Known.txt")
         self.open_known_txt_button.setToolTip("Open the 'Known.txt' file in your default text editor.\nThe file is located in the application's directory.")
         self.open_known_txt_button.setStyleSheet("padding: 4px 8px;") # Consistent small button style
         self.open_known_txt_button.setFixedWidth(120) # Adjust width as needed
         known_chars_label_layout.addWidget(self.open_known_txt_button) # Add button second
-
-        # Then create and add the character search input, allowing it to stretch
         self.character_search_input = QLineEdit()
         self.character_search_input.setToolTip("Type here to filter the list of known shows/characters below.")
         self.character_search_input.setPlaceholderText("Search characters...")
@@ -1311,8 +1284,9 @@ class DownloaderApp(QWidget):
         self.add_char_button = QPushButton("➕ Add")
         self.add_char_button.setToolTip("Add the name from the input field to the 'Known Shows/Characters' list.")
         self.delete_char_button = QPushButton("🗑️ Delete Selected")
-        self.delete_char_button.setToolTip("Delete the selected name(s) from the 'Known Shows/Characters' list.")
-        self.add_char_button.clicked.connect(self.add_new_character)
+        self.delete_char_button.setToolTip("Delete the selected name(s) from the 'Known Shows/Characters' list.")        
+        # Connect add_char_button to a new handler that calls the refactored add_new_character
+        self.add_char_button.clicked.connect(self._handle_ui_add_new_character)
         self.new_char_input.returnPressed.connect(self.add_char_button.click)
         self.delete_char_button.clicked.connect(self.delete_selected_character)
         char_manage_layout.addWidget(self.new_char_input, 2)
@@ -1405,7 +1379,6 @@ class DownloaderApp(QWidget):
         export_button_layout = QHBoxLayout()
         export_button_layout.addStretch(1)
         self.export_links_button = QPushButton("Export Links")
-        # Tooltip already exists for export_links_button
         self.export_links_button.setToolTip("Export all extracted links to a .txt file.")
         self.export_links_button.setFixedWidth(100)
         self.export_links_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
@@ -1456,7 +1429,6 @@ class DownloaderApp(QWidget):
         
     def _browse_cookie_file(self):
         """Opens a file dialog to select a cookie file."""
-        # Start in the user's documents directory or current app dir if not available
         start_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
         if not start_dir:
             start_dir = os.path.dirname(self.config_file) # App directory
@@ -1466,7 +1438,6 @@ class DownloaderApp(QWidget):
             self.selected_cookie_filepath = filepath
             self.log_signal.emit(f"ℹ️ Selected cookie file: {filepath}")
             if hasattr(self, 'cookie_text_input'):
-                # Block signals temporarily to prevent textChanged handler from misinterpreting this programmatic change
                 self.cookie_text_input.blockSignals(True)
                 self.cookie_text_input.setText(filepath)
                 self.cookie_text_input.setReadOnly(True)
@@ -1475,7 +1446,6 @@ class DownloaderApp(QWidget):
 
     def _center_on_screen(self):
         """Centers the widget on the screen."""
-        # Updated to use availableGeometry and center more reliably        
         try:
             primary_screen = QApplication.primaryScreen()
             if not primary_screen:
@@ -1496,8 +1466,6 @@ class DownloaderApp(QWidget):
         """Handles manual changes to the cookie text input, especially clearing a browsed path."""
         if not hasattr(self, 'cookie_text_input') or not hasattr(self, 'use_cookie_checkbox'):
             return
-
-        # If a file was selected AND the text field is now empty (user deleted the path)
         if self.selected_cookie_filepath and not text.strip() and self.use_cookie_checkbox.isChecked():
             self.selected_cookie_filepath = None
             self.cookie_text_input.setReadOnly(False)
@@ -1543,7 +1511,6 @@ class DownloaderApp(QWidget):
         if is_html_message:
              display_message = message[len(HTML_PREFIX):]
              use_html = True
-        # Basic log mode toggle is removed for this button. Progress log is always "full".
         
         try:
              safe_message = str(display_message).replace('\x00', '[NULL]')
@@ -1560,29 +1527,21 @@ class DownloaderApp(QWidget):
     def _extract_key_term_from_title(self, title):
         if not title:
             return None
-        # Try to find words that look like names/keywords
         title_cleaned = re.sub(r'\[.*?\]', '', title) # Remove content in square brackets
         title_cleaned = re.sub(r'\(.*?\)', '', title_cleaned) # Remove content in parentheses
         title_cleaned = title_cleaned.strip()
-
-        # Find all words and their original start positions
         word_matches = list(re.finditer(r'\b[a-zA-Z][a-zA-Z0-9_-]*\b', title_cleaned))
         
         capitalized_candidates = []
         for match in word_matches:
             word = match.group(0)
-            # istitle() checks if first char is upper and rest lower (or non-cased like numbers)
-            # We also check if the whole word is not uppercase (like "AI") unless it's short
             if word.istitle() and word.lower() not in self.STOP_WORDS and len(word) > 2:
                  if not (len(word) > 3 and word.isupper()): # Avoid all-caps words unless short (like "AI")
                     capitalized_candidates.append({'text': word, 'len': len(word), 'pos': match.start()})
         
         if capitalized_candidates:
-            # Sort by length (desc), then by original position (desc - later words preferred if same length)
             capitalized_candidates.sort(key=lambda x: (x['len'], x['pos']), reverse=True)
             return capitalized_candidates[0]['text']
-
-        # Fallback: longest word not in stop words, if no good capitalized word found
         non_capitalized_words_info = []
         for match in word_matches:
             word = match.group(0)
@@ -1590,7 +1549,6 @@ class DownloaderApp(QWidget):
                  non_capitalized_words_info.append({'text': word, 'len': len(word), 'pos': match.start()})
         
         if non_capitalized_words_info:
-            # Sort by length (desc), then position (desc - later preferred if same length)
             non_capitalized_words_info.sort(key=lambda x: (x['len'], x['pos']), reverse=True)
             return non_capitalized_words_info[0]['text']
                 
@@ -1603,7 +1561,6 @@ class DownloaderApp(QWidget):
             if key_term:
                 normalized_key_term = key_term.lower()
                 if normalized_key_term not in self.already_logged_bold_key_terms:
-                    # Use the extracted key_term directly to preserve its original casing for display
                     self.already_logged_bold_key_terms.add(normalized_key_term)
                     self.missed_key_terms_buffer.append(key_term) # Store original case
                     self._refresh_missed_character_log()
@@ -1613,7 +1570,6 @@ class DownloaderApp(QWidget):
     def _refresh_missed_character_log(self):
         if self.missed_character_log_output:
             self.missed_character_log_output.clear()
-            # Sort case-insensitively but keep original casing from buffer
             sorted_terms = sorted(self.missed_key_terms_buffer, key=str.lower)
             separator_line = "-" * 40  # Define the separator
             
@@ -1621,7 +1577,6 @@ class DownloaderApp(QWidget):
                 display_term = term.capitalize() # Ensure first letter is capitalized
 
                 self.missed_character_log_output.append(separator_line)
-                # Center the bold, blue text using a <p> tag with align attribute
                 self.missed_character_log_output.append(f'<p align="center"><b><font style="font-size: 12.4pt; color: #87CEEB;">{display_term}</font></b></p>')
                 self.missed_character_log_output.append(separator_line)
                 self.missed_character_log_output.append("") # Add a blank line for spacing
@@ -1717,8 +1672,6 @@ class DownloaderApp(QWidget):
                 return
 
             total_downloaded_overall = sum(cs.get('downloaded', 0) for cs in progress_info)
-            # total_file_size_overall should ideally be from progress_data['total_file_size']
-            # For now, we sum chunk totals. This assumes all chunks are for the same file.
             total_file_size_overall = sum(cs.get('total', 0) for cs in progress_info)
             
             active_chunks_count = 0
@@ -1795,14 +1748,10 @@ class DownloaderApp(QWidget):
         filter_mode_text = button.text()
         is_only_links = (filter_mode_text == "🔗 Only Links")
         is_only_archives = (filter_mode_text == "📦 Only Archives")
-
-        # --- Visibility for log header buttons ---
-        # Hide these buttons if in "Only Links" or "Only Archives" mode
         if self.skip_scope_toggle_button:
             self.skip_scope_toggle_button.setVisible(not (is_only_links or is_only_archives))
         if hasattr(self, 'multipart_toggle_button') and self.multipart_toggle_button:
             self.multipart_toggle_button.setVisible(not (is_only_links or is_only_archives))
-        # Other log header buttons (manga, char filter scope) are handled by update_ui_for_manga_mode and update_ui_for_subfolders
 
         if self.link_search_input: self.link_search_input.setVisible(is_only_links)
         if self.link_search_button: self.link_search_button.setVisible(is_only_links)
@@ -1885,7 +1834,6 @@ class DownloaderApp(QWidget):
         
         self.update_ui_for_subfolders(subfolders_on)
         self.update_custom_folder_visibility()
-        # Ensure manga mode UI updates (which includes the visibility of manga_rename_toggle_button)
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
 
 
@@ -2086,7 +2034,6 @@ class DownloaderApp(QWidget):
                 )
 
     def _cycle_char_filter_scope(self):
-        # Cycle: Files -> Title -> Both -> Comments -> Files
         if self.char_filter_scope == CHAR_SCOPE_FILES:
             self.char_filter_scope = CHAR_SCOPE_TITLE
         elif self.char_filter_scope == CHAR_SCOPE_TITLE:
@@ -2102,65 +2049,82 @@ class DownloaderApp(QWidget):
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
         self.log_signal.emit(f"ℹ️ Character filter scope changed to: '{self.char_filter_scope}'")
 
+    def _handle_ui_add_new_character(self):
+        """Handles adding a new character from the UI input field."""
+        name_from_ui_input = self.new_char_input.text().strip()
+        if not name_from_ui_input:
+            QMessageBox.warning(self, "Input Error", "Name cannot be empty.")
+            return
 
+        # For UI additions, it's always a simple, non-group entry.
+        # The special ( ) and ( )~ parsing is for the "Filter by Character(s)" field.
+        self.add_new_character(name_to_add=name_from_ui_input,
+                               is_group_to_add=False,
+                               aliases_to_add=[name_from_ui_input],
+                               suppress_similarity_prompt=False) # UI adds one by one, so prompt is fine
 
-    def add_new_character(self):
+    def add_new_character(self, name_to_add, is_group_to_add, aliases_to_add, suppress_similarity_prompt=False):
         global KNOWN_NAMES, clean_folder_name
-        name_to_add = self.new_char_input.text().strip()
         if not name_to_add:
-             QMessageBox.warning(self, "Input Error", "Name cannot be empty."); return False
+             QMessageBox.warning(self, "Input Error", "Name cannot be empty."); return False # Return False on failure
 
         name_to_add_lower = name_to_add.lower()
-
-        # Check for duplicates (primary name or any alias)
         for kn_entry in KNOWN_NAMES:
             if kn_entry["name"].lower() == name_to_add_lower:
-                 QMessageBox.warning(self, "Duplicate Name", f"The name '{name_to_add}' already exists as a primary folder name."); return False
-            for alias in kn_entry["aliases"]:
-                if alias.lower() == name_to_add_lower:
-                    QMessageBox.warning(self, "Duplicate Alias", f"The name '{name_to_add}' already exists as an alias for '{kn_entry['name']}'."); return False
-
+                 QMessageBox.warning(self, "Duplicate Name", f"The primary folder name '{name_to_add}' already exists."); return False
+            if not is_group_to_add and name_to_add_lower in [a.lower() for a in kn_entry["aliases"]]: # Check if new simple name is an alias elsewhere
+                 QMessageBox.warning(self, "Duplicate Alias", f"The name '{name_to_add}' already exists as an alias for '{kn_entry['name']}'."); return False
+        
         similar_names_details = []
-        # Check for similarity with existing primary names or aliases
         for kn_entry in KNOWN_NAMES:
             for term_to_check_similarity_against in kn_entry["aliases"]: # Check against all aliases
                 term_lower = term_to_check_similarity_against.lower()
                 if name_to_add_lower != term_lower and \
                    (name_to_add_lower in term_lower or term_lower in name_to_add_lower):
-                    # Warn about similarity with the primary name of the group
                     similar_names_details.append((name_to_add, kn_entry["name"])) 
+                    break
+            # Also check if any of the new aliases are similar to existing primary names or other aliases
+            for new_alias in aliases_to_add:
+                if new_alias.lower() != term_to_check_similarity_against.lower() and (new_alias.lower() in term_to_check_similarity_against.lower() or term_to_check_similarity_against.lower() in new_alias.lower()):
+                    similar_names_details.append((new_alias, kn_entry["name"]))
                     break # Found a similarity for this entry, no need to check its other aliases
         
-        if similar_names_details:
-            first_similar_new, first_similar_existing = similar_names_details[0]
-            shorter, longer = sorted([first_similar_new, first_similar_existing], key=len)
+        if similar_names_details and not suppress_similarity_prompt:
+            # This block is only entered if suppress_similarity_prompt is False
+            # and there are similar names.
+            # If suppress_similarity_prompt is True, this entire block is skipped.
+            if similar_names_details: # Double check, though outer if should cover
+                first_similar_new, first_similar_existing = similar_names_details[0]
+                shorter, longer = sorted([first_similar_new, first_similar_existing], key=len)
 
-            msg_box = QMessageBox(self)
-            msg_box.setIcon(QMessageBox.Warning)
-            msg_box.setWindowTitle("Potential Name Conflict")
-            msg_box.setText(
-                f"The name '{first_similar_new}' is very similar to an existing name: '{first_similar_existing}'.\n\n"
-                f"This could lead to unexpected folder grouping (e.g., under '{clean_folder_name(shorter)}' instead of a more specific '{clean_folder_name(longer)}' or vice-versa).\n\n"
-                "Do you want to change the name you are adding, or proceed anyway?"
-            )
-            change_button = msg_box.addButton("Change Name", QMessageBox.RejectRole)
-            proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
-            msg_box.setDefaultButton(proceed_button)
-            msg_box.setEscapeButton(change_button)
-            msg_box.exec_()
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Warning)
+                msg_box.setWindowTitle("Potential Name Conflict")
+                msg_box.setText(
+                    f"The name '{first_similar_new}' is very similar to an existing name: '{first_similar_existing}'.\n\n"
+                    f"This could lead to unexpected folder grouping (e.g., under '{clean_folder_name(shorter)}' instead of a more specific '{clean_folder_name(longer)}' or vice-versa).\n\n"
+                    "Do you want to change the name you are adding, or proceed anyway?"
+                )
+                change_button = msg_box.addButton("Change Name", QMessageBox.RejectRole)
+                proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+                msg_box.setDefaultButton(proceed_button)
+                msg_box.setEscapeButton(change_button)
+                msg_box.exec_()
 
-            if msg_box.clickedButton() == change_button:
-                self.log_signal.emit(f"ℹ️ User chose to change '{first_similar_new}' due to similarity with an alias of '{first_similar_existing_primary}'.")
-                return False
-
-            self.log_signal.emit(f"⚠️ User proceeded with adding '{first_similar_new}' despite similarity with an alias of '{first_similar_existing_primary}'.")
-
-        # Add as a simple (non-group) entry
+                if msg_box.clickedButton() == change_button:
+                    self.log_signal.emit(f"ℹ️ User chose to change '{first_similar_new}' due to similarity with an alias of '{first_similar_existing}'.")
+                    return False # Return False on failure/user cancel
+                self.log_signal.emit(f"⚠️ User proceeded with adding '{first_similar_new}' despite similarity with an alias of '{first_similar_existing}'.")
         new_entry = {
-            "name": name_to_add,
-            "is_group": False,
-            "aliases": [name_to_add]
+            "name": name_to_add, # This is the primary/folder name
+            "is_group": is_group_to_add,
+            "aliases": sorted(list(set(aliases_to_add)), key=str.lower) # Ensure unique and sorted aliases
         }
+        # Final check for alias conflicts if this is a group
+        if is_group_to_add:
+            for new_alias in new_entry["aliases"]:
+                if any(new_alias.lower() == kn_entry["name"].lower() for kn_entry in KNOWN_NAMES if kn_entry["name"].lower() != name_to_add_lower):
+                    QMessageBox.warning(self, "Alias Conflict", f"Alias '{new_alias}' (for group '{name_to_add}') conflicts with an existing primary name."); return False
         KNOWN_NAMES.append(new_entry)
         KNOWN_NAMES.sort(key=lambda x: x["name"].lower()) # Sort by primary name
 
@@ -2168,7 +2132,8 @@ class DownloaderApp(QWidget):
         self.character_list.addItems([entry["name"] for entry in KNOWN_NAMES])
         self.filter_character_list(self.character_search_input.text())
 
-        self.log_signal.emit(f"✅ Added '{name_to_add}' to known names list.")
+        log_msg_suffix = f" (as group with aliases: {', '.join(new_entry['aliases'])})" if is_group_to_add and len(new_entry['aliases']) > 1 else ""
+        self.log_signal.emit(f"✅ Added '{name_to_add}' to known names list{log_msg_suffix}.")
         self.new_char_input.clear()
         self.save_known_names()
         return True
@@ -2253,8 +2218,6 @@ class DownloaderApp(QWidget):
 
         if cookie_text_input_exists or cookie_browse_button_exists:
             is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
-            
-            # Cookie text input and browse button are visible if "Use Cookie" is checked
             if cookie_text_input_exists: self.cookie_text_input.setVisible(checked)
             if cookie_browse_button_exists: self.cookie_browse_button.setVisible(checked)
             
@@ -2262,8 +2225,6 @@ class DownloaderApp(QWidget):
             enable_state_for_fields = can_enable_cookie_text and (self.download_btn.isEnabled() or self.is_paused)
 
             if cookie_text_input_exists:
-                # Text input is always enabled if its parent "Use Cookie" is checked and conditions met,
-                # unless a file path is displayed (then it's read-only).
                 self.cookie_text_input.setEnabled(enable_state_for_fields)
                 if self.selected_cookie_filepath and checked: # If a file is selected and "Use Cookie" is on
                     self.cookie_text_input.setText(self.selected_cookie_filepath)
@@ -2347,15 +2308,6 @@ class DownloaderApp(QWidget):
 
         if current_style == STYLE_POST_TITLE: # Title -> Original
             new_style = STYLE_ORIGINAL_NAME
-            # The warning for original name style
-            # reply = QMessageBox.information(self, "Manga Filename Preference",
-            #                                "Using 'Name: Post Title' (first file by title, others original) is recommended for Manga Mode.\n\n"
-            #                                "Using 'Name: Original File' for all files might lead to less organized downloads if original names are inconsistent or non-sequential.\n\n"
-            #                                "Proceed with using 'Name: Original File' for all files?",
-            #                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
-            # if reply == QMessageBox.No:
-            #     self.log_signal.emit("ℹ️ Manga filename style change to 'Original File' cancelled by user.")
-            #     return
         elif current_style == STYLE_ORIGINAL_NAME: # Original -> Date
             new_style = STYLE_DATE_BASED
         elif current_style == STYLE_DATE_BASED: # Date -> Title
@@ -2373,7 +2325,6 @@ class DownloaderApp(QWidget):
 
 
     def update_ui_for_manga_mode(self, checked):
-        # Get current filter mode status
         is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
         is_only_archives_mode = self.radio_only_archives and self.radio_only_archives.isChecked()
 
@@ -2381,19 +2332,15 @@ class DownloaderApp(QWidget):
         _, _, post_id = extract_post_info(url_text)
 
         is_creator_feed = not post_id if url_text else False
-
-        # Manga mode checkbox itself is only enabled for creator feeds
         if self.manga_mode_checkbox:
             self.manga_mode_checkbox.setEnabled(is_creator_feed)
             if not is_creator_feed and self.manga_mode_checkbox.isChecked():
-                # If URL changes to non-creator feed, uncheck manga mode
                 self.manga_mode_checkbox.setChecked(False)
                 checked = self.manga_mode_checkbox.isChecked() 
 
         manga_mode_effectively_on = is_creator_feed and checked
 
         if self.manga_rename_toggle_button:
-            # Visible if manga mode is on AND not in "Only Links" or "Only Archives" mode
             self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode))
 
 
@@ -2459,7 +2406,6 @@ class DownloaderApp(QWidget):
 
         if manga_on and is_date_style:
             if self.use_multithreading_checkbox.isChecked() or self.use_multithreading_checkbox.isEnabled():
-                # Only log if a change is made or it was previously enabled
                 if self.use_multithreading_checkbox.isChecked():
                     self.log_signal.emit("ℹ️ Manga Date Mode: Multithreading for post processing has been disabled to ensure correct sequential file numbering.")
                 self.use_multithreading_checkbox.setChecked(False)
@@ -2499,7 +2445,6 @@ class DownloaderApp(QWidget):
         
         use_multithreading_enabled_by_checkbox = self.use_multithreading_checkbox.isChecked()
         try:
-            # num_threads_from_gui is used for post workers or file workers depending on context
             num_threads_from_gui = int(self.thread_count_input.text().strip())
             if num_threads_from_gui < 1: num_threads_from_gui = 1
         except ValueError:
@@ -2508,7 +2453,6 @@ class DownloaderApp(QWidget):
             return
 
         if use_multithreading_enabled_by_checkbox:
-            # Hard Warning: Threads > MAX_THREADS (200)
             if num_threads_from_gui > MAX_THREADS:
                 hard_warning_msg = (
                     f"You've entered a thread count ({num_threads_from_gui}) exceeding the maximum of {MAX_THREADS}.\n\n"
@@ -2522,9 +2466,6 @@ class DownloaderApp(QWidget):
                 num_threads_from_gui = MAX_THREADS
                 self.thread_count_input.setText(str(MAX_THREADS)) # Update the input field
                 self.log_signal.emit(f"⚠️ User attempted {num_threads_from_gui} threads, capped to {MAX_THREADS}.")
-
-            # Soft Warning: SOFT_WARNING_THREAD_THRESHOLD < Threads <= MAX_THREADS
-            # This uses the potentially capped num_threads_from_gui from the hard warning
             if SOFT_WARNING_THREAD_THRESHOLD < num_threads_from_gui <= MAX_THREADS:
                 soft_warning_msg_box = QMessageBox(self)
                 soft_warning_msg_box.setIcon(QMessageBox.Question)
@@ -2567,8 +2508,6 @@ class DownloaderApp(QWidget):
         extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
         backend_filter_mode = self.get_filter_mode()
         user_selected_filter_text = self.radio_group.checkedButton().text() if self.radio_group.checkedButton() else "All"
-
-        # If a file path is selected, cookie_text_from_input should be considered empty for backend logic
         if selected_cookie_file_path_for_backend:
             cookie_text_from_input = ""
 
@@ -2616,89 +2555,77 @@ class DownloaderApp(QWidget):
             except ValueError as e: QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}"); return
         elif manga_mode:
             start_page, end_page = None, None 
-        
-        # Manga Mode specific duplicate handling is now managed entirely within downloader_utils.py
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
 
         raw_character_filters_text = self.character_input.text().strip() # Get current text
         parsed_character_filter_objects = self._parse_character_filters(raw_character_filters_text) # Parse it
 
-        filter_character_list_to_pass = None
+        # This will be the list of filter objects passed to the backend
+        actual_filters_to_use_for_run = []
+
         needs_folder_naming_validation = (use_subfolders or manga_mode) and not extract_links_only
 
-        if parsed_character_filter_objects and not extract_links_only :
-            self.log_signal.emit(f"ℹ️ Validating character filters: {', '.join(item['name'] + (' (Group: ' + '/'.join(item['aliases']) + ')' if item['is_group'] else '') for item in parsed_character_filter_objects)}")
-            valid_filters_for_backend = []
-            user_cancelled_validation = False
+        if parsed_character_filter_objects:
+            actual_filters_to_use_for_run = parsed_character_filter_objects # Use all parsed filters for matching
 
-            for filter_item_obj in parsed_character_filter_objects:
-                item_primary_name = filter_item_obj["name"]
-                cleaned_name_test = clean_folder_name(item_primary_name)
+            if not extract_links_only:
+                self.log_signal.emit(f"ℹ️ Using character filters for matching: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
 
+                # --- Logic for Known.txt prompting (does not change filters for current run) ---
+                filter_objects_to_potentially_add_to_known_list = []
+                for filter_item_obj in parsed_character_filter_objects: # Iterate over the same parsed_character_filter_objects
+                    item_primary_name = filter_item_obj["name"]
+                    # Check for folder name validity only for the purpose of Known.txt interaction
+                    cleaned_name_test = clean_folder_name(item_primary_name)
+                    if needs_folder_naming_validation and not cleaned_name_test:
+                        QMessageBox.warning(self, "Invalid Filter Name for Folder", f"Filter name '{item_primary_name}' is invalid for a folder and will be skipped for Known.txt interaction.")
+                        self.log_signal.emit(f"⚠️ Skipping invalid filter for Known.txt interaction: '{item_primary_name}'")
+                        continue # Skip this filter for Known.txt prompting
+                    
+                    an_alias_is_already_known = False
+                    if any(kn_entry["name"].lower() == item_primary_name.lower() for kn_entry in KNOWN_NAMES):
+                        an_alias_is_already_known = True
+                    elif filter_item_obj["is_group"] and needs_folder_naming_validation:
+                        for alias_in_filter_obj in filter_item_obj["aliases"]:
+                            if any(kn_entry["name"].lower() == alias_in_filter_obj.lower() or alias_in_filter_obj.lower() in [a.lower() for a in kn_entry["aliases"]] for kn_entry in KNOWN_NAMES):
+                                an_alias_is_already_known = True; break
+                    
+                    if an_alias_is_already_known and filter_item_obj["is_group"]:
+                         self.log_signal.emit(f"ℹ️ An alias from group '{item_primary_name}' is already known. Group will not be prompted for Known.txt addition.")
 
-                if needs_folder_naming_validation and not cleaned_name_test:
-                    QMessageBox.warning(self, "Invalid Filter Name for Folder", f"Filter name '{item_primary_name}' is invalid for a folder and will be skipped for folder naming.")
-                    self.log_signal.emit(f"⚠️ Skipping invalid filter for folder naming: '{item_primary_name}'")
-                    continue
-
-                # --- New: Check if any alias of a group is already known ---
-                an_alias_is_already_known = False
-                if filter_item_obj["is_group"] and needs_folder_naming_validation:
-                    for alias in filter_item_obj["aliases"]:
-                        if any(existing_known.lower() == alias.lower() for existing_known in KNOWN_NAMES):
-                            an_alias_is_already_known = True
-                            self.log_signal.emit(f"ℹ️ Alias '{alias}' (from group '{item_primary_name}') is already in Known Names. Group name '{item_primary_name}' will not be added to Known.txt.")
-                            break
-                # --- End new check ---
-
-                if an_alias_is_already_known:
-                    valid_filters_for_backend.append(filter_item_obj)
-                    continue
-
-                # Determine if we should prompt to add the name to the Known.txt list.
-                # Prompt if:
-                #   - Folder naming validation is relevant (subfolders or manga mode, and not just extracting links)
-                #   - AND Manga Mode is OFF (this is the key change for your request)
-                #   - AND the primary name of the filter isn't already in Known.txt
-                should_prompt_to_add_to_known_list = (
-                    needs_folder_naming_validation and
-                    not manga_mode and  # Do NOT prompt if Manga Mode is ON
-                    item_primary_name.lower() not in {kn_entry["name"].lower() for kn_entry in KNOWN_NAMES}
-                )
-
-                if should_prompt_to_add_to_known_list:
-                    reply = QMessageBox.question(self, "Add to Known List?",
-                                               f"Filter name '{item_primary_name}' (used for folder/manga naming) is not in known names list.\nAdd it now?",
-                                               QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel, QMessageBox.Yes)
-                    if reply == QMessageBox.Yes:
-                        self.new_char_input.setText(item_primary_name) # Use the primary name for adding
-                        if self.add_new_character():
-                            valid_filters_for_backend.append(filter_item_obj)
-                    elif reply == QMessageBox.Cancel:
-                        user_cancelled_validation = True; break
-                    # If 'No', the filter is not used and not added to Known.txt for this session.
-                else:
-                    # Add to filters to be used for this session if:
-                    # - Prompting is not needed (e.g., name already known, or not manga_mode but name is known)
-                    # - OR Manga Mode is ON (filter is used without adding to Known.txt)
-                    # - OR extract_links_only is true (folder naming validation is false)
-                    valid_filters_for_backend.append(filter_item_obj)
-                    if manga_mode and needs_folder_naming_validation and item_primary_name.lower() not in {kn_entry["name"].lower() for kn_entry in KNOWN_NAMES}:
+                    should_prompt_to_add_to_known_list = (
+                        needs_folder_naming_validation and not manga_mode and
+                        not any(kn_entry["name"].lower() == item_primary_name.lower() for kn_entry in KNOWN_NAMES) and
+                        not an_alias_is_already_known
+                    )
+                    if should_prompt_to_add_to_known_list:
+                        if not any(obj_to_add["name"].lower() == item_primary_name.lower() for obj_to_add in filter_objects_to_potentially_add_to_known_list):
+                            filter_objects_to_potentially_add_to_known_list.append(filter_item_obj)
+                    elif manga_mode and needs_folder_naming_validation and item_primary_name.lower() not in {kn_entry["name"].lower() for kn_entry in KNOWN_NAMES} and not an_alias_is_already_known:
                         self.log_signal.emit(f"ℹ️ Manga Mode: Using filter '{item_primary_name}' for this session without adding to Known Names.")
 
-            if user_cancelled_validation: return
+                if filter_objects_to_potentially_add_to_known_list:
+                    display_names_for_dialog = [obj["name"] for obj in filter_objects_to_potentially_add_to_known_list]
+                    confirm_dialog = ConfirmAddAllDialog(display_names_for_dialog, self)
+                    dialog_result = confirm_dialog.exec_()
+                    if dialog_result == CONFIRM_ADD_ALL_CANCEL_DOWNLOAD:
+                        self.log_signal.emit("❌ Download cancelled by user at new name confirmation stage.")
+                        self.set_ui_enabled(True); return
+                    elif dialog_result == CONFIRM_ADD_ALL_ACCEPTED:
+                        self.log_signal.emit(f"ℹ️ User chose to add {len(filter_objects_to_potentially_add_to_known_list)} new entry/entries to Known.txt.")
+                        for filter_obj_to_add in filter_objects_to_potentially_add_to_known_list:
+                            self.add_new_character(name_to_add=filter_obj_to_add["name"], is_group_to_add=filter_obj_to_add["is_group"], aliases_to_add=filter_obj_to_add["aliases"], suppress_similarity_prompt=True)
+                    elif dialog_result == CONFIRM_ADD_ALL_SKIP_ADDING:
+                        self.log_signal.emit("ℹ️ User chose not to add new names to Known.txt for this session.")
+                # --- End of Known.txt prompting logic ---
+            else: # extract_links_only is true
+                self.log_signal.emit(f"ℹ️ Using character filters for link extraction: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
+        else: # No character filters typed by user
+            self.log_signal.emit("ℹ️ No character filters provided. All content (matching other criteria) will be processed.")
+            # actual_filters_to_use_for_run remains []
 
-            if valid_filters_for_backend:
-                filter_character_list_to_pass = valid_filters_for_backend
-                self.log_signal.emit(f"   Using validated character filters: {', '.join(item['name'] for item in filter_character_list_to_pass)}")
-            else:
-                self.log_signal.emit("⚠️ No valid character filters to use for this session.")
-        elif parsed_character_filter_objects : # If not extract_links_only is false, but filters exist
-            filter_character_list_to_pass = parsed_character_filter_objects
-            self.log_signal.emit(f"ℹ️ Character filters provided (folder naming validation may not apply): {', '.join(item['name'] for item in filter_character_list_to_pass)}")
 
-
-        if manga_mode and not filter_character_list_to_pass and not extract_links_only:
+        if manga_mode and not actual_filters_to_use_for_run and not extract_links_only:
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
             msg_box.setWindowTitle("Manga Mode Filter Warning")
@@ -2715,10 +2642,7 @@ class DownloaderApp(QWidget):
                 self.log_signal.emit("❌ Download cancelled due to Manga Mode filter warning."); return
             else:
                 self.log_signal.emit("⚠️ Proceeding with Manga Mode without a specific title filter.")
-
-        # Set the dynamic filter holder with the filters determined for this run
-        # This ensures workers get the correct initial set if they start before any live changes.
-        self.dynamic_character_filter_holder.set_filters(filter_character_list_to_pass if filter_character_list_to_pass else [])
+        self.dynamic_character_filter_holder.set_filters(actual_filters_to_use_for_run)
 
         custom_folder_name_cleaned = None
         if use_subfolders and post_id_from_url and self.custom_folder_widget and self.custom_folder_widget.isVisible() and not extract_links_only: 
@@ -2742,38 +2666,23 @@ class DownloaderApp(QWidget):
         self.progress_label.setText("Progress: Initializing...")
 
         self.retryable_failed_files_info.clear() # Clear previous retryable failures before new session
-        # Manga date file counter initialization is now moved into DownloadThread.run()
-        # We will pass None or a placeholder if needed, and DownloadThread will calculate it.
         manga_date_file_counter_ref_for_thread = None
         if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not extract_links_only:
-            # Pass None; DownloadThread will calculate if it's a single-threaded download.
-            # For multi-threaded, this ref needs to be created here and shared.
-            # However, with date_based manga mode forcing single post worker, this specific ref might only be used by that one worker.
-            # Let's keep it as None for now, assuming DownloadThread handles its init if it's the one doing sequential processing.
-            # If multi-threaded post processing were allowed with date-based, this would need careful shared state.
             manga_date_file_counter_ref_for_thread = None
             self.log_signal.emit(f"ℹ️ Manga Date Mode: File counter will be initialized by the download thread.")
         effective_num_post_workers = 1
         effective_num_file_threads_per_worker = 1 # Default to 1 for all cases initially
 
         if post_id_from_url:
-            # Single post URL: UI threads control concurrent file downloads for that post
             if use_multithreading_enabled_by_checkbox:
                 effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
-            # else: effective_num_file_threads_per_worker remains 1
-            # effective_num_post_workers remains 1 (not used for post thread pool)        
         else:
-            # Creator feed URL
             if manga_mode and self.manga_filename_style == STYLE_DATE_BASED:
-                # Force single post worker for date-based manga mode
                 effective_num_post_workers = 1
-                # File threads per worker can still be > 1 if user set it
                 effective_num_file_threads_per_worker = 1 # Files are sequential for this worker too
             elif use_multithreading_enabled_by_checkbox: # Standard creator feed with multithreading enabled
                 effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS)) # For posts
                 effective_num_file_threads_per_worker = 1 # Files within each post worker are sequential
-            # else (not multithreading for creator feed):
-            # effective_num_post_workers remains 1, effective_num_file_threads_per_worker remains 1
 
         log_messages = ["="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"   URL: {api_url}"]
         if not extract_links_only: log_messages.append(f"   Save Location: {output_dir}")
@@ -2798,8 +2707,8 @@ class DownloaderApp(QWidget):
             log_messages.append(f"   Subfolders: {'Enabled' if use_subfolders else 'Disabled'}")
             if use_subfolders:
                  if custom_folder_name_cleaned: log_messages.append(f"   Custom Folder (Post): '{custom_folder_name_cleaned}'")
-            if filter_character_list_to_pass:
-                log_messages.append(f"   Character Filters: {', '.join(item['name'] for item in filter_character_list_to_pass)}")
+            if actual_filters_to_use_for_run:
+                log_messages.append(f"   Character Filters: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
                 log_messages.append(f"     ↳ Char Filter Scope: {current_char_filter_scope.capitalize()}")
             elif use_subfolders:
                  log_messages.append(f"   Folder Naming: Automatic (based on title/known names)")
@@ -2815,7 +2724,6 @@ class DownloaderApp(QWidget):
                 f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}" # Removed duplicate file handling log
             ])
         else:
-            # If only_links, cookie might still be relevant for accessing the page
             log_messages.append(f"   Mode: Extracting Links Only")
 
         log_messages.append(f"   Show External Links: {'Enabled' if self.show_external_links and not extract_links_only and backend_filter_mode != 'archive' else 'Disabled'}")
@@ -2823,8 +2731,8 @@ class DownloaderApp(QWidget):
         if manga_mode:
             log_messages.append(f"   Manga Mode (File Renaming by Post Title): Enabled")
             log_messages.append(f"     ↳ Manga Filename Style: {'Post Title Based' if self.manga_filename_style == STYLE_POST_TITLE else 'Original File Name'}")
-            if filter_character_list_to_pass:
-                 log_messages.append(f"     ↳ Manga Character Filter (for naming/folder): {', '.join(item['name'] for item in filter_character_list_to_pass)}")
+            if actual_filters_to_use_for_run:
+                 log_messages.append(f"     ↳ Manga Character Filter (for naming/folder): {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
             log_messages.append(f"     ↳ Manga Duplicates: Will be renamed with numeric suffix if names clash (e.g., _1, _2).")
 
         log_messages.append(f"   Use Cookie ('cookies.txt'): {'Enabled' if use_cookie_from_checkbox else 'Disabled'}")
@@ -2833,7 +2741,6 @@ class DownloaderApp(QWidget):
         elif use_cookie_from_checkbox and selected_cookie_file_path_for_backend:
             log_messages.append(f"     ↳ Cookie File Selected: {os.path.basename(selected_cookie_file_path_for_backend)}")
         should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
-        # Adjust log message if date-based manga mode forced single thread
         if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not post_id_from_url:
             log_messages.append(f"   Threading: Single-threaded (posts) - Enforced by Manga Date Mode")
             should_use_multithreading_for_posts = False # Ensure this reflects the forced state
@@ -2853,8 +2760,8 @@ class DownloaderApp(QWidget):
             'download_root': output_dir,
             'output_dir': output_dir,
             'known_names': list(KNOWN_NAMES),
-            'known_names_copy': list(KNOWN_NAMES),
-            'filter_character_list': filter_character_list_to_pass,
+            'known_names_copy': list(KNOWN_NAMES), # Used by DownloadThread constructor
+            'filter_character_list': actual_filters_to_use_for_run, # Pass the correctly determined list
             'filter_mode': backend_filter_mode,
             'skip_zip': effective_skip_zip,
             'skip_rar': effective_skip_rar,
@@ -2883,7 +2790,6 @@ class DownloaderApp(QWidget):
             'cancellation_event': self.cancellation_event,
             'dynamic_character_filter_holder': self.dynamic_character_filter_holder, # Pass the holder
             'pause_event': self.pause_event, # Explicitly add pause_event here
-            # 'emitter' will be set based on single/multi-thread mode below
             'manga_filename_style': self.manga_filename_style,
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
             'manga_date_file_counter_ref': manga_date_file_counter_ref_for_thread,
@@ -2892,7 +2798,6 @@ class DownloaderApp(QWidget):
             'selected_cookie_file': selected_cookie_file_path_for_backend, # Pass selected cookie file
             'app_base_dir': app_base_dir_for_cookies, # Pass app base dir
             'use_cookie': use_cookie_from_checkbox, # Pass cookie setting
-            # 'duplicate_file_mode' and session-wide tracking removed
         }
 
         try:
@@ -2902,7 +2807,6 @@ class DownloaderApp(QWidget):
                 self.start_multi_threaded_download(num_post_workers=effective_num_post_workers, **args_template)
             else:
                 self.log_signal.emit(f"   Initializing single-threaded {'link extraction' if extract_links_only else 'download'}...")
-                # For single-threaded, DownloadThread creates its own PostProcessorSignals and passes it as emitter.
                 dt_expected_keys = [
                     'api_url_input', 'output_dir', 'known_names_copy', 'cancellation_event',
                     'filter_character_list', 'filter_mode', 'skip_zip', 'skip_rar',
@@ -2962,9 +2866,6 @@ class DownloaderApp(QWidget):
         global PostProcessorWorker # Ensure PostProcessorWorker is accessible
         if not isinstance(post_data_item, dict):
             self.log_signal.emit(f"⚠️ Skipping invalid post data item (not a dict): {type(post_data_item)}");
-            # Note: This skip does not directly increment processed_posts_count here,
-            # as that counter is tied to future completion.
-            # The overall effect is that total_posts_to_process might be higher than actual futures.
             return False # Indicate failure or skip
 
         worker_init_args = {}
@@ -3032,8 +2933,6 @@ class DownloaderApp(QWidget):
         all_posts_data = []
         fetch_error_occurred = False
         manga_mode_active_for_fetch = worker_args_template.get('manga_mode_active', False)
-
-        # In multi-threaded mode, the emitter is the queue.
         emitter_for_worker = worker_args_template.get('emitter') # This should be self.worker_to_gui_queue
         if not emitter_for_worker: # Should not happen if logic in start_download is correct
              self.log_signal.emit("❌ CRITICAL ERROR: Emitter (queue) missing for worker in _fetch_and_queue_posts.");
@@ -3064,20 +2963,16 @@ class DownloaderApp(QWidget):
             
             if not fetch_error_occurred and not self.cancellation_event.is_set():
                 self.log_signal.emit(f"✅ Post fetching complete. Total posts to process: {self.total_posts_to_process}")
-
-            # --- De-duplicate posts by ID ---
             unique_posts_dict = {}
             for post in all_posts_data:
                 post_id = post.get('id')
                 if post_id is not None:
-                    # Keep the first occurrence of each post ID
                     if post_id not in unique_posts_dict:
                         unique_posts_dict[post_id] = post
                 else:
                     self.log_signal.emit(f"⚠️ Skipping post with no ID: {post.get('title', 'Untitled')}")
 
             all_posts_data = list(unique_posts_dict.values())
-            # --- End De-duplication ---
 
             self.total_posts_to_process = len(all_posts_data)
             self.log_signal.emit(f"   Processed {len(unique_posts_dict)} unique posts after de-duplication.")
@@ -3121,19 +3016,17 @@ class DownloaderApp(QWidget):
             'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
             'manga_mode_active', 'manga_filename_style'
         ]
-        # Ensure 'allow_multipart_download' is also considered for optional keys if it has a default in PostProcessorWorker
         ppw_optional_keys_with_defaults = {
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
             'show_external_links', 'extract_links_only', 'duplicate_file_mode', # Added duplicate_file_mode here
             'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style',
             'manga_date_file_counter_ref', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
         }
-        
-        # --- Batching Logic ---
         if num_post_workers > POST_WORKER_BATCH_THRESHOLD and self.total_posts_to_process > POST_WORKER_NUM_BATCHES :
             self.log_signal.emit(f"   High thread count ({num_post_workers}) detected. Batching post submissions into {POST_WORKER_NUM_BATCHES} parts.")
             
             import math # Moved import here
+            tasks_submitted_in_batch_segment = 0
             batch_size = math.ceil(self.total_posts_to_process / POST_WORKER_NUM_BATCHES)
             submitted_count_in_batching = 0
 
@@ -3163,6 +3056,10 @@ class DownloaderApp(QWidget):
                     success = self._submit_post_to_worker_pool(post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, ppw_optional_keys_with_defaults)
                     if success:
                         submitted_count_in_batching += 1
+                        tasks_submitted_in_batch_segment += 1 # Increment counter
+                        if tasks_submitted_in_batch_segment % 10 == 0: # Yield roughly every 10 tasks
+                            time.sleep(0.005) # Slightly longer sleep to yield GIL
+                            tasks_submitted_in_batch_segment = 0
                     elif self.cancellation_event.is_set(): 
                         break 
                 
@@ -3181,11 +3078,16 @@ class DownloaderApp(QWidget):
         else: # Standard submission (no batching)
             self.log_signal.emit(f"   Submitting all {self.total_posts_to_process} tasks to pool directly...")
             submitted_count_direct = 0
+            tasks_submitted_since_last_yield = 0
             for post_data_item in all_posts_data:
                 if self.cancellation_event.is_set(): break
                 success = self._submit_post_to_worker_pool(post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, ppw_optional_keys_with_defaults)
                 if success:
                     submitted_count_direct += 1
+                    tasks_submitted_since_last_yield += 1 # Increment counter
+                    if tasks_submitted_since_last_yield % 10 == 0: # Yield roughly every 10 tasks
+                        time.sleep(0.005) # Slightly longer sleep to yield GIL
+                        tasks_submitted_since_last_yield = 0
                 elif self.cancellation_event.is_set():
                     break
             
@@ -3222,7 +3124,6 @@ class DownloaderApp(QWidget):
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
         except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_future_result callback: {e}\n{traceback.format_exc(limit=2)}")
-            # If an error occurs, ensure we don't get stuck waiting for this future
             if self.processed_posts_count < self.total_posts_to_process:
                  self.processed_posts_count = self.total_posts_to_process # Mark as if all processed to allow finish
 
@@ -3253,7 +3154,6 @@ class DownloaderApp(QWidget):
         ]
 
     def set_ui_enabled(self, enabled):
-        # This list contains all widgets whose enabled state might change.
         all_potentially_toggleable_widgets = [
             self.link_input, self.dir_input, self.dir_button,
             self.page_range_label, self.start_page_input, self.to_label, self.end_page_input,
@@ -3291,8 +3191,6 @@ class DownloaderApp(QWidget):
             self.external_links_checkbox.setEnabled(can_enable_ext_links)
             if self.is_paused and not is_only_links and not is_only_archives:
                 self.external_links_checkbox.setEnabled(True)
-
-        # Handle "Use Cookie" checkbox and text input
         if hasattr(self, 'use_cookie_checkbox'):
             self.use_cookie_checkbox.setEnabled(enabled or self.is_paused)
             self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked()) # This will handle cookie_text_input's enabled state
@@ -3302,19 +3200,14 @@ class DownloaderApp(QWidget):
         if self.log_verbosity_toggle_button: self.log_verbosity_toggle_button.setEnabled(True) # New button, always enabled
 
         multithreading_currently_on = self.use_multithreading_checkbox.isChecked()
-        # Thread count related widgets follow 'enabled' strictly (disabled if paused)
         if self.thread_count_input: self.thread_count_input.setEnabled(enabled and multithreading_currently_on)
         if self.thread_count_label: self.thread_count_label.setEnabled(enabled and multithreading_currently_on)
 
         subfolders_currently_on = self.use_subfolders_checkbox.isChecked()
         if self.use_subfolder_per_post_checkbox:
             self.use_subfolder_per_post_checkbox.setEnabled(enabled or (self.is_paused and self.use_subfolder_per_post_checkbox in widgets_to_enable_on_pause))
-
-        # --- Main Action Buttons ---
         self.download_btn.setEnabled(enabled) # Start Download only enabled when fully idle
         self.cancel_btn.setEnabled(download_is_active_or_paused) # Cancel enabled if running or paused
-
-        # Pause button logic
         if self.pause_btn:
             self.pause_btn.setEnabled(download_is_active_or_paused)
             if download_is_active_or_paused:
@@ -3327,15 +3220,11 @@ class DownloaderApp(QWidget):
 
         if enabled: # Ensure these are updated based on current (possibly reset) checkbox states
                 if self.pause_event: self.pause_event.clear()
-
-        # --- UI Updates based on current states ---
-        # These should run if UI is idle OR if paused (to reflect changes made during pause)
         if enabled or self.is_paused:             
             self._handle_multithreading_toggle(multithreading_currently_on)
             self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
             self.update_custom_folder_visibility(self.link_input.text())
             self.update_page_range_enabled_state()
-            # Re-evaluate filter mode as radio buttons might have been changed during pause
             if self.radio_group and self.radio_group.checkedButton():
                  self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
             self.update_ui_for_subfolders(subfolders_currently_on) # Re-evaluate subfolder UI
@@ -3354,8 +3243,6 @@ class DownloaderApp(QWidget):
     def _perform_soft_ui_reset(self, preserve_url=None, preserve_dir=None):
         """Resets UI elements and some state to app defaults, then applies preserved inputs."""
         self.log_signal.emit("🔄 Performing soft UI reset...")
-
-        # 1. Reset UI fields to their visual defaults
         self.link_input.clear() # Will be set later if preserve_url is given
         self.dir_input.clear()  # Will be set later if preserve_dir is given
         self.custom_folder_input.clear(); self.character_input.clear();
@@ -3368,14 +3255,9 @@ class DownloaderApp(QWidget):
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox: self.manga_mode_checkbox.setChecked(False)
         if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setChecked(self.use_cookie_setting) # Reset to loaded or False
-        
-        # For soft reset, if a cookie file was selected, keep it displayed if "Use Cookie" remains checked.
-        # Otherwise, clear it. The _update_cookie_input_visibility will handle the display.
         if not (hasattr(self, 'use_cookie_checkbox') and self.use_cookie_checkbox.isChecked()):
             self.selected_cookie_filepath = None 
         if hasattr(self, 'cookie_text_input'): self.cookie_text_input.setText(self.cookie_text_setting if self.use_cookie_setting else "") # Reset to loaded or empty
-
-        # 2. Reset internal state for UI-managed settings to app defaults (not from QSettings)
         self.allow_multipart_download_setting = False # Default to OFF
         self._update_multipart_toggle_button_text()
 
@@ -3387,14 +3269,10 @@ class DownloaderApp(QWidget):
 
         self.manga_filename_style = STYLE_POST_TITLE # Reset to app default
         self._update_manga_filename_style_button_text()
-
-        # 3. Restore preserved URL and Directory
         if preserve_url is not None:
             self.link_input.setText(preserve_url)
         if preserve_dir is not None:
             self.dir_input.setText(preserve_dir)
-
-        # 4. Reset operational state variables (but not session-based downloaded_files/hashes)
         self.external_link_queue.clear(); self.extracted_links_cache = []
         self._is_processing_external_link_queue = False; self._current_link_post_title = None
         if self.pause_event: self.pause_event.clear()        
@@ -3402,19 +3280,14 @@ class DownloaderApp(QWidget):
         self.download_counter = 0; self.skip_counter = 0
         self.all_kept_original_filenames = []
         self.is_paused = False # Reset pause state on soft reset
-
-        # 5. Update UI based on new (default or preserved) states
         self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         self.filter_character_list(self.character_search_input.text())
 
         self.set_ui_enabled(True) # This enables buttons and calls other UI update methods
-
-        # Explicitly call these to ensure they reflect changes from preserved inputs
         self.update_custom_folder_visibility(self.link_input.text())
         self.update_page_range_enabled_state()
         self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False)
-        # update_ui_for_manga_mode is called within set_ui_enabled
 
         self.log_signal.emit("✅ Soft UI reset complete. Preserved URL and Directory (if provided).")
 
@@ -3443,8 +3316,6 @@ class DownloaderApp(QWidget):
         if self.pause_event: self.pause_event.clear()        
         self.log_signal.emit("ℹ️ UI reset. Ready for new operation. Background tasks are being terminated.")
         self.is_paused = False # Ensure pause state is reset
-        
-        # Also clear retryable files on a manual cancel, as the context is lost.
         if self.retryable_failed_files_info:
             self.log_signal.emit(f"   Discarding {len(self.retryable_failed_files_info)} pending retryable file(s) due to cancellation.")
             self.retryable_failed_files_info.clear()
@@ -3456,8 +3327,6 @@ class DownloaderApp(QWidget):
             kept_original_names_list = []
 
         status_message = "Cancelled by user" if cancelled_by_user else "Finished"
-
-        # If cancelled, don't offer retry for this session's failures
         if cancelled_by_user and self.retryable_failed_files_info:
             self.log_signal.emit(f"   Download cancelled, discarding {len(self.retryable_failed_files_info)} file(s) that were pending retry.")
             self.retryable_failed_files_info.clear()
@@ -3514,8 +3383,6 @@ class DownloaderApp(QWidget):
         if self.pause_event: self.pause_event.clear()
         self.cancel_btn.setEnabled(False)
         self.is_paused = False # Reset pause state when download finishes
-
-        # Offer to retry failed files if any were collected and not cancelled
         if not cancelled_by_user and self.retryable_failed_files_info:
             num_failed = len(self.retryable_failed_files_info)
             reply = QMessageBox.question(self, "Retry Failed Downloads?",
@@ -3556,8 +3423,6 @@ class DownloaderApp(QWidget):
             num_retry_threads = 1 # Default to 1 if input is bad
 
         self.retry_thread_pool = ThreadPoolExecutor(max_workers=num_retry_threads, thread_name_prefix='RetryFile_')
-
-        # Prepare common arguments for PostProcessorWorker instances during retry
         common_ppw_args_for_retry = {
             'download_root': self.dir_input.text().strip(),
             'known_names': list(KNOWN_NAMES),
@@ -3581,7 +3446,6 @@ class DownloaderApp(QWidget):
             'char_filter_scope': self.get_char_filter_scope(),
             'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()] if hasattr(self, 'remove_from_filename_input') else [],
             'allow_multipart_download': self.allow_multipart_download_setting,
-            # These are not strictly needed for retry of a single file if path is fixed, but good to pass
             'filter_character_list': None, 
             'dynamic_character_filter_holder': None,
             'target_post_id_from_initial_url': None, # Not relevant for file retry
@@ -3597,12 +3461,7 @@ class DownloaderApp(QWidget):
 
     def _execute_single_file_retry(self, job_details, common_args):
         """Executes a single file download retry attempt."""
-        # Construct a dummy post_data, service, user_id, api_url_input for PPW init
         dummy_post_data = {'id': job_details['original_post_id_for_log'], 'title': job_details['post_title']}
-        # Extract service/user from a known URL or pass them if available in job_details
-        # For simplicity, assuming we might not have original service/user easily.
-        # This might affect some logging or minor details in PPW if it relies on them beyond post_id.
-        # Let's assume job_details can store 'service' and 'user_id' from the original post.
         
         ppw_init_args = {
             **common_args,
@@ -3678,7 +3537,6 @@ class DownloaderApp(QWidget):
                 self.log_verbosity_toggle_button.setText(self.CLOSED_EYE_ICON) # Monkey icon
                 self.log_verbosity_toggle_button.setToolTip("Current View: Missed Character Log. Click to switch to Progress Log.")
             if self.progress_log_label: self.progress_log_label.setText("🚫 Missed Character Log:")
-            # self.log_signal.emit("="*20 + " Switched to Missed Character Log View " + "="*20) # Optional log message
         else: # current_log_view == 'missed_character'
             self.current_log_view = 'progress'
             if self.log_view_stack: self.log_view_stack.setCurrentIndex(0) # Show progress log
@@ -3686,7 +3544,6 @@ class DownloaderApp(QWidget):
                 self.log_verbosity_toggle_button.setText(self.EYE_ICON) # Open eye icon
                 self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
             if self.progress_log_label: self.progress_log_label.setText("📜 Progress Log:")
-            # self.log_signal.emit("="*20 + " Switched to Progress Log View " + "="*20) # Optional log message
 
     def reset_application_state(self):
         if self._is_download_active(): QMessageBox.warning(self, "Reset Error", "Cannot reset while a download is in progress. Please cancel first."); return
@@ -3705,7 +3562,6 @@ class DownloaderApp(QWidget):
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
         self.progress_label.setText("Progress: Idle"); self.file_progress_label.setText("")
         with self.downloaded_files_lock: count = len(self.downloaded_files); self.downloaded_files.clear();
-        # Reset old summarization state (if any remnants) and new bold list state
         self.missed_title_key_terms_count.clear()
         self.missed_title_key_terms_examples.clear()
         self.logged_summary_for_key_term.clear()
@@ -3747,13 +3603,9 @@ class DownloaderApp(QWidget):
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox: self.manga_mode_checkbox.setChecked(False)        
         if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setChecked(False) # Default to False on full reset
-        
-        # On full reset, always clear the selected cookie file path
         self.selected_cookie_filepath = None
 
         if hasattr(self, 'cookie_text_input'): self.cookie_text_input.clear() # Clear cookie text on full reset
-
-        # Reset old summarization state (if any remnants) and new bold list state
         self.missed_title_key_terms_count.clear()
         self.missed_title_key_terms_examples.clear()
         self.logged_summary_for_key_term.clear()
@@ -3782,7 +3634,6 @@ class DownloaderApp(QWidget):
 
         self.download_btn.setEnabled(True); self.cancel_btn.setEnabled(False)
         if self.reset_button: self.reset_button.setEnabled(True)
-        # self.basic_log_mode is False after reset, so Full Log is active
         if self.log_verbosity_toggle_button: # Reset eye button to show Progress Log
             self.log_verbosity_toggle_button.setText(self.EYE_ICON)
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
@@ -3794,9 +3645,14 @@ class DownloaderApp(QWidget):
         reply = QMessageBox.question(self, "Add Filter Name to Known List?", f"The name '{character_name}' was encountered or used as a filter.\nIt's not in your known names list (used for folder suggestions).\nAdd it now?", QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         result = (reply == QMessageBox.Yes)
         if result:
-              self.new_char_input.setText(character_name)
-              if self.add_new_character(): self.log_signal.emit(f"✅ Added '{character_name}' to known names via background prompt.")
-              else: result = False; self.log_signal.emit(f"ℹ️ Adding '{character_name}' via background prompt was declined or failed.")
+              # For background prompts, assume it's a simple, non-group entry.
+              # The character_name here is the primary name of a filter object.
+              if self.add_new_character(name_to_add=character_name,
+                                        is_group_to_add=False, # Background prompts add simple entries
+                                        aliases_to_add=[character_name],
+                                        suppress_similarity_prompt=False): # Allow similarity prompt for background adds
+                  self.log_signal.emit(f"✅ Added '{character_name}' to known names via background prompt.")
+              else: result = False; self.log_signal.emit(f"ℹ️ Adding '{character_name}' via background prompt was declined, failed, or a similar name conflict was not overridden.")
         self.character_prompt_response_signal.emit(result)
 
     def receive_add_character_result(self, result):
@@ -3829,7 +3685,6 @@ class DownloaderApp(QWidget):
                 )
 
     def _toggle_multipart_mode(self):
-        # If currently OFF, and user is trying to turn it ON
         if not self.allow_multipart_download_setting:
             msg_box = QMessageBox(self)
             msg_box.setIcon(QMessageBox.Warning)
@@ -3852,7 +3707,6 @@ class DownloaderApp(QWidget):
             msg_box.exec_()
 
             if msg_box.clickedButton() == cancel_button:
-                # User cancelled, so don't change the setting (it's already False)
                 self.log_signal.emit("ℹ️ Multi-part download enabling cancelled by user.")
                 return # Exit without changing the state or button text
         
@@ -3895,13 +3749,10 @@ if __name__ == '__main__':
         else: print(f"Warning: Application icon 'Kemono.ico' not found at {icon_path}")
 
         downloader_app_instance = DownloaderApp()
-
-        # --- Calculate initial window size based on screen dimensions ---
         primary_screen = QApplication.primaryScreen()
         if not primary_screen:
             screens = QApplication.screens()
             if not screens:
-                # Absolute fallback if no screen information is available
                 downloader_app_instance.resize(1024, 768)
                 downloader_app_instance.show()
                 sys.exit(qt_app.exec_())
@@ -3910,8 +3761,6 @@ if __name__ == '__main__':
         available_geo = primary_screen.availableGeometry()
         screen_width = available_geo.width()
         screen_height = available_geo.height()
-
-        # Define desired size relative to screen and minimums
         min_app_width = 960    # Minimum width for the app to be usable
         min_app_height = 680   # Minimum height
         desired_app_width_ratio = 0.80  # Use 80% of available screen width
@@ -3919,16 +3768,12 @@ if __name__ == '__main__':
 
         app_width = max(min_app_width, int(screen_width * desired_app_width_ratio))
         app_height = max(min_app_height, int(screen_height * desired_app_height_ratio))
-
-        # Ensure the calculated size doesn't exceed the available screen space
         app_width = min(app_width, screen_width)
         app_height = min(app_height, screen_height)
         
         downloader_app_instance.resize(app_width, app_height)
         downloader_app_instance.show()
         downloader_app_instance._center_on_screen()
-
-        # TourDialog is now defined in this file, so we can call it directly.
         try:
             tour_result = TourDialog.run_tour_if_needed(downloader_app_instance)
             if tour_result == QDialog.Accepted: print("Tour completed by user.")

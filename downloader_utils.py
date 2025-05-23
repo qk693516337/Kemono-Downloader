@@ -62,8 +62,6 @@ VIDEO_EXTENSIONS = {
 ARCHIVE_EXTENSIONS = {
     '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'
 }
-
-# --- Cookie Helper Functions ---
 def parse_cookie_string(cookie_string):
     """Parses a 'name=value; name2=value2' cookie string into a dict."""
     cookies = {}
@@ -88,13 +86,10 @@ def load_cookies_from_netscape_file(filepath, logger_func):
                     continue
                 parts = line.split('\t')
                 if len(parts) == 7:
-                    # Netscape format: domain, flag, path, secure, expiration, name, value
                     name = parts[5]
                     value = parts[6]
                     if name: # Ensure name is not empty
                         cookies[name] = value
-                # else:
-                    # logger_func(f"   🍪 Cookie file line {line_num} malformed (expected 7 tab-separated parts): '{line[:50]}...'")
         logger_func(f"   🍪 Loaded {len(cookies)} cookies from '{os.path.basename(filepath)}'.")
         return cookies if cookies else None
     except FileNotFoundError:
@@ -103,8 +98,6 @@ def load_cookies_from_netscape_file(filepath, logger_func):
     except Exception as e:
         logger_func(f"   🍪 Error parsing cookie file '{os.path.basename(filepath)}': {e}")
         return None
-
-# --- End Cookie Helper Functions ---
 
 def is_title_match_for_character(post_title, character_name_filter):
     if not post_title or not character_name_filter:
@@ -137,15 +130,9 @@ def clean_folder_name(name):
 
     if not cleaned: # If empty after initial cleaning
         return "untitled_folder"
-
-    # Strip all trailing dots and spaces.
-    # This handles cases like "folder...", "folder. .", "folder . ." -> "folder"
     temp_name = cleaned
     while len(temp_name) > 0 and (temp_name.endswith('.') or temp_name.endswith(' ')):
         temp_name = temp_name[:-1]
-    
-    # If stripping all trailing dots/spaces made it empty (e.g., original was "."), use default
-    # Also handles if the original name was just spaces and became empty.
     return temp_name if temp_name else "untitled_folder"
 
 
@@ -158,10 +145,7 @@ def clean_filename(name):
 
 def strip_html_tags(html_text):
     if not html_text: return ""
-    # First, unescape HTML entities
     text = html.unescape(html_text)
-    # Then, remove HTML tags using a simple regex
-    # This is a basic approach and might not handle all complex HTML perfectly
     clean_pattern = re.compile('<.*?>')
     cleaned_text = re.sub(clean_pattern, '', text)
     return cleaned_text.strip()
@@ -187,8 +171,6 @@ def match_folders_from_title(title, names_to_match, unwanted_keywords):
     if not title or not names_to_match: return []
     title_lower = title.lower()
     matched_cleaned_names = set()
-    # Sort by the length of the primary name for matching longer, more specific names first.
-    # This is a heuristic; alias length might also be a factor but primary name length is simpler.
     sorted_name_objects = sorted(names_to_match, key=lambda x: len(x.get("name", "")), reverse=True)
 
     for name_obj in sorted_name_objects:
@@ -625,7 +607,6 @@ class PostProcessorWorker:
         self.pause_event = pause_event # Store pause_event
         self.emitter = emitter # Store the emitter
         if not self.emitter:
-            # This case should ideally be prevented by the caller
             raise ValueError("PostProcessorWorker requires an emitter (signals object or queue).")
         self.skip_current_file_flag = skip_current_file_flag
 
@@ -660,12 +641,9 @@ class PostProcessorWorker:
         if isinstance(self.emitter, queue.Queue):
             self.emitter.put({'type': signal_type_str, 'payload': payload_args})
         elif self.emitter and hasattr(self.emitter, f"{signal_type_str}_signal"):
-            # Assuming emitter is a QObject with pyqtSignal attributes
-            # e.g., emitter.progress_signal.emit(*payload_args)
             signal_attr = getattr(self.emitter, f"{signal_type_str}_signal")
             signal_attr.emit(*payload_args)
         else:
-            # Fallback or error logging if emitter is not recognized
             print(f"(Worker Log - Unrecognized Emitter for {signal_type_str}): {payload_args[0] if payload_args else ''}")
 
     def logger(self, message):
@@ -686,12 +664,10 @@ class PostProcessorWorker:
         return False # Not cancelled during pause
 
     def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event, # skip_event is threading.Event
-                              # emitter_for_file_ops, # This will be self.emitter
                               post_title="", file_index_in_post=0, num_files_in_this_post=1,
                               manga_date_file_counter_ref=None): # Added manga_date_file_counter_ref
         was_original_name_kept_flag = False 
         final_filename_saved_for_return = "" 
-        # target_folder_path is the base character/post folder.
 
     def _get_current_character_filters(self):
         if self.dynamic_filter_holder:
@@ -699,14 +675,12 @@ class PostProcessorWorker:
         return self.filter_character_list_objects_initial
 
     def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event,
-                              # emitter_for_file_ops, # This will be self.emitter
                               post_title="", file_index_in_post=0, num_files_in_this_post=1, # Added manga_date_file_counter_ref
                               manga_date_file_counter_ref=None,
                               forced_filename_override=None): # New for retries
         was_original_name_kept_flag = False 
         final_filename_saved_for_return = "" 
         retry_later_details = None # For storing info if retryable failure
-        # target_folder_path is the base character/post folder.
 
         if self._check_pause(f"File download prep for '{file_info.get('name', 'unknown file')}'"): return 0, 1, "", False
         if self.check_cancel() or (skip_event and skip_event.is_set()): return 0, 1, "", False
@@ -716,14 +690,11 @@ class PostProcessorWorker:
         if self.use_cookie: # This flag comes from the checkbox
             cookies_to_use_for_file = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger)
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
-        
-        # This is the ideal name for the file if it were to be saved in the main target_folder_path.
         filename_to_save_in_main_path = "" 
 
         if forced_filename_override:
             filename_to_save_in_main_path = forced_filename_override
             self.logger(f"   Retrying with forced filename: '{filename_to_save_in_main_path}'")
-            # was_original_name_kept_flag might need to be determined based on how forced_filename_override was created
         else:
             if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_FILES or self.skip_words_scope == SKIP_SCOPE_BOTH):
                 filename_to_check_for_skip_words = api_original_filename.lower()
@@ -755,21 +726,15 @@ class PostProcessorWorker:
                         self.logger(f"⚠️ Manga mode (Post Title Style): Post title missing for post {original_post_id_for_log}. Using cleaned original filename '{filename_to_save_in_main_path}'.")
                 elif self.manga_filename_style == STYLE_DATE_BASED:
                     current_thread_name = threading.current_thread().name
-                    # self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Manga Date Mode. Counter Ref ID: {id(manga_date_file_counter_ref)}, Value before access: {manga_date_file_counter_ref}")
 
                     if manga_date_file_counter_ref is not None and len(manga_date_file_counter_ref) == 2:
                         counter_val_for_filename = -1
                         counter_lock = manga_date_file_counter_ref[1]
-                        
-                        # self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Attempting to acquire lock. Counter value before lock: {manga_date_file_counter_ref[0]}")
                         with counter_lock:
-                            # self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Lock acquired. Counter value at lock acquisition: {manga_date_file_counter_ref[0]}")
                             counter_val_for_filename = manga_date_file_counter_ref[0]
                             manga_date_file_counter_ref[0] += 1
-                            # self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Incremented counter. New counter value: {manga_date_file_counter_ref[0]}. Filename will use: {counter_val_for_filename}")
                         
                         filename_to_save_in_main_path = f"{counter_val_for_filename:03d}{original_ext}"
-                        # self.logger(f"DEBUG_COUNTER [{current_thread_name}, PostID: {original_post_id_for_log}]: File '{api_original_filename}'. Lock released. Generated filename: {filename_to_save_in_main_path}")
                     else:
                         self.logger(f"⚠️ Manga Date Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_date_file_counter_ref}")
                         filename_to_save_in_main_path = clean_filename(api_original_filename)
@@ -824,19 +789,11 @@ class PostProcessorWorker:
             if self.skip_rar and is_rar(api_original_filename):
                 self.logger(f"   -> Pref Skip: '{api_original_filename}' (RAR).")
                 return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
-
-        # --- Pre-Download Duplicate Handling ---
-        # Skipping based on filename before download is removed to allow suffixing for files from different posts.
-        # Hash-based skipping occurs after download.
-        # Physical path existence is handled by suffixing logic later.
-        # Ensure base target folder exists (used for .part file with multipart)
         try:
             os.makedirs(target_folder_path, exist_ok=True) # For .part file
         except OSError as e:
             self.logger(f"   ❌ Critical error creating directory '{target_folder_path}': {e}. Skipping file '{api_original_filename}'.")
             return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None # Treat as skip
-
-        # --- Download Attempt ---
         max_retries = 3
         retry_delay = 5
         downloaded_size_bytes = 0
@@ -869,8 +826,6 @@ class PostProcessorWorker:
                 if attempt_multipart:
                     response.close() 
                     self._emit_signal('file_download_status', False)
-                    
-                    # .part file is always based on the main target_folder_path and filename_to_save_in_main_path
                     mp_save_path_base_for_part = os.path.join(target_folder_path, filename_to_save_in_main_path)
                     mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
                         file_url, mp_save_path_base_for_part, total_size_bytes, num_parts_for_file, headers, api_original_filename,
@@ -931,8 +886,6 @@ class PostProcessorWorker:
                 if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
             finally:
                 self._emit_signal('file_download_status', False)
-
-        # Final progress update for single stream
         final_total_for_progress = total_size_bytes if download_successful_flag and total_size_bytes > 0 else downloaded_size_bytes
         self._emit_signal('file_progress', api_original_filename, (downloaded_size_bytes, final_total_for_progress))
 
@@ -944,8 +897,6 @@ class PostProcessorWorker:
         if not download_successful_flag:
             self.logger(f"❌ Download failed for '{api_original_filename}' after {max_retries + 1} attempts.")
             if file_content_bytes: file_content_bytes.close()
-            
-            # Check if this failure is one we want to mark for later retry
             if isinstance(last_exception_for_retry_later, http.client.IncompleteRead):
                 self.logger(f"   Marking '{api_original_filename}' for potential retry later due to IncompleteRead.")
                 retry_later_details = {
@@ -964,43 +915,29 @@ class PostProcessorWorker:
             return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None # Generic failure
 
         if self._check_pause(f"Post-download hash check for '{api_original_filename}'"): return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
-        # --- Universal Post-Download Hash Check ---
         with self.downloaded_file_hashes_lock:
             if calculated_file_hash in self.downloaded_file_hashes:
                 self.logger(f"   -> Skip Saving Duplicate (Hash Match): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...).")
                 with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Mark logical name
                 if file_content_bytes: file_content_bytes.close()
-                # If it was a multipart download, its .part file needs cleanup
                 if not isinstance(file_content_bytes, BytesIO): # Indicates multipart download
                     part_file_to_remove = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
                     if os.path.exists(part_file_to_remove):
                         try: os.remove(part_file_to_remove);
                         except OSError: self.logger(f"  -> Failed to remove .part file for hash duplicate: {part_file_to_remove}") # type: ignore
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
-
-        # --- Determine Save Location and Final Filename ---
         effective_save_folder = target_folder_path  # Default: main character/post folder
-        # filename_to_save_in_main_path is the logical name after cleaning, manga styling, word removal
         filename_after_styling_and_word_removal = filename_to_save_in_main_path
-
-        # "Move" logic and "Duplicate" subfolder logic removed.
-        # effective_save_folder will always be target_folder_path.
                 
         try: # Ensure the chosen save folder (main or Duplicate) exists
             os.makedirs(effective_save_folder, exist_ok=True)
         except OSError as e:
             self.logger(f"   ❌ Critical error creating directory '{effective_save_folder}': {e}. Skipping file '{api_original_filename}'.")
             if file_content_bytes: file_content_bytes.close()
-            # Cleanup .part file if multipart
             if not isinstance(file_content_bytes, BytesIO):
                 part_file_to_remove = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
                 if os.path.exists(part_file_to_remove): os.remove(part_file_to_remove)
             return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
-
-        # --- Image Compression ---
-        # This operates on file_content_bytes (which is BytesIO or a file handle from multipart)
-        # It might change filename_after_styling_and_word_removal's extension (e.g., .jpg to .webp)
-        # and returns new data_to_write_after_compression (BytesIO) or original file_content_bytes.
         data_to_write_after_compression = file_content_bytes 
         filename_after_compression = filename_after_styling_and_word_removal
 
@@ -1029,33 +966,21 @@ class PostProcessorWorker:
             except Exception as comp_e:
                 self.logger(f"❌ Compression failed for '{api_original_filename}': {comp_e}. Saving original."); file_content_bytes.seek(0)
                 data_to_write_after_compression = file_content_bytes # Use original
-
-        # --- Final Numeric Suffixing in the effective_save_folder ---
         final_filename_on_disk = filename_after_compression # This is the name after potential compression
-         # If Manga Date Based style, we trust the counter from main.py.
-        # Suffixing should not be needed if the counter initialization was correct.
-        # If a file with the generated DDD.ext name exists, it will be overwritten.
         if not (self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED):
             temp_base, temp_ext = os.path.splitext(final_filename_on_disk)
             suffix_counter = 1
-            # Check for existing file and apply suffix only if not in date-based manga mode
             while os.path.exists(os.path.join(effective_save_folder, final_filename_on_disk)):
                 final_filename_on_disk = f"{temp_base}_{suffix_counter}{temp_ext}"
                 suffix_counter += 1
             if final_filename_on_disk != filename_after_compression: # Log if a suffix was applied
                 self.logger(f"     Applied numeric suffix in '{os.path.basename(effective_save_folder)}': '{final_filename_on_disk}' (was '{filename_after_compression}')")
-        # else: for STYLE_DATE_BASED, final_filename_on_disk remains filename_after_compression.
         if self._check_pause(f"File saving for '{final_filename_on_disk}'"): return 0, 1, final_filename_on_disk, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
-        # --- Save File ---
         final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
 
         try:
-            # data_to_write_after_compression is BytesIO (single stream, or compressed multipart)
-            # OR it's the original file_content_bytes (which is a file handle if uncompressed multipart)
             
             if data_to_write_after_compression is file_content_bytes and not isinstance(file_content_bytes, BytesIO):
-                # This means uncompressed multipart download. Original .part file handle is file_content_bytes.
-                # The .part file is at target_folder_path/filename_to_save_in_main_path.part
                 original_part_file_actual_path = file_content_bytes.name
                 file_content_bytes.close() # Close handle first
                 os.rename(original_part_file_actual_path, final_save_path)
@@ -1063,8 +988,6 @@ class PostProcessorWorker:
             else: # Single stream download, or compressed multipart. Write from BytesIO.
                 with open(final_save_path, 'wb') as f_out:
                     f_out.write(data_to_write_after_compression.getvalue())
-                
-                # If original was multipart and then compressed, clean up original .part file
                 if data_to_write_after_compression is not file_content_bytes and not isinstance(file_content_bytes, BytesIO):
                     original_part_file_actual_path = file_content_bytes.name
                     file_content_bytes.close()
@@ -1074,10 +997,8 @@ class PostProcessorWorker:
 
             with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
             with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Track by logical name
-            # The counter for STYLE_DATE_BASED is now incremented *before* filename generation, under lock.
             final_filename_saved_for_return = final_filename_on_disk
             self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024*1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
-            # Session-wide base name tracking removed.
             time.sleep(0.05) # Brief pause after successful save
             return 1, 0, final_filename_saved_for_return, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SUCCESS, None
         except Exception as save_err:
@@ -1087,10 +1008,8 @@ class PostProcessorWorker:
                   except OSError: self.logger(f"  -> Failed to remove partially saved file: {final_save_path}")
              return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None # Treat save fail as skip
         finally:
-            # Ensure all handles are closed
             if data_to_write_after_compression and hasattr(data_to_write_after_compression, 'close'):
                 data_to_write_after_compression.close()
-            # If original file_content_bytes was a different handle (e.g. multipart before compression) and not closed yet
             if file_content_bytes and file_content_bytes is not data_to_write_after_compression and hasattr(file_content_bytes, 'close'):
                 try:
                     if not file_content_bytes.closed: # Check if already closed
@@ -1101,10 +1020,7 @@ class PostProcessorWorker:
     def process(self):
         if self._check_pause(f"Post processing for ID {self.post.get('id', 'N/A')}"): return 0,0,[], []
         if self.check_cancel(): return 0, 0, [], []
-        
-        # Get the potentially updated character filters at the start of processing this post
         current_character_filters = self._get_current_character_filters()
-        # self.logger(f"DEBUG: Post {post_id}, Worker using filters: {[(f['name'], f['aliases']) for f in current_character_filters]}")
 
         kept_original_filenames_for_log = [] 
         retryable_failures_this_post = [] # New list to store retryable failure details
@@ -1132,40 +1048,30 @@ class PostProcessorWorker:
         post_is_candidate_by_title_char_match = False
         char_filter_that_matched_title = None
         post_is_candidate_by_comment_char_match = False
-        # New variables for CHAR_SCOPE_COMMENTS file-first logic
         post_is_candidate_by_file_char_match_in_comment_scope = False
         char_filter_that_matched_file_in_comment_scope = None
         char_filter_that_matched_comment = None
         
         if current_character_filters and \
            (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH):
-            # self.logger(f"   [Debug Title Match] Checking post title '{post_title}' against {len(self.filter_character_list_objects)} filter objects. Scope: {self.char_filter_scope}") 
             if self._check_pause(f"Character title filter for post {post_id}"): return 0, num_potential_files_in_post, [], []
             for idx, filter_item_obj in enumerate(current_character_filters):
                 if self.check_cancel(): break
-                # self.logger(f"     [Debug Title Match] Filter obj #{idx}: {filter_item_obj}") 
                 terms_to_check_for_title = list(filter_item_obj["aliases"])
                 if filter_item_obj["is_group"]:
                     if filter_item_obj["name"] not in terms_to_check_for_title:
                         terms_to_check_for_title.append(filter_item_obj["name"])
                 
                 unique_terms_for_title_check = list(set(terms_to_check_for_title)) 
-                # self.logger(f"       [Debug Title Match] Unique terms for this filter obj: {unique_terms_for_title_check}") 
 
                 for term_to_match in unique_terms_for_title_check:
-                    # self.logger(f"         [Debug Title Match] Checking term: '{term_to_match}'") 
                     match_found_for_term = is_title_match_for_character(post_title, term_to_match)
-                    # self.logger(f"           [Debug Title Match] Result for '{term_to_match}': {match_found_for_term}") 
                     if match_found_for_term:
                         post_is_candidate_by_title_char_match = True
                         char_filter_that_matched_title = filter_item_obj 
                         self.logger(f"   Post title matches char filter term '{term_to_match}' (from group/name '{filter_item_obj['name']}', Scope: {self.char_filter_scope}). Post is candidate.")
                         break
                 if post_is_candidate_by_title_char_match: break
-            # self.logger(f"   [Debug Title Match] Final post_is_candidate_by_title_char_match: {post_is_candidate_by_title_char_match}") 
-        
-        # --- Populate all_files_from_post_api before character filter logic that needs it ---
-        # This is needed for the file-first check in CHAR_SCOPE_COMMENTS
         all_files_from_post_api_for_char_check = []
         api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
         if not api_file_domain_for_char_check or not any(d in api_file_domain_for_char_check.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
@@ -1181,7 +1087,6 @@ class PostProcessorWorker:
                 original_api_att_name = att_info.get('name') or os.path.basename(att_info['path'].lstrip('/'))
                 if original_api_att_name:
                     all_files_from_post_api_for_char_check.append({'_original_name_for_log': original_api_att_name})
-        # --- End population of all_files_from_post_api_for_char_check ---
 
 
         if current_character_filters and self.char_filter_scope == CHAR_SCOPE_COMMENTS:
@@ -1258,8 +1163,6 @@ class PostProcessorWorker:
                 self.logger(f"   [Char Scope: Comments] Phase 2 Result: post_is_candidate_by_comment_char_match = {post_is_candidate_by_comment_char_match}")
             else: # post_is_candidate_by_file_char_match_in_comment_scope was True
                 self.logger(f"   [Char Scope: Comments] Phase 2: Skipped comment check for post ID '{post_id}' because a file match already made it a candidate.")
-
-        # --- Skip Post Logic based on Title or Comment Scope (if filters are active) ---
         if current_character_filters: # Check if any filters are defined
             if self.char_filter_scope == CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match:
                 self.logger(f"   -> Skip Post (Scope: Title - No Char Match): Title '{post_title[:50]}' does not match character filters.")
@@ -1278,9 +1181,6 @@ class PostProcessorWorker:
             post_title_lower = post_title.lower()
             for skip_word in self.skip_words_list:
                 if skip_word.lower() in post_title_lower:
-                    # This is a skip by "skip_words_list", not by character filter.
-                    # If you want these in the "Missed Character Log" too, you'd add a signal emit here.
-                    # For now, sticking to the request for character filter misses.
                     self.logger(f"   -> Skip Post (Keyword in Title '{skip_word}'): '{post_title[:50]}...'. Scope: {self.skip_words_scope}")
                     return 0, num_potential_files_in_post, [], []
         
@@ -1302,7 +1202,6 @@ class PostProcessorWorker:
             log_reason_for_folder = ""
 
             if self.char_filter_scope == CHAR_SCOPE_COMMENTS and char_filter_that_matched_comment:
-                # For CHAR_SCOPE_COMMENTS, prioritize file match for folder name if it happened
                 if post_is_candidate_by_file_char_match_in_comment_scope and char_filter_that_matched_file_in_comment_scope:
                     primary_char_filter_for_folder = char_filter_that_matched_file_in_comment_scope
                     log_reason_for_folder = "Matched char filter in filename (Comments scope)"
@@ -1312,25 +1211,18 @@ class PostProcessorWorker:
             elif (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and char_filter_that_matched_title: # Existing logic for other scopes
                 primary_char_filter_for_folder = char_filter_that_matched_title
                 log_reason_for_folder = "Matched char filter in title"
-            # If scope is FILES, primary_char_filter_for_folder will be None here. Folder determined per file.
-            
-            # When determining base_folder_names_for_post_content without a direct character filter match:
             if primary_char_filter_for_folder:
                 base_folder_names_for_post_content = [clean_folder_name(primary_char_filter_for_folder["name"])]
                 self.logger(f"   Base folder name(s) for post content ({log_reason_for_folder}): {', '.join(base_folder_names_for_post_content)}")
             elif not current_character_filters: # No char filters defined, use generic logic
                 derived_folders = match_folders_from_title(post_title, self.known_names, self.unwanted_keywords)
                 if derived_folders:
-                    # Use the live KNOWN_NAMES from downloader_utils for generic title parsing
-                    # self.known_names is a snapshot from when the worker was created.
                     base_folder_names_for_post_content.extend(match_folders_from_title(post_title, KNOWN_NAMES, self.unwanted_keywords))
                 else:
                     base_folder_names_for_post_content.append(extract_folder_name_from_title(post_title, self.unwanted_keywords))
                 if not base_folder_names_for_post_content or not base_folder_names_for_post_content[0]:
                     base_folder_names_for_post_content = [clean_folder_name(post_title if post_title else "untitled_creator_content")]
                 self.logger(f"   Base folder name(s) for post content (Generic title parsing - no char filters): {', '.join(base_folder_names_for_post_content)}")
-            # If char filters are defined, and scope is FILES, then base_folder_names_for_post_content remains empty.
-            # The folder will be determined by char_filter_info_that_matched_file later.
             
         if not self.extract_links_only and self.use_subfolders and self.skip_words_list:
             if self._check_pause(f"Folder keyword skip check for post {post_id}"): return 0, num_potential_files_in_post, []
@@ -1413,12 +1305,9 @@ class PostProcessorWorker:
             if not all_files_from_post_api:
                  self.logger(f"   -> No image thumbnails found for post {post_id} in thumbnail-only mode.")
                  return 0, 0, [], []
-        
-        # Sort files within the post by original name if in Date Based manga mode
         if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED:
             def natural_sort_key_for_files(file_api_info):
                 name = file_api_info.get('_original_name_for_log', '').lower()
-                # Split into text and number parts for natural sorting (e.g., "file2.jpg" before "file10.jpg")
                 return [int(text) if text.isdigit() else text for text in re.split('([0-9]+)', name)]
             
             all_files_from_post_api.sort(key=natural_sort_key_for_files)
@@ -1489,12 +1378,10 @@ class PostProcessorWorker:
                             char_filter_info_that_matched_file = char_filter_that_matched_title
                             self.logger(f"   File '{current_api_original_filename}' is candidate because post title matched. Scope: Both (Title part).")
                         else: 
-                            # This part is for the "File" part of "Both" scope
                             for filter_item_obj_both_file in current_character_filters:
                                 terms_to_check_for_file_both = list(filter_item_obj_both_file["aliases"])
                                 if filter_item_obj_both_file["is_group"] and filter_item_obj_both_file["name"] not in terms_to_check_for_file_both:
                                     terms_to_check_for_file_both.append(filter_item_obj_both_file["name"])
-                                # Ensure unique_terms_for_file_both_check is defined here
                                 unique_terms_for_file_both_check = list(set(terms_to_check_for_file_both)) 
                                 
                                 for term_to_match in unique_terms_for_file_both_check:
@@ -1505,8 +1392,6 @@ class PostProcessorWorker:
                                         break
                                 if file_is_candidate_by_char_filter_scope: break
                     elif self.char_filter_scope == CHAR_SCOPE_COMMENTS:
-                        # If the post is a candidate (either by file or comment under this scope), then this file is also a candidate.
-                        # The folder naming will use the filter that made the POST a candidate.
                         if post_is_candidate_by_file_char_match_in_comment_scope: # Post was candidate due to a file match
                             file_is_candidate_by_char_filter_scope = True
                             char_filter_info_that_matched_file = char_filter_that_matched_file_in_comment_scope # Use the filter that matched a file in the post
@@ -1577,8 +1462,6 @@ class PostProcessorWorker:
                 except Exception as exc_f:
                     self.logger(f"❌ File download task for post {post_id} resulted in error: {exc_f}")
                     total_skipped_this_post += 1
-        
-        # Clear file progress display after all files in a post are done
         self._emit_signal('file_progress', "", None)
 
         if self.check_cancel(): self.logger(f"   Post {post_id} processing interrupted/cancelled.");
@@ -1670,7 +1553,6 @@ class DownloadThread(QThread):
         self.cookie_text = cookie_text # Store cookie text
         self.use_cookie = use_cookie # Store cookie setting
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker by DownloadThread
-        # self.manga_date_scan_dir = manga_date_scan_dir # Store scan directory
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
             self.compress_images = False
@@ -1704,14 +1586,9 @@ class DownloadThread(QThread):
         grand_total_skipped_files = 0
         grand_list_of_kept_original_filenames = [] 
         was_process_cancelled = False
-        
-        # Initialize manga_date_file_counter_ref if needed (moved from main.py)
-        # This is now done within the DownloadThread's run method.
         current_manga_date_file_counter_ref = self.manga_date_file_counter_ref
         if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED and \
            not self.extract_links_only and current_manga_date_file_counter_ref is None: # Check if it needs calculation
-            
-            # series_scan_directory calculation logic (simplified for direct use here)
             series_scan_dir = self.output_dir
             if self.use_subfolders:
                 if self.filter_character_list_objects and self.filter_character_list_objects[0] and self.filter_character_list_objects[0].get("name"):
@@ -1731,9 +1608,6 @@ class DownloadThread(QThread):
                         if match: highest_num = max(highest_num, int(match.group(1)))
             current_manga_date_file_counter_ref = [highest_num + 1, threading.Lock()]
             self.logger(f"ℹ️ [Thread] Manga Date Mode: Initialized counter at {current_manga_date_file_counter_ref[0]}.")
-
-        # This DownloadThread (being a QThread) will use its own signals object
-        # to communicate with PostProcessorWorker if needed.
         worker_signals_obj = PostProcessorSignals()
         try:
             worker_signals_obj.progress_signal.connect(self.progress_signal)
@@ -1841,7 +1715,6 @@ class DownloadThread(QThread):
                     worker_signals_obj.external_link_signal.disconnect(self.external_link_signal)
                     worker_signals_obj.file_progress_signal.disconnect(self.file_progress_signal)
                     worker_signals_obj.missed_character_post_signal.disconnect(self.missed_character_post_signal)
-                    # No need to disconnect retryable_file_failed_signal from worker_signals_obj as it's not on it
             except (TypeError, RuntimeError) as e:
                 self.logger(f"ℹ️ Note during DownloadThread signal disconnection: {e}")
             

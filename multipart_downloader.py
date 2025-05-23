@@ -33,21 +33,13 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download resumed.")
 
     chunk_headers = headers.copy()
-    # end_byte can be -1 for 0-byte files, meaning download from start_byte to end of file (which is start_byte itself)
     if end_byte != -1 : # For 0-byte files, end_byte might be -1, Range header should not be set or be 0-0
         chunk_headers['Range'] = f"bytes={start_byte}-{end_byte}"
     elif start_byte == 0 and end_byte == -1: # Specifically for 0-byte files
-        # Some servers might not like Range: bytes=0--1.
-        # For a 0-byte file, we might not even need a range header, or Range: bytes=0-0
-        # Let's try without for 0-byte, or rely on server to handle 0-0 if Content-Length was 0.
-        # If Content-Length was 0, the main function might handle it directly.
-        # This chunking logic is primarily for files > 0 bytes.
-        # For now, if end_byte is -1, it implies a 0-byte file, so we expect 0 bytes.
         pass
 
 
     bytes_this_chunk = 0
-    # last_progress_emit_time_for_chunk = time.time() # Replaced by global_emit_time_ref logic
     last_speed_calc_time = time.time()
     bytes_at_last_speed_calc = 0
 
@@ -71,18 +63,12 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
             if attempt > 0:
                 logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Retrying download (Attempt {attempt}/{MAX_CHUNK_DOWNLOAD_RETRIES})...")
                 time.sleep(CHUNK_DOWNLOAD_RETRY_DELAY * (2 ** (attempt - 1)))
-                # Reset speed calculation on retry
                 last_speed_calc_time = time.time()
                 bytes_at_last_speed_calc = bytes_this_chunk # Current progress of this chunk
-            
-            # Enhanced log message for chunk start
             log_msg = f"   🚀 [Chunk {part_num + 1}/{total_parts}] Starting download: bytes {start_byte}-{end_byte if end_byte != -1 else 'EOF'}"
             logger_func(log_msg)
-            # print(f"DEBUG_MULTIPART: {log_msg}") # Direct console print for debugging
             response = requests.get(chunk_url, headers=chunk_headers, timeout=(10, 120), stream=True, cookies=cookies_for_chunk)
             response.raise_for_status()
-
-            # For 0-byte files, if end_byte was -1, we expect 0 content.
             if start_byte == 0 and end_byte == -1 and int(response.headers.get('Content-Length', 0)) == 0:
                 logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Confirmed 0-byte file.")
                 with progress_data['lock']:
@@ -112,7 +98,6 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
                         bytes_this_chunk += len(data_segment)
                         
                         with progress_data['lock']:
-                            # Increment both the chunk's downloaded and the overall downloaded
                             progress_data['total_downloaded_so_far'] += len(data_segment)
                             progress_data['chunks_status'][part_num]['downloaded'] = bytes_this_chunk
                             progress_data['chunks_status'][part_num]['active'] = True
@@ -125,17 +110,12 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
                                 progress_data['chunks_status'][part_num]['speed_bps'] = current_speed_bps
                                 last_speed_calc_time = current_time
                                 bytes_at_last_speed_calc = bytes_this_chunk                            
-
-                            # Throttle emissions globally for this file download
                             if emitter and (current_time - global_emit_time_ref[0] > 0.25): # Max ~4Hz for the whole file
                                 global_emit_time_ref[0] = current_time # Update shared last emit time
-                                
-                                # Prepare and emit the status_list_copy
                                 status_list_copy = [dict(s) for s in progress_data['chunks_status']] # Make a deep enough copy
                                 if isinstance(emitter, queue.Queue):
                                     emitter.put({'type': 'file_progress', 'payload': (api_original_filename, status_list_copy)})
                                 elif hasattr(emitter, 'file_progress_signal'): # PostProcessorSignals-like
-                                    # Ensure we read the latest total downloaded from progress_data
                                     emitter.file_progress_signal.emit(api_original_filename, status_list_copy)
             return bytes_this_chunk, True
 
@@ -150,8 +130,6 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
         except Exception as e:
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Unexpected error: {e}\n{traceback.format_exc(limit=1)}")
             return bytes_this_chunk, False
-
-    # Ensure final status is marked as inactive if loop finishes due to retries
     with progress_data['lock']:
         progress_data['chunks_status'][part_num]['active'] = False
         progress_data['chunks_status'][part_num]['speed_bps'] = 0
@@ -236,11 +214,8 @@ def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, 
     if cancellation_event and cancellation_event.is_set():
         logger_func(f"   Multi-part download for '{api_original_filename}' cancelled by main event.")
         all_chunks_successful = False
-
-    # Ensure a final progress update is sent with all chunks marked inactive (unless still active due to error)
     if emitter_for_multipart:
         with progress_data['lock']:
-            # Ensure all chunks are marked inactive for the final signal if download didn't fully succeed or was cancelled
             status_list_copy = [dict(s) for s in progress_data['chunks_status']]
             if isinstance(emitter_for_multipart, queue.Queue):
                 emitter_for_multipart.put({'type': 'file_progress', 'payload': (api_original_filename, status_list_copy)})
@@ -254,8 +229,6 @@ def download_file_in_parts(file_url, save_path, total_size, num_parts, headers, 
             for buf in iter(lambda: f_hash.read(4096*10), b''): # Read in larger buffers for hashing
                 md5_hasher.update(buf)
         calculated_hash = md5_hasher.hexdigest()
-        # Return an open file handle for the caller to manage (e.g., for compression)
-        # The caller is responsible for closing this handle and renaming/deleting the .part file.
         return True, total_bytes_from_chunks, calculated_hash, open(temp_file_path, 'rb')
     else:
         logger_func(f"   ❌ Multi-part download failed for '{api_original_filename}'. Success: {all_chunks_successful}, Bytes: {total_bytes_from_chunks}/{total_size}. Cleaning up.")
