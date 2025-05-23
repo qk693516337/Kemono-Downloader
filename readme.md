@@ -51,18 +51,18 @@ This field allows for dynamic filtering for the current download session and pro
 
 - **Standard Names:**
   - Input: `Nami, Robin`
-  - Session Behavior: Filters for "Nami" or "Robin". If "Separate Folders" is on, creates folders "Nami" and "Robin".
+  - Session Behavior: Filters for "Nami" OR "Robin". If "Separate Folders" is on, creates folders "Nami" and "Robin".
   - `Known.txt` Addition: If "Nami" is new and selected for addition in the confirmation dialog, it's added as `Nami` on a new line in `Known.txt`.
 
-- **Grouped Aliases for a Single Character (using `~`):**
-  - Input: `(Boa ~ Hancock)`
-  - Meaning: "Boa" and "Hancock" are different names for the *same character*.
+- **Grouped Aliases for a Single Character (using `(...)~` syntax):**
+  - Input: `(Boa, Hancock)~`
+  - Meaning: "Boa" and "Hancock" are different names/aliases for the *same character*. The names are listed within parentheses separated by commas (e.g., `name1, alias1, alias2`), and the entire group is followed by a `~` symbol. This is useful when a creator uses different names for the same character.
   - Session Behavior: Filters for "Boa" OR "Hancock". If "Separate Folders" is on, creates a single folder named "Boa Hancock".
-  - `Known.txt` Addition: If this group is new and selected for addition, it's added to `Known.txt` as a grouped alias entry, like `(Boa Hancock, Boa, Hancock)`.
+  - `Known.txt` Addition: If this group is new and selected for addition, it's added to `Known.txt` as a grouped alias entry, typically `(Boa Hancock, Boa, Hancock)`. The first name in the `Known.txt` entry (e.g., "Boa Hancock") becomes the primary folder name.
 
-- **Combined Folder for Distinct Characters (using `,` within parentheses):**
+- **Combined Folder for Distinct Characters (using `(...)` syntax):**
   - Input: `(Vivi, Uta)`
-  - Meaning: "Vivi" and "Uta" are *distinct characters*, but for this download session, their content should be grouped into a single folder.
+  - Meaning: "Vivi" and "Uta" are *distinct characters*, but for this download session, their content should be grouped into a single folder. The names are listed within parentheses separated by commas. This is useful for grouping art of less frequent characters without creating many small individual folders.
   - Session Behavior: Filters for "Vivi" OR "Uta". If "Separate Folders" is on, creates a single folder named "Vivi Uta".
   - `Known.txt` Addition: If this "combined group" is new and selected for addition, "Vivi" and "Uta" are added to `Known.txt` as *separate, individual simple entries* on new lines:
     ```
