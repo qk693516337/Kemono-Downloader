@@ -2124,16 +2124,53 @@ class DownloaderApp(QWidget):
     def _handle_ui_add_new_character(self):
         """Handles adding a new character from the UI input field."""
         name_from_ui_input = self.new_char_input.text().strip()
+        successfully_added_any = False
+
         if not name_from_ui_input:
             QMessageBox.warning(self, "Input Error", "Name cannot be empty.")
             return
 
-        # For UI additions, it's always a simple, non-group entry.
-        # The special ( ) and ( )~ parsing is for the "Filter by Character(s)" field.
-        self.add_new_character(name_to_add=name_from_ui_input,
-                               is_group_to_add=False,
-                               aliases_to_add=[name_from_ui_input],
-                               suppress_similarity_prompt=False) # UI adds one by one, so prompt is fine
+        if name_from_ui_input.startswith("(") and name_from_ui_input.endswith(")~"):
+            # Format: (Name1, Name2)~ -> Group "Name1 Name2" with aliases Name1, Name2
+            content = name_from_ui_input[1:-2].strip() # Remove ( and )~
+            aliases = [alias.strip() for alias in content.split(',') if alias.strip()]
+            if aliases:
+                folder_name = " ".join(aliases) # The primary name for the KNOWN_NAMES entry
+                if self.add_new_character(name_to_add=folder_name,
+                                           is_group_to_add=True,
+                                           aliases_to_add=aliases,
+                                           suppress_similarity_prompt=False):
+                    successfully_added_any = True
+            else:
+                QMessageBox.warning(self, "Input Error", "Empty group content for `~` format.")
+
+        elif name_from_ui_input.startswith("(") and name_from_ui_input.endswith(")"):
+            # Format: (Name1, Name2) -> Add Name1 and Name2 as separate entries
+            content = name_from_ui_input[1:-1].strip() # Remove ( and )
+            names_to_add_separately = [name.strip() for name in content.split(',') if name.strip()]
+            if names_to_add_separately:
+                for name_item in names_to_add_separately:
+                    if self.add_new_character(name_to_add=name_item,
+                                               is_group_to_add=False,
+                                               aliases_to_add=[name_item],
+                                               suppress_similarity_prompt=False):
+                        successfully_added_any = True
+            else:
+                QMessageBox.warning(self, "Input Error", "Empty group content for standard group format.")
+        else:
+            # Simple name, add as a single non-group entry
+            if self.add_new_character(name_to_add=name_from_ui_input,
+                                       is_group_to_add=False,
+                                       aliases_to_add=[name_from_ui_input],
+                                       suppress_similarity_prompt=False):
+                successfully_added_any = True
+
+        if successfully_added_any:
+            self.new_char_input.clear()
+            self.save_known_names()
+        # The add_new_character method itself handles logging success/failure of individual additions
+        # and updating the character_list widget.
+
 
     def add_new_character(self, name_to_add, is_group_to_add, aliases_to_add, suppress_similarity_prompt=False):
         global KNOWN_NAMES, clean_folder_name
@@ -2207,7 +2244,6 @@ class DownloaderApp(QWidget):
         log_msg_suffix = f" (as group with aliases: {', '.join(new_entry['aliases'])})" if is_group_to_add and len(new_entry['aliases']) > 1 else ""
         self.log_signal.emit(f"✅ Added '{name_to_add}' to known names list{log_msg_suffix}.")
         self.new_char_input.clear()
-        self.save_known_names()
         return True
 
 
