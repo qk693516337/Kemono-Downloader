@@ -27,27 +27,55 @@ Version 3.5.0 focuses on enhancing access to content and providing even smarter 
 
 ---
 
-###  Advanced `Known.txt` for Smart Folder Organization
+###  Advanced `Known.txt` and Character Filtering
 
 The `Known.txt` system has been revamped for improved performance and stability. The previous method of handling known names could become resource-intensive with large lists, potentially leading to application slowdowns or crashes. This new, streamlined system offers more direct control and robust organization.
+The `Known.txt` file and the "Filter by Character(s)" input field work together to provide powerful and flexible content organization. The `Known.txt` file itself has a straightforward syntax, while the UI input allows for more complex session-specific grouping and alias definitions that can then be added to `Known.txt`.
 
-- **Fine-Grained Control:** `Known.txt`, located in the application's directory, allows you to create a personalized list of names, series titles, and keywords for precise automatic folder organization when "Separate Folders by Name/Title" is enabled.
+**1. `Known.txt` File Syntax (Located in App Directory):**
 
-- **How It Works (Syntax and Behavior):**
-  Each line in `Known.txt` represents an entry:
-  - **Simple Entries:** A line like `My Awesome Series` defines both the term to match in content (post titles, filenames, etc., based on your filter scope) and the name of the folder where matching content will be saved ("My Awesome Series").
-  - **Grouped Entries (Primary Folder Name & Aliases):** To group multiple search terms under a single, specific folder name, use parentheses. The format is `(FolderName, alias1, alias2, ...)`.
-    - The **first item** inside the parentheses explicitly defines the name of the folder.
-    - All items within the parentheses (including the first one) are used as aliases to match against content.
-    - **Example:** An entry like `(Chainsaw Man, Denji, Pochita, Makima)` means:
-      - Matching content (containing "Chainsaw Man", "Denji", "Pochita", or "Makima") will be saved into a folder named "Chainsaw Man".
-    - **Another Example:** `(Power, powwr, pwr, Blood Devil)` will create a folder named "Power" for content matching any of those terms.
+`Known.txt` stores your persistent list of characters, series, or keywords for folder organization. Each line is an entry:
 
-- **Intelligent Fallback:** If "Separate Folders by Name/Title" is active, and a post's content doesn't match any terms provided in the main "Filter by Character(s)" UI input, the downloader will then consult `Known.txt`. If a match is found in `Known.txt`, the content will be organized into the folder defined by that `Known.txt` entry.
+- **Simple Entries:**
+  - A line like `My Awesome Series` or `Nami`.
+  - **Behavior:** Content matching this term will be saved into a folder named "My Awesome Series" or "Nami" respectively (if "Separate Folders" is enabled).
+- **Grouped Alias Entries (for a single character/entity):**
+  - Format: `(PrimaryFolderName, alias1, alias2, ...)`
+  - **Example:** `(Boa Hancock, Boa, Hancock)`
+  - **Behavior:** Content matching "Boa Hancock", "Boa", OR "Hancock" will be saved into a folder named "Boa Hancock". The first item in the parentheses is the primary folder name; all items are matching aliases.
+  - **Example:** `(Power, powwr, pwr, Blood Devil)` creates a folder "Power" for content matching any of those terms.
 
-- **User-Friendly Management:**
-  - You can add new simple (non-grouped) entries to `Known.txt` directly using the list and "Add" button in the UI.
-  - To create or modify grouped entries, or to make more complex changes, click the "Open Known.txt" button. This will open the file in your system's default text editor. The application reloads `Known.txt` on startup or when a download process begins.
+**2. "Filter by Character(s)" UI Input Field:**
+
+This field allows for dynamic filtering for the current download session and provides options for how new entries are added to `Known.txt`.
+
+- **Standard Names:**
+  - Input: `Nami, Robin`
+  - Session Behavior: Filters for "Nami" or "Robin". If "Separate Folders" is on, creates folders "Nami" and "Robin".
+  - `Known.txt` Addition: If "Nami" is new and selected for addition in the confirmation dialog, it's added as `Nami` on a new line in `Known.txt`.
+
+- **Grouped Aliases for a Single Character (using `~`):**
+  - Input: `(Boa ~ Hancock)`
+  - Meaning: "Boa" and "Hancock" are different names for the *same character*.
+  - Session Behavior: Filters for "Boa" OR "Hancock". If "Separate Folders" is on, creates a single folder named "Boa Hancock".
+  - `Known.txt` Addition: If this group is new and selected for addition, it's added to `Known.txt` as a grouped alias entry, like `(Boa Hancock, Boa, Hancock)`.
+
+- **Combined Folder for Distinct Characters (using `,` within parentheses):**
+  - Input: `(Vivi, Uta)`
+  - Meaning: "Vivi" and "Uta" are *distinct characters*, but for this download session, their content should be grouped into a single folder.
+  - Session Behavior: Filters for "Vivi" OR "Uta". If "Separate Folders" is on, creates a single folder named "Vivi Uta".
+  - `Known.txt` Addition: If this "combined group" is new and selected for addition, "Vivi" and "Uta" are added to `Known.txt` as *separate, individual simple entries* on new lines:
+    ```
+    Vivi
+    Uta
+    ```
+    The combined folder "Vivi Uta" is a session-only convenience; `Known.txt` stores them as distinct entities for future individual use.
+
+**3. Interaction with `Known.txt`:**
+
+- **Adding New Names from Filters:** When you use the "Filter by Character(s)" input, if any names or groups are new (not already in `Known.txt`), a dialog will appear after you start the download. This dialog allows you to select which of these new names/groups should be added to `Known.txt`, formatted according to the rules described above.
+- **Intelligent Fallback:** If "Separate Folders by Name/Title" is active, and content doesn't match the "Filter by Character(s)" UI input, the downloader consults your `Known.txt` file for folder naming.
+- **Direct Management:** You can add simple entries directly to `Known.txt` using the list and "Add" button in the UI's `Known.txt` management section. For creating or modifying complex grouped alias entries directly in the file, or for bulk edits, click the "Open Known.txt" button. The application reloads `Known.txt` on startup or before a download process begins.
 
 ---
 ##  What's in v3.4.0? (Previous Update)
@@ -141,7 +169,12 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 - **Character Name Filtering:**
   - Use `Tifa, Aerith` or group `(Boa, Hancock)` → folder `Boa Hancock`
-
+  - Flexible input for current session and for adding to `Known.txt`.
+  - Examples:
+    - `Nami` (simple character)
+    - `(Boa ~ Hancock)` (aliases for one character, session folder "Boa Hancock", adds `(Boa Hancock, Boa, Hancock)` to `Known.txt`)
+    - `(Vivi, Uta)` (distinct characters, session folder "Vivi Uta", adds `Vivi` and `Uta` separately to `Known.txt`)
+  - See "Advanced `Known.txt` and Character Filtering" for full details.
   - **Filter Scopes:**
     - `Files`
     - `Title`
