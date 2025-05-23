@@ -29,10 +29,25 @@ Version 3.5.0 focuses on enhancing access to content and providing even smarter 
 
 ###  Advanced `Known.txt` for Smart Folder Organization
 
-- **Fine-Grained Control:** Take your automatic folder organization to the next level with a personalized list of names, series titles, and keywords in `Known.txt`.
-- **Primary Names & Aliases:** Define a main folder name and link multiple aliases to it. For example, `([Power], powwr, pwr, Blood devil)` ensures any post matching "Power" or "powwr" (in title or filename, depending on settings) gets saved into a "Power" folder. Simple entries like `My Series` are also supported.
-- **Intelligent Fallback:** When "Separate Folders by Name/Title" is active, and if a post doesn't match any specific "Filter by Character(s)" input, the downloader consults `Known.txt` to find a matching primary name for folder creation.
-- **User-Friendly Management:** Add or remove primary names directly through the UI, or click "Open Known.txt" for advanced editing (e.g., setting up aliases).
+The `Known.txt` system has been revamped for improved performance and stability. The previous method of handling known names could become resource-intensive with large lists, potentially leading to application slowdowns or crashes. This new, streamlined system offers more direct control and robust organization.
+
+- **Fine-Grained Control:** `Known.txt`, located in the application's directory, allows you to create a personalized list of names, series titles, and keywords for precise automatic folder organization when "Separate Folders by Name/Title" is enabled.
+
+- **How It Works (Syntax and Behavior):**
+  Each line in `Known.txt` represents an entry:
+  - **Simple Entries:** A line like `My Awesome Series` defines both the term to match in content (post titles, filenames, etc., based on your filter scope) and the name of the folder where matching content will be saved ("My Awesome Series").
+  - **Grouped Entries (Primary Folder Name & Aliases):** To group multiple search terms under a single, specific folder name, use parentheses. The format is `(FolderName, alias1, alias2, ...)`.
+    - The **first item** inside the parentheses explicitly defines the name of the folder.
+    - All items within the parentheses (including the first one) are used as aliases to match against content.
+    - **Example:** An entry like `(Chainsaw Man, Denji, Pochita, Makima)` means:
+      - Matching content (containing "Chainsaw Man", "Denji", "Pochita", or "Makima") will be saved into a folder named "Chainsaw Man".
+    - **Another Example:** `(Power, powwr, pwr, Blood Devil)` will create a folder named "Power" for content matching any of those terms.
+
+- **Intelligent Fallback:** If "Separate Folders by Name/Title" is active, and a post's content doesn't match any terms provided in the main "Filter by Character(s)" UI input, the downloader will then consult `Known.txt`. If a match is found in `Known.txt`, the content will be organized into the folder defined by that `Known.txt` entry.
+
+- **User-Friendly Management:**
+  - You can add new simple (non-grouped) entries to `Known.txt` directly using the list and "Add" button in the UI.
+  - To create or modify grouped entries, or to make more complex changes, click the "Open Known.txt" button. This will open the file in your system's default text editor. The application reloads `Known.txt` on startup or when a download process begins.
 
 ---
 ##  What's in v3.4.0? (Previous Update)
@@ -208,14 +223,14 @@ This version brings significant enhancements to manga/comic downloading, filteri
 
 ###  Config System
 
-- **`Known.txt` for Smart Folder Naming:**
-  - A user-editable file (`Known.txt`) stores a list of preferred names, series titles, or keywords.
-  - Used as a fallback for folder creation when "Separate Folders by Name/Title" is enabled, helping to group content logically even without explicit character filters.
-  - **Supports primary names and aliases:**
-    - Simple entries: `My Favorite Series`
-    - Grouped entries with a primary name for the folder: `([Primary Name], alias1, alias2)`
+- **`Known.txt` for Smart Folder Naming (Located in App Directory):**
+  - A user-editable file that stores a list of preferred names, series titles, or keywords.
+  - It's primarily used as an intelligent fallback for folder creation when "Separate Folders by Name/Title" is enabled.
+  - **Syntax:**
+    - Simple entries: `My Favorite Series` (creates folder "My Favorite Series", matches "My Favorite Series").
+    - Grouped entries: `(Desired Folder Name, alias1, alias2)` (creates folder "Desired Folder Name"; matches "Desired Folder Name", "alias1", or "alias2").
 
-- **Stored in Standard App Data Path**
+- **Settings Stored in App Directory**
 
 - **Editable Within GUI**
 
@@ -258,9 +273,9 @@ pyinstaller --name "Kemono Downloader" --onefile --windowed --icon="Kemono.ico" 
 ***
 
 ## ** Config Files**
-
-- `Known.txt` — character/show names used for folder organization
-- Supports simple names (e.g., `My Series`) and grouped names with a primary folder name and aliases (e.g., `([Primary Folder Name], alias1, alias2)`).
+- `settings.json` — Stores your UI preferences and settings.
+- `Known.txt` — Stores character names, series titles, or keywords for organizing downloaded content into specific folders.
+  - Supports simple entries (e.g., `My Series`) and grouped entries for aliases (e.g., `(Folder Name, alias1, alias2)` where "Folder Name" is the name of the created folder, and all terms are used for matching).
 
 ***
 

@@ -21,7 +21,7 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton, QButtonGroup, QCheckBox, QSplitter,
-    QDialog, QStackedWidget, QScrollArea, 
+    QDialog, QStackedWidget, QScrollArea, QListWidgetItem,
     QAbstractItemView, # Added for QListWidget.NoSelection
     QFrame,
     QAbstractButton
@@ -114,11 +114,11 @@ CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3
 
 class ConfirmAddAllDialog(QDialog):
     """A dialog to confirm adding multiple new names to Known.txt."""
-    def __init__(self, new_names_list, parent=None):
+    def __init__(self, new_filter_objects_list, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Confirm Adding New Names")
         self.setModal(True)
-        self.new_names_list = new_names_list
+        self.new_filter_objects_list = new_filter_objects_list
         self.user_choice = CONFIRM_ADD_ALL_CANCEL_DOWNLOAD # Default to cancel if closed
 
         main_layout = QVBoxLayout(self)
@@ -132,20 +132,41 @@ class ConfirmAddAllDialog(QDialog):
         main_layout.addWidget(info_label)
 
         self.names_list_widget = QListWidget()
-        self.names_list_widget.addItems(self.new_names_list)
-        self.names_list_widget.setSelectionMode(QAbstractItemView.NoSelection) # Just for display
+        for filter_obj in self.new_filter_objects_list:
+            item_text = filter_obj["name"]
+            # Optionally, make group display more informative
+            # if filter_obj["is_group"]:
+            #     item_text += f" (Group with aliases: {', '.join(filter_obj['aliases'])})"
+            
+            list_item = QListWidgetItem(item_text)
+            list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+            list_item.setCheckState(Qt.Checked)  # Default to checked
+            list_item.setData(Qt.UserRole, filter_obj) # Store the full filter object
+            self.names_list_widget.addItem(list_item)
+
         main_layout.addWidget(self.names_list_widget)
+
+        selection_buttons_layout = QHBoxLayout()
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self._select_all_items)
+        selection_buttons_layout.addWidget(self.select_all_button)
+
+        self.deselect_all_button = QPushButton("Deselect All")
+        self.deselect_all_button.clicked.connect(self._deselect_all_items)
+        selection_buttons_layout.addWidget(self.deselect_all_button)
+        selection_buttons_layout.addStretch()
+        main_layout.addLayout(selection_buttons_layout)
+
 
         buttons_layout = QHBoxLayout()
         
-        self.add_all_button = QPushButton("Add All to Known.txt")
-        self.add_all_button.clicked.connect(self._accept_add_all)
-        buttons_layout.addWidget(self.add_all_button)
+        self.add_selected_button = QPushButton("Add Selected to Known.txt")
+        self.add_selected_button.clicked.connect(self._accept_add_selected)
+        buttons_layout.addWidget(self.add_selected_button)
 
         self.skip_adding_button = QPushButton("Skip Adding These")
         self.skip_adding_button.clicked.connect(self._reject_skip_adding)
         buttons_layout.addWidget(self.skip_adding_button)
-
         buttons_layout.addStretch()
 
         self.cancel_download_button = QPushButton("Cancel Download")
@@ -158,10 +179,27 @@ class ConfirmAddAllDialog(QDialog):
         self.setMinimumHeight(350)
         if parent and hasattr(parent, 'get_dark_theme'):
             self.setStyleSheet(parent.get_dark_theme())
-        self.add_all_button.setDefault(True)
+        self.add_selected_button.setDefault(True)
 
-    def _accept_add_all(self):
-        self.user_choice = CONFIRM_ADD_ALL_ACCEPTED
+    def _select_all_items(self):
+        for i in range(self.names_list_widget.count()):
+            self.names_list_widget.item(i).setCheckState(Qt.Checked)
+
+    def _deselect_all_items(self):
+        for i in range(self.names_list_widget.count()):
+            self.names_list_widget.item(i).setCheckState(Qt.Unchecked)
+
+    def _accept_add_selected(self):
+        selected_objects = []
+        for i in range(self.names_list_widget.count()):
+            item = self.names_list_widget.item(i)
+            if item.checkState() == Qt.Checked:
+                filter_obj = item.data(Qt.UserRole)
+                if filter_obj: # Should always be true if populated correctly
+                    selected_objects.append(filter_obj)
+        
+        # self.user_choice will be the list of selected filter_obj, or empty list if none selected
+        self.user_choice = selected_objects 
         self.accept()
 
     def _reject_skip_adding(self):
@@ -174,6 +212,10 @@ class ConfirmAddAllDialog(QDialog):
 
     def exec_(self):
         super().exec_()
+        # If user accepted but selected nothing, treat it as skipping addition
+        if isinstance(self.user_choice, list) and not self.user_choice:
+            QMessageBox.information(self, "No Selection", "No names were selected to be added. Skipping addition.")
+            return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
 class TourStepWidget(QWidget):
     """A single step/page in the tour."""
@@ -289,10 +331,13 @@ class TourDialog(QDialog):
         step1_content = (
             "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie management."
             "<ul>"
-            "<li>My goal is to help you easily download content from Kemono and Coomer.</li>"
-            "<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li>"
-            "<li>Many options have tooltips if you hover over them for more details.</li>"
-            "<li>Click <b>Skip Tour</b> to close this guide at any time.</li>"
+            "<li>My goal is to help you easily download content from <b>Kemono</b> and <b>Coomer</b>.</li><br>"
+            "<li><b>Important Tip: App '(Not Responding)'?</b><br>"
+            "   After clicking 'Start Download', especially for large creator feeds or with many threads, the application might temporarily show as '(Not Responding)'. Your operating system (Windows, macOS, Linux) might even suggest you 'End Process' or 'Force Quit'.<br>"
+            "   <b>Please be patient!</b> The app is often still working hard in the background. Before force-closing, try checking your chosen 'Download Location' in your file explorer. If you see new folders being created or files appearing, it means the download is progressing correctly. Give it some time to become responsive again.</li><br>"
+            "<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li><br>"
+            "<li>Many options have tooltips if you hover over them for more details.</li><br>"
+            "<li>Click <b>Skip Tour</b> to close this guide at any time.</li><br>"
             "<li>Check <b>'Never show this tour again'</b> if you don't want to see this on future startups.</li>"
             "</ul>"
         )
@@ -304,6 +349,7 @@ class TourDialog(QDialog):
             "<li><b>🔗 Kemono Creator/Post URL:</b><br>"
             "   Paste the full web address (URL) of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) "
             "or a specific post (e.g., <i>.../post/98765</i>).</li><br>"
+            "   or a Coomer creator (e.g., <i>https://coomer.su/onlyfans/user/artistname</i>) "
             "<li><b>📁 Download Location:</b><br>"
             "   Click 'Browse...' to choose a folder on your computer where all downloaded files will be saved. "
             "This is required unless you are using 'Only Links' mode.</li><br>"
@@ -315,28 +361,28 @@ class TourDialog(QDialog):
         self.step2 = TourStepWidget("① Getting Started", step2_content)
 
         step3_content = (
-            "Refine what you download with these filters:"
+            "Refine what you download with these filters (most are disabled in 'Only Links' or 'Only Archives' modes):"
             "<ul>"
             "<li><b>🎯 Filter by Character(s):</b><br>"
-            "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2)</i> becomes folder 'alias1 alias2'.<br>"
-            "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3' (after cleaning).\nAll names in the group are used as aliases for matching.\n"
-            "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename.</li>"
-            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>"
-            "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li>"
+            "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3' (after cleaning). All names in the group are used as aliases for matching.<br>"
+            "   The <b>'Filter: [Type]'</b> button (next to this input) cycles how this filter applies:"
+            "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename (if 'Separate Folders' is on).</li><br>"
+            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li><br>"
+            "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li><br>"
             "       <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li></ul>"
             "   This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled.</li><br>"
             "<li><b>🚫 Skip with Words:</b><br>"
             "   Enter words, comma-separated (e.g., <i>WIP, sketch, preview</i>). "
             "   The <b>'Scope: [Type]'</b> button (next to this input) cycles how this filter applies:"
-            "   <ul><li><i>Scope: Files:</i> Skips files if their names contain any of these words.</li>"
-            "       <li><i>Scope: Posts:</i> Skips entire posts if their titles contain any of these words.</li>"
+            "   <ul><li><i>Scope: Files:</i> Skips files if their names contain any of these words.</li><br>"
+            "       <li><i>Scope: Posts:</i> Skips entire posts if their titles contain any of these words.</li><br>"
             "       <li><i>Scope: Both:</i> Applies both file and post title skipping (post first, then files).</li></ul></li><br>"
             "<li><b>Filter Files (Radio Buttons):</b> Choose what to download:"
             "   <ul>"
-            "   <li><i>All:</i> Downloads all file types found.</li>"
-            "   <li><i>Images/GIFs:</i> Only common image formats and GIFs.</li>"
-            "   <li><i>Videos:</i> Only common video formats.</li>"
-            "   <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li>"
+            "   <li><i>All:</i> Downloads all file types found.</li><br>"
+            "   <li><i>Images/GIFs:</i> Only common image formats and GIFs.</li><br>"
+            "   <li><i>Videos:</i> Only common video formats.</li><br>"
+            "   <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li><br>"
             "   <li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled.</li>"
             "   </ul></li>"
             "</ul>"
@@ -355,10 +401,11 @@ class TourDialog(QDialog):
             "<li><b>🗄️ Custom Folder Name (Single Post Only):</b><br>"
             "   If you are downloading a single specific post URL AND 'Separate Folders by Name/Title' is enabled, "
             "you can enter a custom name here for that post's download folder.</li><br>"
-            "<li><b>🍪 Use Cookie:</b> Check this to use cookies for requests. You can either:"
-            "   <ul><li>Enter a cookie string directly into the text field (e.g., <i>name1=value1; name2=value2</i>).</li>"
+            "<li><b>🍪 Use Cookie:</b> Check this to use cookies for requests. You can either:" # This <li> is the parent of a sub-ul
+            "   <ul><li>Enter a cookie string directly into the text field (e.g., <i>name1=value1; name2=value2</i>).</li><br>"
             "       <li>Click 'Browse...' to select a <i>cookies.txt</i> file (Netscape format). The path will appear in the text field.</li></ul>"
-            "   This is useful for accessing content that requires login. The text field takes precedence if filled.</li>"
+            "   This is useful for accessing content that requires login. The text field takes precedence if filled. "
+            "If 'Use Cookie' is checked but both the text field and browsed file are empty, it will try to load 'cookies.txt' from the app's directory.</li>"
             "</ul>"
         )
         self.step4 = TourStepWidget("③ Fine-Tuning Downloads", step4_content)
@@ -366,61 +413,87 @@ class TourDialog(QDialog):
         step5_content = (
             "Organize your downloads and manage performance:"
             "<ul>"
-            "<li><b>⚙️ Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the 'Known Shows/Characters' list as a fallback for folder names).</li><br>"
+            "<li><b>⚙️ Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the <b>Known.txt</b> list as a fallback for folder names).</li><br>"
             "<li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li><br>"
             "<li><b>🚀 Use Multithreading (Threads):</b> Enables faster operations. The number in 'Threads' input means:"
-            "   <ul><li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li>"
+            "   <ul><li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li><br>"
             "       <li>For <b>Single Post URLs:</b> Number of files to download concurrently from that single post.</li></ul>"
             "   If unchecked, 1 thread is used. High thread counts (e.g., >40) may show an advisory.</li><br>"
             "<li><b>Multi-part Download Toggle (Top-right of log area):</b><br>"
             "   The <b>'Multi-part: [ON/OFF]'</b> button allows enabling/disabling multi-segment downloads for individual large files. "
-            "   <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling. If a multi-part download fails, it retries as single-stream.</li>"
+            "   <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling. If a multi-part download fails, it retries as single-stream.</li><br>"
             "       <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li></ul>"
             "   This is disabled if 'Only Links' or 'Only Archives' mode is active.</li><br>"
             "<li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content."
             "   <ul>"
-            "   <li>Downloads posts from <b>oldest to newest</b>.</li>"
-            "   <li>The 'Page Range' input is disabled as all posts are fetched.</li>"
+            "   <li>Downloads posts from <b>oldest to newest</b>.</li><br>"
+            "   <li>The 'Page Range' input is disabled as all posts are fetched.</li><br>"
             "   <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:"
             "       <ul>"
-            "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's title. Subsequent files in the same post keep original names.</li>"
-            "       <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames.</li>"
+            "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's title. Subsequent files in the same post keep original names.</li><br>"
+            "       <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames.</li><br>"
             "       <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>"
             "       </ul>"
-            "   </li>"
+            "   </li><br>"
             "   <li>For best results with 'Name: Post Title' or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>"
             "   </ul></li><br>"
             "<li><b>🎭 Known.txt for Smart Folder Organization:</b><br>"
-            "   Fine-grained control over automatic folder organization using a personalized list in <b>Known.txt</b>."
+            "   <code>Known.txt</code> (in the app's directory) allows fine-grained control over automatic folder organization when 'Separate Folders by Name/Title' is active."
             "   <ul>"
-            "       <li><b>Grouped Entries (Aliases):</b> Define a set of aliases that should all map to a single folder name. For example, an entry like <code>(Power, powwr, pwr, Blood devil)</code> in Known.txt means any post matching \"Power\", \"powwr\", etc. (based on your filter scope) will be saved into a folder named \"Power powwr pwr Blood devil\" (after cleaning). Simple entries like <code>My Series</code> are also supported. The folder name for a group is derived from the *entire content* inside the parentheses, with commas replaced by spaces before cleaning.</li>"
-            "       <li><b>Intelligent Fallback:</b> When 'Separate Folders by Name/Title' is active, and if a post doesn't match any specific 'Filter by Character(s)' input, the downloader consults <code>Known.txt</code> to find a matching primary name for folder creation.</li>"
-            "       <li><b>User-Friendly Management:</b> Add or remove primary names directly through the UI list below. For advanced editing (like setting up aliases or defining the primary name for a group), click <b>'Open Known.txt'</b> to edit the file directly.</li>"
+            "       <li><b>How it Works:</b> Each line in <code>Known.txt</code> is an entry. "
+            "           <ul><li>A simple line like <code>My Awesome Series</code> means content matching this will go into a folder named \"My Awesome Series\".</li><br>"
+            "               <li>A grouped line like <code>(Character A, Char A, Alt Name A)</code> means content matching \"Character A\", \"Char A\", OR \"Alt Name A\" will ALL go into a single folder named \"Character A Char A Alt Name A\" (after cleaning). All terms in the parentheses become aliases for that folder.</li></ul></li>"
+            "       <li><b>Intelligent Fallback:</b> When 'Separate Folders by Name/Title' is active, and if a post doesn't match any specific 'Filter by Character(s)' input, the downloader consults <code>Known.txt</code> to find a matching primary name for folder creation.</li><br>"
+            "       <li><b>User-Friendly Management:</b> Add simple (non-grouped) names via the UI list below. For advanced editing (like creating/modifying grouped aliases), click <b>'Open Known.txt'</b> to edit the file in your text editor. The app reloads it on next use or startup.</li>"
             "   </ul>"
             "</li>"
             "</ul>"
         )
         self.step5 = TourStepWidget("④ Organization & Performance", step5_content)
 
-        step6_content = (
+        step6_errors_content = (
+            "Sometimes, downloads might encounter issues. Here are a few common ones:"
+            "<ul>"
+            "<li><b>502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout:</b><br>"
+            "   These usually indicate temporary server-side problems with Kemono/Coomer. The site might be overloaded, down for maintenance, or experiencing issues. <br>"
+            "   <b>Solution:</b> Wait a while (e.g., 30 minutes to a few hours) and try again later. Check the site directly in your browser.</li><br>"
+            "<li><b>Connection Lost / Connection Refused / Timeout (during file download):</b><br>"
+            "   This can happen due to your internet connection, server instability, or if the server drops the connection for a large file. <br>"
+            "   <b>Solution:</b> Check your internet. Try reducing the number of 'Threads' if it's high. The app might prompt to retry some failed files at the end of a session.</li><br>"
+            "<li><b>IncompleteRead Error:</b><br>"
+            "   The server sent less data than expected. Often a temporary network hiccup or server issue. <br>"
+            "   <b>Solution:</b> The app will often mark these files for a retry attempt at the end of the download session.</li><br>"
+            "<li><b>403 Forbidden / 401 Unauthorized (less common for public posts):</b><br>"
+            "   You might not have permission to access the content. For some paywalled or private content, using the 'Use Cookie' option with valid cookies from your browser session might help. Ensure your cookies are fresh.</li><br>"
+            "<li><b>404 Not Found:</b><br>"
+            "   The post or file URL is incorrect, or the content has been removed from the site. Double-check the URL.</li><br>"
+            "<li><b>'No posts found' / 'Target post not found':</b><br>"
+            "   Ensure the URL is correct and the creator/post exists. If using page ranges, make sure they are valid for the creator. For very new posts, there might be a slight delay before they appear in the API.</li><br>"
+            "<li><b>General Slowness / App '(Not Responding)':</b><br>"
+            "   As mentioned in Step 1, if the app seems to hang after starting, especially with large creator feeds or many threads, please give it time. It's likely processing data in the background. Reducing thread count can sometimes improve responsiveness if this is frequent.</li>"
+            "</ul>"
+        )
+        self.step6_errors = TourStepWidget("⑥ Common Errors & Troubleshooting", step6_errors_content)
+
+        step7_final_controls_content = (
             "Monitoring and Controls:"
             "<ul>"
             "<li><b>📜 Progress Log / Extracted Links Log:</b> Shows detailed download messages. If '🔗 Only Links' mode is active, this area displays the extracted links.</li><br>"
             "<li><b>Show External Links in Log:</b> If checked, a secondary log panel appears below the main log to display any external links found in post descriptions. <i>(This is disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</i></li><br>"
             "<li><b>Log View Toggle (👁️ / 🙈 Button):</b><br>"
             "   This button (top-right of log area) switches the main log view:"
-            "   <ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li>"
-            "       <li><b>🙈 Missed Character Log:</b> Displays a summarized list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>"
+            "   <ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li><br>"
+            "       <li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>"
             "<li><b>🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li><br>"
             "<li><b>⬇️ Start Download / 🔗 Extract Links / ⏸️ Pause / ❌ Cancel:</b> These buttons control the process. 'Cancel & Reset UI' stops the current operation and performs a soft UI reset, preserving your URL and Directory inputs. 'Pause/Resume' allows temporarily halting and continuing.</li><br>"
             "<li>If some files fail with recoverable errors (like 'IncompleteRead'), you might be prompted to retry them at the end of a session.</li>"
             "</ul>"
             "<br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader."
         )
-        self.step6 = TourStepWidget("⑤ Logs & Final Controls", step6_content)
+        self.step7_final_controls = TourStepWidget("⑦ Logs & Final Controls", step7_final_controls_content)
 
 
-        self.tour_steps = [self.step1, self.step2, self.step3, self.step4, self.step5, self.step6]
+        self.tour_steps = [self.step1, self.step2, self.step3, self.step4, self.step5, self.step6_errors, self.step7_final_controls]
         for step_widget in self.tour_steps:
             self.stacked_widget.addWidget(step_widget)
 
@@ -2605,24 +2678,30 @@ class DownloaderApp(QWidget):
                         self.log_signal.emit(f"ℹ️ Manga Mode: Using filter '{item_primary_name}' for this session without adding to Known Names.")
 
                 if filter_objects_to_potentially_add_to_known_list:
-                    display_names_for_dialog = [obj["name"] for obj in filter_objects_to_potentially_add_to_known_list]
-                    confirm_dialog = ConfirmAddAllDialog(display_names_for_dialog, self)
+                    # Pass the list of full filter objects to the dialog
+                    confirm_dialog = ConfirmAddAllDialog(filter_objects_to_potentially_add_to_known_list, self)
                     dialog_result = confirm_dialog.exec_()
+
                     if dialog_result == CONFIRM_ADD_ALL_CANCEL_DOWNLOAD:
                         self.log_signal.emit("❌ Download cancelled by user at new name confirmation stage.")
                         self.set_ui_enabled(True); return
-                    elif dialog_result == CONFIRM_ADD_ALL_ACCEPTED:
-                        self.log_signal.emit(f"ℹ️ User chose to add {len(filter_objects_to_potentially_add_to_known_list)} new entry/entries to Known.txt.")
-                        for filter_obj_to_add in filter_objects_to_potentially_add_to_known_list:
-                            self.add_new_character(name_to_add=filter_obj_to_add["name"], is_group_to_add=filter_obj_to_add["is_group"], aliases_to_add=filter_obj_to_add["aliases"], suppress_similarity_prompt=True)
+                    elif isinstance(dialog_result, list): # User chose to add selected items
+                        if dialog_result: # If the list of selected filter_objects is not empty
+                            self.log_signal.emit(f"ℹ️ User chose to add {len(dialog_result)} new entry/entries to Known.txt.")
+                            for filter_obj_to_add in dialog_result: # dialog_result is the list of selected filter_obj
+                                self.add_new_character(
+                                    name_to_add=filter_obj_to_add["name"], 
+                                    is_group_to_add=filter_obj_to_add["is_group"], 
+                                    aliases_to_add=filter_obj_to_add["aliases"], 
+                                    suppress_similarity_prompt=True # Suppress for batch adding
+                                )
+                        else: # Empty list means user selected "Add Selected" but had nothing checked (dialog handles this by returning SKIP_ADDING)
+                            self.log_signal.emit("ℹ️ User confirmed adding, but no names were selected in the dialog. No new names added to Known.txt.")
                     elif dialog_result == CONFIRM_ADD_ALL_SKIP_ADDING:
                         self.log_signal.emit("ℹ️ User chose not to add new names to Known.txt for this session.")
                 # --- End of Known.txt prompting logic ---
             else: # extract_links_only is true
                 self.log_signal.emit(f"ℹ️ Using character filters for link extraction: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
-        else: # No character filters typed by user
-            self.log_signal.emit("ℹ️ No character filters provided. All content (matching other criteria) will be processed.")
-            # actual_filters_to_use_for_run remains []
 
 
         if manga_mode and not actual_filters_to_use_for_run and not extract_links_only:
