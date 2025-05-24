@@ -1505,6 +1505,8 @@ class DownloadThread(QThread):
                  selected_cookie_file=None, # New parameter for selected cookie file
                  app_base_dir=None, # New parameter
                  manga_date_file_counter_ref=None, # New parameter
+                 use_cookie=False, # Added: Expected by main.py
+                 cookie_text="",   # Added: Expected by main.py
                  ):
         super().__init__()
         self.api_url_input = api_url_input
@@ -1591,8 +1593,8 @@ class DownloadThread(QThread):
            not self.extract_links_only and current_manga_date_file_counter_ref is None: # Check if it needs calculation
             series_scan_dir = self.output_dir
             if self.use_subfolders:
-                if self.filter_character_list_objects and self.filter_character_list_objects[0] and self.filter_character_list_objects[0].get("name"):
-                    series_folder_name = clean_folder_name(self.filter_character_list_objects[0]["name"])
+                if self.filter_character_list_objects_initial and self.filter_character_list_objects_initial[0] and self.filter_character_list_objects_initial[0].get("name"):
+                    series_folder_name = clean_folder_name(self.filter_character_list_objects_initial[0]["name"])
                     series_scan_dir = os.path.join(series_scan_dir, series_folder_name)
                 elif self.service and self.user_id:
                     creator_based_folder_name = clean_folder_name(self.user_id)
