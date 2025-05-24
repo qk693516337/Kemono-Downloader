@@ -214,9 +214,86 @@ class ConfirmAddAllDialog(QDialog):
         super().exec_()
         # If user accepted but selected nothing, treat it as skipping addition
         if isinstance(self.user_choice, list) and not self.user_choice:
-            QMessageBox.information(self, "No Selection", "No names were selected to be added. Skipping addition.")
+            # QMessageBox.information(self, "No Selection", "No names were selected to be added. Skipping addition.")
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
+
+class HelpGuideDialog(QDialog):
+    """A multi-page dialog for displaying the feature guide."""
+    def __init__(self, steps_data, parent=None):
+        super().__init__(parent)
+        self.current_step = 0
+        self.steps_data = steps_data # List of (title, content_html) tuples
+
+        self.setWindowTitle("Kemono Downloader - Feature Guide")
+        self.setModal(True)
+        self.setFixedSize(650, 600) # Adjusted size for guide content
+        
+        # Apply similar styling to TourDialog, or a distinct one if preferred
+        self.setStyleSheet(parent.get_dark_theme() if hasattr(parent, 'get_dark_theme') else """
+            QDialog { background-color: #2E2E2E; border: 1px solid #5A5A5A; }
+            QLabel { color: #E0E0E0; }
+            QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 8px 15px; border-radius: 4px; min-height: 25px; font-size: 11pt; }
+            QPushButton:hover { background-color: #656565; }
+            QPushButton:pressed { background-color: #4A4A4A; }
+        """)
+        self._init_ui()
+        if parent: # Attempt to center on parent
+            self.move(parent.geometry().center() - self.rect().center())
+
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.stacked_widget = QStackedWidget()
+        main_layout.addWidget(self.stacked_widget, 1)
+
+        self.tour_steps_widgets = [] # To hold TourStepWidget instances
+        for title, content in self.steps_data:
+            step_widget = TourStepWidget(title, content) # Reuse TourStepWidget
+            self.tour_steps_widgets.append(step_widget)
+            self.stacked_widget.addWidget(step_widget)
+
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setContentsMargins(15, 10, 15, 15)
+        buttons_layout.setSpacing(10)
+
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(self._previous_step)
+        self.back_button.setEnabled(False)
+
+        self.next_button = QPushButton("Next")
+        self.next_button.clicked.connect(self._next_step_action)
+        self.next_button.setDefault(True)
+
+        buttons_layout.addStretch(1)
+        buttons_layout.addWidget(self.back_button)
+        buttons_layout.addWidget(self.next_button)
+        main_layout.addLayout(buttons_layout)
+        self._update_button_states()
+
+    def _next_step_action(self):
+        if self.current_step < len(self.tour_steps_widgets) - 1:
+            self.current_step += 1
+            self.stacked_widget.setCurrentIndex(self.current_step)
+        else: # Last page
+            self.accept() # Close dialog
+        self._update_button_states()
+
+    def _previous_step(self):
+        if self.current_step > 0:
+            self.current_step -= 1
+            self.stacked_widget.setCurrentIndex(self.current_step)
+        self._update_button_states()
+
+    def _update_button_states(self):
+        if self.current_step == len(self.tour_steps_widgets) - 1:
+            self.next_button.setText("Finish")
+        else:
+            self.next_button.setText("Next")
+        self.back_button.setEnabled(self.current_step > 0)
+
 class TourStepWidget(QWidget):
     """A single step/page in the tour."""
     def __init__(self, title_text, content_text, parent=None):
@@ -1369,8 +1446,18 @@ class DownloaderApp(QWidget):
         self.new_char_input.returnPressed.connect(self.add_char_button.click)
         self.delete_char_button.clicked.connect(self.delete_selected_character)
         char_manage_layout.addWidget(self.new_char_input, 2)
-        char_manage_layout.addWidget(self.add_char_button, 1)
-        char_manage_layout.addWidget(self.delete_char_button, 1)
+        char_manage_layout.addWidget(self.add_char_button, 0)
+
+        # Help button for Known Names list
+        self.known_names_help_button = QPushButton("?") # Restored question mark
+        self.known_names_help_button.setFixedWidth(35) # Small width for a square-like button
+        # self.known_names_help_button.setStyleSheet("font-weight: bold; padding-left: 8px; padding-right: 8px;") # Removed stylesheet
+        self.known_names_help_button.setToolTip("Open the application feature guide.")
+        self.known_names_help_button.clicked.connect(self._show_feature_guide)
+
+
+        char_manage_layout.addWidget(self.delete_char_button, 0)
+        char_manage_layout.addWidget(self.known_names_help_button, 0) # Moved to the end (rightmost)
         left_layout.addLayout(char_manage_layout)
         left_layout.addStretch(0)
 
@@ -1378,7 +1465,7 @@ class DownloaderApp(QWidget):
         self.progress_log_label = QLabel("📜 Progress Log:")
         log_title_layout.addWidget(self.progress_log_label)
         log_title_layout.addStretch(1)
-
+        
         self.link_search_input = QLineEdit()
         self.link_search_input.setToolTip("When in 'Only Links' mode, type here to filter the displayed links by text, URL, or platform.")
         self.link_search_input.setPlaceholderText("Search Links...")
@@ -1897,12 +1984,19 @@ class DownloaderApp(QWidget):
             self.update_external_links_setting(self.external_links_checkbox.isChecked() if self.external_links_checkbox else False)
             self.log_signal.emit(f"="*20 + f" Mode changed to: {filter_mode_text} " + "="*20)
 
-        subfolders_on = self.use_subfolders_checkbox.isChecked() if self.use_subfolders_checkbox else False
-        
+        subfolders_on = self.use_subfolders_checkbox.isChecked() if self.use_subfolders_checkbox else False    
         manga_on = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
-        
-        enable_character_filter_related_widgets = file_download_mode_active and (subfolders_on or manga_on)
 
+        # Determine if character filter section should be active (visible and enabled)
+        # It should be active if we are in a file downloading mode (not 'Only Links' or 'Only Archives')
+        character_filter_should_be_active = not is_only_links and not is_only_archives
+
+        if self.character_filter_widget:
+            self.character_filter_widget.setVisible(character_filter_should_be_active)
+
+        # Enable/disable character input and its scope button based on whether character filtering is active
+        enable_character_filter_related_widgets = character_filter_should_be_active
+        
         if self.character_input:
             self.character_input.setEnabled(enable_character_filter_related_widgets)
             if not enable_character_filter_related_widgets:
@@ -1911,7 +2005,9 @@ class DownloaderApp(QWidget):
         if self.char_filter_scope_toggle_button:
             self.char_filter_scope_toggle_button.setEnabled(enable_character_filter_related_widgets)
         
-        self.update_ui_for_subfolders(subfolders_on)
+        # Call update_ui_for_subfolders to correctly set the "Subfolder per Post" checkbox state
+        # and "Custom Folder Name" visibility, which DO depend on the "Separate Folders" checkbox.
+        self.update_ui_for_subfolders(subfolders_on) # Pass the current state of the main subfolder checkbox
         self.update_custom_folder_visibility()
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
 
@@ -2307,23 +2403,13 @@ class DownloaderApp(QWidget):
         is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
 
         if self.use_subfolder_per_post_checkbox:
-            self.use_subfolder_per_post_checkbox.setEnabled(not is_only_links and not is_only_archives)
+            can_enable_subfolder_per_post = checked and not is_only_links and not is_only_archives
+            self.use_subfolder_per_post_checkbox.setEnabled(can_enable_subfolder_per_post)
+            if not can_enable_subfolder_per_post: # If it's disabled, also uncheck it
+                 self.use_subfolder_per_post_checkbox.setChecked(False)
 
-        if hasattr(self, 'use_cookie_checkbox'):
-            self.use_cookie_checkbox.setEnabled(not is_only_links) # Cookies might be relevant for archives
-
-
-        enable_character_filter_related_widgets = checked and not is_only_links and not is_only_archives
- 
-
-        if self.character_filter_widget:
-            self.character_filter_widget.setVisible(enable_character_filter_related_widgets)
-            if not self.character_filter_widget.isVisible():
-                if self.character_input: self.character_input.clear()
-                if self.char_filter_scope_toggle_button: self.char_filter_scope_toggle_button.setEnabled(False)
-            else:
-                if self.char_filter_scope_toggle_button: self.char_filter_scope_toggle_button.setEnabled(True)
-        
+        # Visibility and enabled state of character filter widgets are now primarily handled
+        # by _handle_filter_mode_change to decouple from the subfolder checkbox.
         self.update_custom_folder_visibility()
 
 
@@ -2468,14 +2554,16 @@ class DownloaderApp(QWidget):
             self.update_page_range_enabled_state()
         
         file_download_mode_active = not (self.radio_only_links and self.radio_only_links.isChecked())
-        subfolders_on = self.use_subfolders_checkbox.isChecked() if self.use_subfolders_checkbox else False
-        enable_char_filter_widgets = file_download_mode_active and (subfolders_on or manga_mode_effectively_on)
+        # Character filter widgets should be enabled if it's a file download mode
+        enable_char_filter_widgets = file_download_mode_active and not (self.radio_only_archives and self.radio_only_archives.isChecked())
 
         if self.character_input:
             self.character_input.setEnabled(enable_char_filter_widgets)
             if not enable_char_filter_widgets: self.character_input.clear()
         if self.char_filter_scope_toggle_button:
             self.char_filter_scope_toggle_button.setEnabled(enable_char_filter_widgets)
+        if self.character_filter_widget: # Also ensure the main widget visibility is correct
+            self.character_filter_widget.setVisible(enable_char_filter_widgets)        
         self._update_multithreading_for_date_mode() # Update multithreading state based on manga mode
 
 
@@ -3775,6 +3863,261 @@ class DownloaderApp(QWidget):
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(False)
+
+    def _show_feature_guide(self):
+        # Define content for each page
+        page1_title = "① Introduction & Main Inputs"
+        page1_content = """<html><head/><body>
+        <p>This guide provides an overview of the Kemono Downloader's features, fields, and buttons.</p>
+
+        <h3>Main Input Area (Top Left)</h3>
+        <ul>
+            <li><b>🔗 Kemono Creator/Post URL:</b>
+                <ul>
+                    <li>Enter the full web address of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) or a specific post (e.g., <i>.../post/98765</i>).</li>
+                    <li>Supports Kemono (kemono.su, kemono.party) and Coomer (coomer.su, coomer.party) URLs.</li>
+                </ul>
+            </li>
+            <li><b>Page Range (Start to End):</b>
+                <ul>
+                    <li>For creator URLs: Specify a range of pages to fetch (e.g., pages 2 to 5). Leave blank for all pages.</li>
+                    <li>Disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>
+                </ul>
+            </li>
+            <li><b>📁 Download Location:</b>
+                <ul>
+                    <li>Click <b>'Browse...'</b> to choose a main folder on your computer where all downloaded files will be saved.</li>
+                    <li>This field is required unless you are using <b>'🔗 Only Links'</b> mode.</li>
+                </ul>
+            </li>
+        </ul></body></html>"""
+
+        page2_title = "② Filtering Downloads"
+        page2_content = """<html><head/><body>
+        <h3>Filtering Downloads (Left Panel)</h3>
+        <ul>
+            <li><b>🎯 Filter by Character(s):</b>
+                <ul>
+                    <li>Enter names, comma-separated (e.g., <code>Tifa, Aerith</code>).</li>
+                    <li><b>Grouped Aliases for Shared Folder (Separate Known.txt Entries):</b> <code>(Vivi, Ulti, Uta)</code>.
+                        <ul><li>Content matching "Vivi", "Ulti", OR "Uta" will go into a shared folder named "Vivi Ulti Uta" (after cleaning).</li>
+                            <li>If these names are new, "Vivi", "Ulti", and "Uta" will be prompted to be added as <i>separate individual entries</i> to <code>Known.txt</code>.</li>
+                        </ul>
+                    </li>
+                    <li><b>Grouped Aliases for Shared Folder (Single Known.txt Entry):</b> <code>(Yuffie, Sonon)~</code> (note the tilde <code>~</code>).
+                        <ul><li>Content matching "Yuffie" OR "Sonon" will go into a shared folder named "Yuffie Sonon".</li>
+                            <li>If new, "Yuffie Sonon" (with aliases Yuffie, Sonon) will be prompted to be added as a <i>single group entry</i> to <code>Known.txt</code>.</li>
+                        </ul>
+                    </li>
+                    <li>This filter influences folder naming if 'Separate Folders by Name/Title' is enabled.</li>
+                </ul>
+            </li>
+            <li><b>Filter: [Type] Button (Character Filter Scope):</b> Cycles how the 'Filter by Character(s)' applies:
+                <ul>
+                    <li><code>Filter: Files</code>: Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename.</li>
+                    <li><code>Filter: Title</code>: Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>
+                    <li><code>Filter: Both</code>: Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li>
+                    <li><code>Filter: Comments (Beta)</code>: Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li>
+                </ul>
+            </li>
+            <li><b>🗄️ Custom Folder Name (Single Post Only):</b>
+                <ul>
+                    <li>Visible and usable only when downloading a single specific post URL AND 'Separate Folders by Name/Title' is enabled.</li>
+                    <li>Allows you to specify a custom name for that single post's download folder.</li>
+                </ul>
+            </li>
+            <li><b>🚫 Skip with Words:</b>
+                <ul><li>Enter words, comma-separated (e.g., <code>WIP, sketch, preview</code>) to skip certain content.</li></ul>
+            </li>
+            <li><b>Scope: [Type] Button (Skip Words Scope):</b> Cycles how 'Skip with Words' applies:
+                <ul>
+                    <li><code>Scope: Files</code>: Skips individual files if their names contain any of these words.</li>
+                    <li><code>Scope: Posts</code>: Skips entire posts if their titles contain any of these words.</li>
+                    <li><code>Scope: Both</code>: Applies both (post title first, then individual files).</li>
+                </ul>
+            </li>
+            <li><b>✂️ Remove Words from name:</b>
+                <ul><li>Enter words, comma-separated (e.g., <code>patreon, [HD]</code>), to remove from downloaded filenames (case-insensitive).</li></ul>
+            </li>
+            <li><b>Filter Files (Radio Buttons):</b> Choose what to download:
+                <ul>
+                    <li><code>All</code>: Downloads all file types found.</li>
+                    <li><code>Images/GIFs</code>: Only common image formats (JPG, PNG, GIF, WEBP, etc.) and GIFs.</li>
+                    <li><code>Videos</code>: Only common video formats (MP4, MKV, WEBM, MOV, etc.).</li>
+                    <li><code>📦 Only Archives</code>: Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li>
+                    <li><code>🔗 Only Links</code>: Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled. The main download button changes to '🔗 Extract Links'.</li>
+                </ul>
+            </li>
+        </ul></body></html>"""
+
+        page3_title = "③ Download Options & Settings"
+        page3_content = """<html><head/><body>
+        <h3>Download Options & Settings (Left Panel)</h3>
+        <ul>
+            <li><b>Skip .zip / Skip .rar:</b> Checkboxes to avoid downloading these archive file types. (Disabled and ignored if '📦 Only Archives' filter mode is selected).</li>
+            <li><b>Download Thumbnails Only:</b> Downloads small preview images instead of full-sized files (if available).</li>
+            <li><b>Compress Large Images (to WebP):</b> If the 'Pillow' (PIL) library is installed, images larger than 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li>
+            <li><b>⚙️ Advanced Settings:</b>
+                <ul>
+                    <li><b>Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles. Can use the <b>Known.txt</b> list as a fallback for folder names.</li></ul></li></ul></body></html>"""
+
+        page4_title = "④ Advanced Settings (Part 1)"
+        page4_content = """<html><head/><body><h3>⚙️ Advanced Settings (Continued)</h3><ul><ul>
+                    <!-- Continuing from previous page's ul for Advanced Settings -->
+                    <li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li>
+                    <li><b>Use Cookie:</b> Check this to use cookies for requests.
+                        <ul>
+                            <li><b>Text Field:</b> Enter a cookie string directly (e.g., <code>name1=value1; name2=value2</code>).</li>
+                            <li><b>Browse...:</b> Select a <code>cookies.txt</code> file (Netscape format). The path will appear in the text field.</li>
+                            <li><b>Precedence:</b> The text field (if filled) takes precedence over a browsed file. If 'Use Cookie' is checked but both are empty, it attempts to load <code>cookies.txt</code> from the app's directory.</li>
+                        </ul>
+                    </li>
+                    <li><b>Use Multithreading & Threads Input:</b>
+                        <ul>
+                            <li>Enables faster operations. The number in 'Threads' input means:
+                                <ul>
+                                    <li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li>
+                                    <li>For <b>Single Post URLs:</b> Number of files to download concurrently from that single post.</li>
+                                </ul>
+                            </li>
+                            <li>If unchecked, 1 thread is used. High thread counts (e.g., >40) may show an advisory.</li>
+                        </ul>
+                    </li></ul></ul></body></html>"""
+
+        page5_title = "⑤ Advanced Settings (Part 2) & Actions"
+        page5_content = """<html><head/><body><h3>⚙️ Advanced Settings (Continued)</h3><ul><ul>
+                    <!-- Continuing from previous page's ul for Advanced Settings -->
+                    <li><b>Show External Links in Log:</b> If checked, a secondary log panel appears below the main log to display any external links found in post descriptions. (Disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</li>
+                    <li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content.
+                        <ul>
+                            <li>Downloads posts from <b>oldest to newest</b>.</li>
+                            <li>The 'Page Range' input is disabled as all posts are fetched.</li>
+                            <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:
+                                <ul>
+                                    <li><code>Name: Post Title (Default)</code>: The first file in a post is named after the post's title. Subsequent files in the same post keep original names.</li>
+                                    <li><code>Name: Original File</code>: All files attempt to keep their original filenames.</li>
+                                    <li><code>Name: Date Based</code>: Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>
+                                </ul>
+                            </li>
+                            <li>For best results with 'Name: Post Title' or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>
+                        </ul>
+                    </li>
+                </ul></li></ul>
+        
+        <h3>Main Action Buttons (Left Panel)</h3>
+        <ul>
+            <li><b>⬇️ Start Download / 🔗 Extract Links:</b> This button's text and function change based on the 'Filter Files' radio button selection. It starts the primary operation.</li>
+            <li><b>⏸️ Pause Download / ▶️ Resume Download:</b> Allows you to temporarily halt the current download/extraction process and resume it later. Some UI settings can be changed while paused.</li>
+            <li><b>❌ Cancel & Reset UI:</b> Stops the current operation and performs a soft UI reset. Your URL and Download Directory inputs are preserved, but other settings and logs are cleared.</li>
+        </ul></body></html>"""
+
+        page6_title = "⑥ Known Shows/Characters List"
+        page6_content = """<html><head/><body>
+        <h3>Known Shows/Characters List Management (Bottom Left)</h3>
+        <p>This section helps manage the <code>Known.txt</code> file, which is used for smart folder organization when 'Separate Folders by Name/Title' is enabled, especially as a fallback if a post doesn't match your active 'Filter by Character(s)' input.</p>
+        <ul>
+            <li><b>Open Known.txt:</b> Opens the <code>Known.txt</code> file (located in the app's directory) in your default text editor for advanced editing (like creating complex grouped aliases).</li>
+            <li><b>Search characters...:</b> Filters the list of known names displayed below.</li>
+            <li><b>List Widget:</b> Displays the primary names from your <code>Known.txt</code>. Select entries here to delete them.</li>
+            <li><b>Add new show/character name (Input Field):</b> Enter a name or group to add.
+                <ul>
+                    <li><b>Simple Name:</b> e.g., <code>My Awesome Series</code>. Adds as a single entry.</li>
+                    <li><b>Group for Separate Known.txt Entries:</b> e.g., <code>(Vivi, Ulti, Uta)</code>. Adds "Vivi", "Ulti", and "Uta" as three separate individual entries to <code>Known.txt</code>.</li>
+                    <li><b>Group for Shared Folder & Single Known.txt Entry (Tilde <code>~</code>):</b> e.g., <code>(Character A, Char A)~</code>. Adds one entry to <code>Known.txt</code> named "Character A Char A". "Character A" and "Char A" become aliases for this single folder/entry.</li>
+                </ul>
+            </li>
+            <li><b>➕ Add Button:</b> Adds the name/group from the input field above to the list and <code>Known.txt</code>.</li>
+            <li><b>🗑️ Delete Selected Button:</b> Deletes the selected name(s) from the list and <code>Known.txt</code>.</li>
+            <li><b>❓ Button (This one!):</b> Displays this comprehensive help guide.</li>
+        </ul></body></html>"""
+
+        page7_title = "⑦ Log Area & Controls"
+        page7_content = """<html><head/><body>
+        <h3>Log Area & Controls (Right Panel)</h3>
+        <ul>
+            <li><b>📜 Progress Log / Extracted Links Log (Label):</b> Title for the main log area; changes if '🔗 Only Links' mode is active.</li>
+            <li><b>Search Links... / 🔍 Button (Link Search):</b>
+                <ul><li>Visible only when '🔗 Only Links' mode is active. Allows real-time filtering of the extracted links displayed in the main log by text, URL, or platform.</li></ul>
+            </li>
+            <li><b>Name: [Style] Button (Manga Filename Style):</b>
+                <ul><li>Visible only when <b>Manga/Comic Mode</b> is active for a creator feed and not in 'Only Links' or 'Only Archives' mode.</li>
+                    <li>Cycles through filename styles: <code>Post Title</code>, <code>Original File</code>, <code>Date Based</code>. (See Manga/Comic Mode section for details).</li>
+                </ul>
+            </li>
+            <li><b>Multi-part: [ON/OFF] Button:</b>
+                <ul><li>Toggles multi-segment downloads for individual large files.
+                    <ul><li><b>ON:</b> Can speed up large file downloads but may increase UI choppiness or log spam with many small files. An advisory appears when enabling. If a multi-part download fails, it retries as single-stream.</li>
+                        <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li>
+                    </ul>
+                    <li>Disabled if '🔗 Only Links' or '📦 Only Archives' mode is active.</li>
+                </ul>
+            </li>
+            <li><b>👁️ / 🙈 Button (Log View Toggle):</b> Switches the main log view:
+                <ul>
+                    <li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li>
+                    <li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles/content that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li>
+                </ul>
+            </li>
+            <li><b>🔄 Reset Button:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li>
+            <li><b>Main Log Output (Text Area):</b> Displays detailed progress messages, errors, and summaries. If '🔗 Only Links' mode is active, this area displays the extracted links.</li>
+            <li><b>Missed Character Log Output (Text Area):</b> (Viewable via 👁️ / 🙈 toggle) Displays posts/files skipped due to character filters.</li>
+            <li><b>External Log Output (Text Area):</b> Appears below the main log if 'Show External Links in Log' is checked. Displays external links found in post descriptions.</li>
+            <li><b>Export Links Button:</b>
+                <ul><li>Visible and enabled only when '🔗 Only Links' mode is active and links have been extracted.</li>
+                    <li>Allows you to save all extracted links to a <code>.txt</code> file.</li>
+                </ul>
+            </li>
+            <li><b>Progress: [Status] Label:</b> Shows the overall progress of the download or link extraction process (e.g., posts processed).</li>
+            <li><b>File Progress Label:</b> Shows the progress of individual file downloads, including speed and size, or multi-part download status.</li>
+        </ul></body></html>"""
+
+        page8_title = "⑧ Key Files & Tour"
+        page8_content = """<html><head/><body>
+        <h3>Key Files Used by the Application</h3>
+        <ul>
+            <li><b><code>Known.txt</code>:</b>
+                <ul>
+                    <li>Located in the application's directory (where the <code>.exe</code> or <code>main.py</code> is).</li>
+                    <li>Stores your list of known shows, characters, or series titles for automatic folder organization when 'Separate Folders by Name/Title' is enabled.</li>
+                    <li><b>Format:</b>
+                        <ul>
+                            <li>Each line is an entry.</li>
+                            <li><b>Simple Name:</b> e.g., <code>My Awesome Series</code>. Content matching this will go into a folder named "My Awesome Series".</li>
+                            <li><b>Grouped Aliases:</b> e.g., <code>(Character A, Char A, Alt Name A)</code>. Content matching "Character A", "Char A", OR "Alt Name A" will ALL go into a single folder named "Character A Char A Alt Name A" (after cleaning). All terms in the parentheses become aliases for that folder.</li>
+                        </ul>
+                    </li>
+                    <li><b>Usage:</b> Serves as a fallback for folder naming if a post doesn't match your active 'Filter by Character(s)' input. You can manage simple entries via the UI or edit the file directly for complex aliases. The app reloads it on startup or next use.</li>
+                </ul>
+            </li>
+            <li><b><code>cookies.txt</code> (Optional):</b>
+                <ul>
+                    <li>If you use the 'Use Cookie' feature and don't provide a direct cookie string or browse to a specific file, the application will look for a file named <code>cookies.txt</code> in its directory.</li>
+                    <li><b>Format:</b> Must be in Netscape cookie file format.</li>
+                    <li><b>Usage:</b> Allows the downloader to use your browser's login session for accessing content that might be behind a login on Kemono/Coomer.</li>
+                </ul>
+            </li>
+        </ul>
+
+        <h3>First-Time User Tour</h3>
+        <ul>
+            <li>On the first launch (or if reset), a welcome tour dialog appears, guiding you through the main features. You can skip it or choose to "Never show this tour again."</li>
+        </ul>
+        <p><em>Many UI elements also have tooltips that appear when you hover your mouse over them, providing quick hints.</em></p>
+        </body></html>
+        """
+
+        steps = [
+            (page1_title, page1_content),
+            (page2_title, page2_content),
+            (page3_title, page3_content),
+            (page4_title, page4_content),
+            (page5_title, page5_content),
+            (page6_title, page6_content),
+            (page7_title, page7_content),
+            (page8_title, page8_content),
+        ]
+        guide_dialog = HelpGuideDialog(steps, self)
+        guide_dialog.exec_()
 
     def prompt_add_character(self, character_name):
         global KNOWN_NAMES
