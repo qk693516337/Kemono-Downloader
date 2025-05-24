@@ -107,7 +107,6 @@ USE_COOKIE_KEY = "useCookieV1" # New setting key
 COOKIE_TEXT_KEY = "cookieTextV1" # New setting key for cookie text
 CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
 
-# Custom dialog result constants for ConfirmAddAllDialog
 CONFIRM_ADD_ALL_ACCEPTED = 1
 CONFIRM_ADD_ALL_SKIP_ADDING = 2
 CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3
