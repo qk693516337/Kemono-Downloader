@@ -16,7 +16,8 @@ from concurrent.futures import ThreadPoolExecutor, CancelledError, Future
 
 from PyQt5.QtGui import (
     QIcon,
-    QIntValidator
+    QIntValidator,
+    QDesktopServices
 )
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
@@ -26,7 +27,7 @@ from PyQt5.QtWidgets import (
     QFrame,
     QAbstractButton
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QObject, QTimer, QSettings, QStandardPaths, QCoreApplication
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QObject, QTimer, QSettings, QStandardPaths, QCoreApplication, QUrl, QSize
 from urllib.parse import urlparse
 
 try:
@@ -262,15 +263,65 @@ class HelpGuideDialog(QDialog):
         self.back_button.clicked.connect(self._previous_step)
         self.back_button.setEnabled(False)
 
+        # Determine base directory for assets
+        # This logic assumes 'assest' folder is at the same level as main.py or the executable
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # For PyInstaller, assets are in _MEIPASS or a relative path from executable
+            # If 'assest' is bundled at the root of _MEIPASS:
+            assets_base_dir = sys._MEIPASS
+            # If 'assest' is bundled relative to the executable directory:
+            # assets_base_dir = os.path.dirname(sys.executable)
+        else:
+            # For development, assets are relative to the script
+            assets_base_dir = os.path.dirname(os.path.abspath(__file__))
+
+        github_icon_path = os.path.join(assets_base_dir, "assest", "github.png")
+        instagram_icon_path = os.path.join(assets_base_dir, "assest", "instagram.png")
+        discord_icon_path = os.path.join(assets_base_dir, "assest", "discord.png")
+
+        self.github_button = QPushButton(QIcon(github_icon_path), "")
+        self.instagram_button = QPushButton(QIcon(instagram_icon_path), "")
+        self.Discord_button = QPushButton(QIcon(discord_icon_path), "")
+
+        # Optional: Set a fixed icon size for consistency
+        icon_size = QSize(24, 24) # Adjust as needed
+        self.github_button.setIconSize(icon_size)
+        self.instagram_button.setIconSize(icon_size)
+        self.Discord_button.setIconSize(icon_size)
+
         self.next_button = QPushButton("Next")
         self.next_button.clicked.connect(self._next_step_action)
         self.next_button.setDefault(True)
+        self.github_button.clicked.connect(self._open_github_link)
+        self.instagram_button.clicked.connect(self._open_instagram_link)
+        self.Discord_button.clicked.connect(self._open_Discord_link)
+        self.github_button.setToolTip("Visit project's GitHub page (Opens in browser)")
+        self.instagram_button.setToolTip("Visit our Instagram page (Opens in browser)")
+        self.Discord_button.setToolTip("Visit our Discord community (Opens in browser)")
 
-        buttons_layout.addStretch(1)
-        buttons_layout.addWidget(self.back_button)
+
+        # Social media buttons layout
+        social_layout = QHBoxLayout()
+        social_layout.setSpacing(10)
+        social_layout.addWidget(self.github_button)
+        social_layout.addWidget(self.instagram_button)
+        social_layout.addWidget(self.Discord_button)
+        # social_layout.addStretch(1) # Pushes social buttons to the left if uncommented and placed before nav buttons
+
+        # Add social buttons to the main buttons_layout, before the stretch, to keep them left
+        # Clear buttons_layout and rebuild to ensure order
+        while buttons_layout.count():
+            item = buttons_layout.takeAt(0) # Removes the item from the layout
+            if item.widget(): # Check if the item is a widget
+                item.widget().setParent(None) # Detach the widget from this layout
+            elif item.layout(): # If it's a sub-layout
+                pass # Sub-layouts are handled by Qt's ownership or need explicit deletion if complex
+        buttons_layout.addLayout(social_layout) # Add social buttons on the left
+        buttons_layout.addStretch(1) # Stretch between social and nav buttons
+        buttons_layout.addWidget(self.back_button) # Back and Next on the right
         buttons_layout.addWidget(self.next_button)
         main_layout.addLayout(buttons_layout)
-        self._update_button_states()
+        self._update_button_states() # Set initial button states
 
     def _next_step_action(self):
         if self.current_step < len(self.tour_steps_widgets) - 1:
@@ -292,6 +343,18 @@ class HelpGuideDialog(QDialog):
         else:
             self.next_button.setText("Next")
         self.back_button.setEnabled(self.current_step > 0)
+
+    def _open_github_link(self):
+        # Replace with your actual GitHub project URL
+        QDesktopServices.openUrl(QUrl("https://github.com/Yuvi9587"))
+
+    def _open_instagram_link(self):
+        # Replace with your actual Instagram URL
+        QDesktopServices.openUrl(QUrl("https://www.instagram.com/uvi.arts/"))
+
+    def _open_Discord_link(self):
+        # Replace with your actual Discord URL
+        QDesktopServices.openUrl(QUrl("https://discord.gg/BqP64XTdJN"))
 
 class TourStepWidget(QWidget):
     """A single step/page in the tour."""
