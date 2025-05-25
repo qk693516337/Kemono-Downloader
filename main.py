@@ -584,12 +584,13 @@ class TourDialog(QDialog):
             "   <li>The 'Page Range' input is disabled as all posts are fetched.</li><br>"
             "   <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:"
             "       <ul>"
-            "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's title. Subsequent files in the same post keep original names.</li><br>"
+            "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li><br>"
             "       <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames.</li><br>"
+            "       <li><b><i>Name: Title+G.Num (Post Title + Global Numbering):</i></b> All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. For example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li><br>"
             "       <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>"
             "       </ul>"
             "   </li><br>"
-            "   <li>For best results with 'Name: Post Title' or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>"
+            "   <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>"
             "   </ul></li><br>"
             "<li><b>🎭 Known.txt for Smart Folder Organization:</b><br>"
             "   <code>Known.txt</code> (in the app's directory) allows fine-grained control over automatic folder organization when 'Separate Folders by Name/Title' is active."
@@ -4125,12 +4126,13 @@ class DownloaderApp(QWidget):
                             <li>The 'Page Range' input is disabled as all posts are fetched.</li>
                             <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:
                                 <ul>
-                                    <li><code>Name: Post Title (Default)</code>: The first file in a post is named after the post's title. Subsequent files in the same post keep original names.</li>
+                                    <li><code>Name: Post Title (Default)</code>: The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li>
                                     <li><code>Name: Original File</code>: All files attempt to keep their original filenames.</li>
+                                    <li><code>Name: Title+G.Num (Post Title + Global Numbering)</code>: All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. For example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li>
                                     <li><code>Name: Date Based</code>: Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>
                                 </ul>
                             </li>
-                            <li>For best results with 'Name: Post Title' or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>
+                            <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>
                         </ul>
                     </li>
                 </ul></li></ul>
