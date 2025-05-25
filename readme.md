@@ -11,9 +11,9 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-##  What's New in v4.0.0?
+##  What's New in v4.0.1?
 
-Version 3.5.0 focuses on enhancing access to content and providing even smarter organization:
+Version 4.0.1 focuses on enhancing access to content and providing even smarter organization:
 
 ###  Cookie Management
 
