@@ -290,9 +290,9 @@ class HelpGuideDialog(QDialog):
             # For development, assets are relative to the script
             assets_base_dir = os.path.dirname(os.path.abspath(__file__))
 
-        github_icon_path = os.path.join(assets_base_dir, "assest", "github.png")
-        instagram_icon_path = os.path.join(assets_base_dir, "assest", "instagram.png")
-        discord_icon_path = os.path.join(assets_base_dir, "assest", "discord.png")
+        github_icon_path = os.path.join(assets_base_dir, "assets", "github.png")
+        instagram_icon_path = os.path.join(assets_base_dir, "assets", "instagram.png")
+        discord_icon_path = os.path.join(assets_base_dir, "assets", "discord.png")
 
         self.github_button = QPushButton(QIcon(github_icon_path), "")
         self.instagram_button = QPushButton(QIcon(instagram_icon_path), "")
@@ -2663,7 +2663,7 @@ class DownloaderApp(QWidget):
         if self.use_multithreading_checkbox.isChecked():
             try:
                 num_threads_val = int(text)
-                if num_threads_val > 0 : self.use_multithreading_checkbox.setText(f"Use Multithreading ({num_threads_val} Threads)")
+                if num_threads_val > 0 : self.use_multithreading_checkbox.setText(f"Use Multithreading ({num_threads_val} Threads)") # type: ignore
                 else: self.use_multithreading_checkbox.setText("Use Multithreading (Invalid: >0)")
             except ValueError:
                 self.use_multithreading_checkbox.setText("Use Multithreading (Invalid Input)")
