@@ -87,6 +87,13 @@ This version brings significant enhancements to manga/comic downloading, filteri
   - **Guaranteed Order:** Disables multi-threading for post processing to ensure sequential accuracy.
 
   - Works alongside the existing "Post Title" and "Original File Name" styles.
+- **New "Title+G.Num (Post Title + Global Numbering)" Filename Style:**
+  - Ideal for series where you want each file to be prefixed by its post title but still maintain a global sequential number across all posts from a single download session.
+  - **Naming Convention:** Files are named using the cleaned post title as a prefix, followed by an underscore and a globally incrementing number (e.g., `Post Title_001.ext`, `Post Title_002.ext`).
+  - **Example:**
+    - Post "Chapter 1: The Adventure Begins" (contains 2 files: `imageA.jpg`, `imageB.png`) -> `Chapter 1 The Adventure Begins_001.jpg`, `Chapter 1 The Adventure Begins_002.png`
+    - Next Post "Chapter 2: New Friends" (contains 1 file: `cover.jpg`) -> `Chapter 2 New Friends_003.jpg`
+  - **Sequential Integrity:** Multithreading for post processing is automatically disabled when this style is selected to ensure the global numbering is strictly sequential.
 
 ---
 
