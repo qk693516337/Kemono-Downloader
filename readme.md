@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v4.0.0</h1>
+<h1 align="center">Kemono Downloader v4.0.1</h1>
 
 <div align="center">
   <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
