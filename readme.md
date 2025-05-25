@@ -200,6 +200,7 @@ This version brings significant enhancements to manga/comic downloading, filteri
   - `Name: Post Title (Default)`
   - `Name: Original File`
   - `Name: Date Based (New)`
+  - `Name: Title+G.Num (Post Title + Global Numbering)`
 
 - **Best With:** Character filters set to manga/series title
 
