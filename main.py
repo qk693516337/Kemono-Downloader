@@ -54,20 +54,33 @@ try:
         CHAR_SCOPE_FILES, # Ensure this is imported
         CHAR_SCOPE_BOTH, 
         CHAR_SCOPE_COMMENTS,
-        FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER # Import the new status
+        FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, # Import the new status
+        STYLE_POST_TITLE_GLOBAL_NUMBERING # Import new manga style
     )
     print("Successfully imported names from downloader_utils.")
 except ImportError as e:
     print(f"--- IMPORT ERROR ---")
     print(f"Failed to import from 'downloader_utils.py': {e}")
+    print(f"--- Check downloader_utils.py for syntax errors or missing dependencies. ---")
     KNOWN_NAMES = []
-    PostProcessorSignals = QObject
     PostProcessorWorker = object
+    # Create a mock PostProcessorSignals class with the expected signals
+    class _MockPostProcessorSignals(QObject):
+        progress_signal = pyqtSignal(str)
+        file_download_status_signal = pyqtSignal(bool)
+        external_link_signal = pyqtSignal(str, str, str, str)
+        file_progress_signal = pyqtSignal(str, object)
+        missed_character_post_signal = pyqtSignal(str, str)
+        # Add any other signals that might be expected if the real class is extended
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            print("WARNING: Using MOCK PostProcessorSignals due to import error from downloader_utils.py. Some functionalities might be impaired.")
+    PostProcessorSignals = _MockPostProcessorSignals # Use the mock class
     BackendDownloadThread = QThread
     def clean_folder_name(n): return str(n)
     def extract_post_info(u): return None, None, None
     def download_from_api(*a, **k): yield []
-    SKIP_SCOPE_FILES = "files"
+    SKIP_SCOPE_FILES = "files" # type: ignore
     SKIP_SCOPE_POSTS = "posts"
     SKIP_SCOPE_BOTH = "both"
     CHAR_SCOPE_TITLE = "title"
@@ -75,6 +88,7 @@ except ImportError as e:
     CHAR_SCOPE_BOTH = "both"
     CHAR_SCOPE_COMMENTS = "comments"
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER = "failed_retry_later"
+    STYLE_POST_TITLE_GLOBAL_NUMBERING = "post_title_global_numbering" # Mock for safety
 
 except Exception as e:
     print(f"--- UNEXPECTED IMPORT ERROR ---")
@@ -101,6 +115,7 @@ MANGA_FILENAME_STYLE_KEY = "mangaFilenameStyleV1"
 STYLE_POST_TITLE = "post_title"
 STYLE_ORIGINAL_NAME = "original_name"
 STYLE_DATE_BASED = "date_based" # New style for date-based naming
+STYLE_POST_TITLE_GLOBAL_NUMBERING = STYLE_POST_TITLE_GLOBAL_NUMBERING # Use imported or mocked
 SKIP_WORDS_SCOPE_KEY = "skipWordsScopeV1"
 ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 
@@ -2460,18 +2475,18 @@ class DownloaderApp(QWidget):
             if self.custom_folder_input: self.custom_folder_input.clear()
 
 
-    def update_ui_for_subfolders(self, checked): 
+    def update_ui_for_subfolders(self, separate_folders_by_name_title_checked: bool):
         is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
         is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
 
+        can_enable_subfolder_per_post_checkbox = not is_only_links and not is_only_archives
+
         if self.use_subfolder_per_post_checkbox:
-            can_enable_subfolder_per_post = checked and not is_only_links and not is_only_archives
-            self.use_subfolder_per_post_checkbox.setEnabled(can_enable_subfolder_per_post)
-            if not can_enable_subfolder_per_post: # If it's disabled, also uncheck it
+            self.use_subfolder_per_post_checkbox.setEnabled(can_enable_subfolder_per_post_checkbox)
+
+            if not can_enable_subfolder_per_post_checkbox:
                  self.use_subfolder_per_post_checkbox.setChecked(False)
 
-        # Visibility and enabled state of character filter widgets are now primarily handled
-        # by _handle_filter_mode_change to decouple from the subfolder checkbox.
         self.update_custom_folder_visibility()
 
 
@@ -2508,12 +2523,12 @@ class DownloaderApp(QWidget):
         _, _, post_id = extract_post_info(url_text)
 
         is_creator_feed = not post_id if url_text else False
-        manga_mode_active = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
-
-        enable_page_range = is_creator_feed and not manga_mode_active
+        # Manga mode no longer directly dictates page range enabled state.
+        # Page range is enabled if it's a creator feed.
+        enable_page_range = is_creator_feed
 
         for widget in [self.page_range_label, self.start_page_input, self.to_label, self.end_page_input]:
-            if widget: widget.setEnabled(enable_page_range)
+            if widget: widget.setEnabled(enable_page_range) # Enable/disable based on whether it's a creator feed
 
         if not enable_page_range:
             if self.start_page_input: self.start_page_input.clear()
@@ -2546,6 +2561,18 @@ class DownloaderApp(QWidget):
                     "  Downloads as: \"001.jpg\", \"002.jpg\".\n\n"
                     "Click to change to: Post Title"
                 )
+            elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
+                self.manga_rename_toggle_button.setText("Name: Title+G.Num")
+                self.manga_rename_toggle_button.setToolTip(
+                    "Manga Filename Style: Post Title + Global Numbering\n\n"
+                    "When Manga/Comic Mode is active for a creator feed:\n"
+                    "- All files across all posts in the current download session are named sequentially using the post's title as a prefix.\n"
+                    "- Example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'.\n"
+                    "           Next Post 'Chapter 2' (1 file) -> 'Chapter 2_003.jpg'.\n"
+                    "- Multithreading for post processing is automatically disabled for this style.\n\n"
+                    "Click to change to: Post Title"
+                )
+
             elif self.manga_filename_style == STYLE_DATE_BASED:
                 self.manga_rename_toggle_button.setText("Name: Date Based")
                 self.manga_rename_toggle_button.setToolTip(
@@ -2572,8 +2599,10 @@ class DownloaderApp(QWidget):
         if current_style == STYLE_POST_TITLE: # Title -> Original
             new_style = STYLE_ORIGINAL_NAME
         elif current_style == STYLE_ORIGINAL_NAME: # Original -> Date
+            new_style = STYLE_POST_TITLE_GLOBAL_NUMBERING # Original -> Title+GlobalNum
+        elif current_style == STYLE_POST_TITLE_GLOBAL_NUMBERING: # Title+GlobalNum -> Date Based
             new_style = STYLE_DATE_BASED
-        elif current_style == STYLE_DATE_BASED: # Date -> Title
+        elif current_style == STYLE_DATE_BASED: # Date Based -> Title
             new_style = STYLE_POST_TITLE
         else:
             self.log_signal.emit(f"⚠️ Unknown current manga filename style: {current_style}. Resetting to default ('{STYLE_POST_TITLE}').")
@@ -2606,14 +2635,8 @@ class DownloaderApp(QWidget):
         if self.manga_rename_toggle_button:
             self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode))
 
-
-        if manga_mode_effectively_on:
-            if self.page_range_label: self.page_range_label.setEnabled(False)
-            if self.start_page_input: self.start_page_input.setEnabled(False); self.start_page_input.clear()
-            if self.to_label: self.to_label.setEnabled(False)
-            if self.end_page_input: self.end_page_input.setEnabled(False); self.end_page_input.clear()
-        else:
-            self.update_page_range_enabled_state()
+        # Always update page range enabled state, as it depends on URL type, not directly manga mode.
+        self.update_page_range_enabled_state()
         
         file_download_mode_active = not (self.radio_only_links and self.radio_only_links.isChecked())
         # Character filter widgets should be enabled if it's a file download mode
@@ -2666,10 +2689,12 @@ class DownloaderApp(QWidget):
         if not hasattr(self, 'manga_mode_checkbox') or not hasattr(self, 'use_multithreading_checkbox'):
             return # UI elements not ready
 
-        manga_on = self.manga_mode_checkbox.isChecked()
-        is_date_style = (self.manga_filename_style == STYLE_DATE_BASED)
-
-        if manga_on and is_date_style:
+        manga_on = self.manga_mode_checkbox.isChecked() # type: ignore
+        is_sequential_style_requiring_single_thread = (
+            self.manga_filename_style == STYLE_DATE_BASED or
+            self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING
+        )
+        if manga_on and is_sequential_style_requiring_single_thread:
             if self.use_multithreading_checkbox.isChecked() or self.use_multithreading_checkbox.isEnabled():
                 if self.use_multithreading_checkbox.isChecked():
                     self.log_signal.emit("ℹ️ Manga Date Mode: Multithreading for post processing has been disabled to ensure correct sequential file numbering.")
@@ -2810,16 +2835,42 @@ class DownloaderApp(QWidget):
         start_page_str, end_page_str = self.start_page_input.text().strip(), self.end_page_input.text().strip()
         start_page, end_page = None, None
         is_creator_feed = bool(not post_id_from_url)
-        if is_creator_feed and not manga_mode:
+
+        if is_creator_feed: # Page range is only relevant and parsed for creator feeds
             try:
                 if start_page_str: start_page = int(start_page_str)
                 if end_page_str: end_page = int(end_page_str)
+
+                # Validate parsed page numbers
                 if start_page is not None and start_page <= 0: raise ValueError("Start page must be positive.")
                 if end_page is not None and end_page <= 0: raise ValueError("End page must be positive.")
                 if start_page and end_page and start_page > end_page: raise ValueError("Start page cannot be greater than end page.")
-            except ValueError as e: QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}"); return
-        elif manga_mode:
-            start_page, end_page = None, None 
+
+                # If it's a creator feed, and manga mode is on, and both page fields were filled, show warning
+                if manga_mode and start_page and end_page:
+                    msg_box = QMessageBox(self)
+                    msg_box.setIcon(QMessageBox.Warning)
+                    msg_box.setWindowTitle("Manga Mode & Page Range Warning")
+                    msg_box.setText(
+                        "You have enabled <b>Manga/Comic Mode</b> and also specified a <b>Page Range</b>.\n\n"
+                        "Manga Mode processes posts from oldest to newest across all available pages by default.\n"
+                        "If you use a page range, you might miss parts of the manga/comic if it starts before your 'Start Page' or continues after your 'End Page'.\n\n"
+                        "However, if you are certain the content you want is entirely within this page range (e.g., a short series, or you know the specific pages for a volume), then proceeding is okay.\n\n"
+                        "Do you want to proceed with this page range in Manga Mode?"
+                    )
+                    proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+                    cancel_button = msg_box.addButton("Cancel Download", QMessageBox.RejectRole)
+                    msg_box.setDefaultButton(proceed_button)
+                    msg_box.setEscapeButton(cancel_button)
+                    msg_box.exec_()
+
+                    if msg_box.clickedButton() == cancel_button:
+                        self.log_signal.emit("❌ Download cancelled by user due to Manga Mode & Page Range warning.")
+                        self.set_ui_enabled(True); return # Re-enable UI and stop
+            except ValueError as e:
+                QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}")
+                self.set_ui_enabled(True); return # Re-enable UI and stop
+        # If not a creator_feed, start_page and end_page remain None.
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
 
         raw_character_filters_text = self.character_input.text().strip() # Get current text
@@ -2954,16 +3005,26 @@ class DownloaderApp(QWidget):
         self.retryable_failed_files_info.clear() # Clear previous retryable failures before new session
         manga_date_file_counter_ref_for_thread = None
         if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not extract_links_only:
-            manga_date_file_counter_ref_for_thread = None
+            # Initialization for STYLE_DATE_BASED (scanning existing files) happens in DownloadThread.run
+            manga_date_file_counter_ref_for_thread = None # Placeholder, actual init in thread
             self.log_signal.emit(f"ℹ️ Manga Date Mode: File counter will be initialized by the download thread.")
+
+        manga_global_file_counter_ref_for_thread = None
+        if manga_mode and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and not extract_links_only:
+            manga_global_file_counter_ref_for_thread = None # Placeholder, actual init in thread
+            self.log_signal.emit(f"ℹ️ Manga Title+GlobalNum Mode: File counter will be initialized by the download thread (starts at 1).")
+
         effective_num_post_workers = 1
+        
         effective_num_file_threads_per_worker = 1 # Default to 1 for all cases initially
 
         if post_id_from_url:
             if use_multithreading_enabled_by_checkbox:
                 effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
-        else:
+        else: # This is the outer else block
             if manga_mode and self.manga_filename_style == STYLE_DATE_BASED:
+                effective_num_post_workers = 1
+            elif manga_mode and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING: # Correctly indented elif
                 effective_num_post_workers = 1
                 effective_num_file_threads_per_worker = 1 # Files are sequential for this worker too
             elif use_multithreading_enabled_by_checkbox: # Standard creator feed with multithreading enabled
@@ -2980,13 +3041,15 @@ class DownloaderApp(QWidget):
             log_messages.append(f"   Mode: Creator Feed")
             log_messages.append(f"   Post Processing: {'Multi-threaded (' + str(effective_num_post_workers) + ' workers)' if effective_num_post_workers > 1 else 'Single-threaded (1 worker)'}")
             log_messages.append(f"     ↳ File Downloads per Worker: Up to {effective_num_file_threads_per_worker} concurrent file(s)")
-            if is_creator_feed:
-                if manga_mode: log_messages.append("   Page Range: All (Manga Mode - Oldest Posts Processed First)")
-                else:
-                    pr_log = "All"
-                    if start_page or end_page: 
-                        pr_log = f"{f'From {start_page} ' if start_page else ''}{'to ' if start_page and end_page else ''}{f'{end_page}' if end_page else (f'Up to {end_page}' if end_page else (f'From {start_page}' if start_page else 'Specific Range'))}".strip()
-                    log_messages.append(f"   Page Range: {pr_log if pr_log else 'All'}")
+            # Logging for page range (applies if is_creator_feed is true)
+            pr_log = "All"
+            if start_page or end_page: # Construct pr_log if start_page or end_page have values
+                pr_log = f"{f'From {start_page} ' if start_page else ''}{'to ' if start_page and end_page else ''}{f'{end_page}' if end_page else (f'Up to {end_page}' if end_page else (f'From {start_page}' if start_page else 'Specific Range'))}".strip()
+            
+            if manga_mode:
+                log_messages.append(f"   Page Range: {pr_log if pr_log else 'All'} (Manga Mode - Oldest Posts Processed First within range)")
+            else: # Not manga mode, but still a creator feed
+                log_messages.append(f"   Page Range: {pr_log if pr_log else 'All'}")
 
 
         if not extract_links_only:
@@ -3027,8 +3090,9 @@ class DownloaderApp(QWidget):
         elif use_cookie_from_checkbox and selected_cookie_file_path_for_backend:
             log_messages.append(f"     ↳ Cookie File Selected: {os.path.basename(selected_cookie_file_path_for_backend)}")
         should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
-        if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not post_id_from_url:
-            log_messages.append(f"   Threading: Single-threaded (posts) - Enforced by Manga Date Mode")
+        if manga_mode and (self.manga_filename_style == STYLE_DATE_BASED or self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING) and not post_id_from_url:
+            enforced_by_style = "Date Mode" if self.manga_filename_style == STYLE_DATE_BASED else "Title+GlobalNum Mode"
+            log_messages.append(f"   Threading: Single-threaded (posts) - Enforced by Manga {enforced_by_style}")
             should_use_multithreading_for_posts = False # Ensure this reflects the forced state
         else:
             log_messages.append(f"   Threading: {'Multi-threaded (posts)' if should_use_multithreading_for_posts else 'Single-threaded (posts)'}")
@@ -3082,6 +3146,7 @@ class DownloaderApp(QWidget):
             'allow_multipart_download': allow_multipart,
             'cookie_text': cookie_text_from_input, # Pass cookie text
             'selected_cookie_file': selected_cookie_file_path_for_backend, # Pass selected cookie file
+            'manga_global_file_counter_ref': manga_global_file_counter_ref_for_thread, # Pass new counter            
             'app_base_dir': app_base_dir_for_cookies, # Pass app base dir
             'use_cookie': use_cookie_from_checkbox, # Pass cookie setting
         }
@@ -3103,7 +3168,8 @@ class DownloaderApp(QWidget):
                     'skip_words_list', 'skip_words_scope', 'char_filter_scope',
                     'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
-                    'manga_date_file_counter_ref', # Ensure this is passed for single thread mode
+                    'manga_date_file_counter_ref', 
+                    'manga_global_file_counter_ref', # Pass new counter for single thread mode
                     'manga_mode_active', 'unwanted_keywords', 'manga_filename_style',
                     'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
                 ]
@@ -3300,7 +3366,8 @@ class DownloaderApp(QWidget):
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
             'show_external_links', 'extract_links_only', 'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', # Added selected_cookie_file
             'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
-            'manga_mode_active', 'manga_filename_style'
+            'manga_mode_active', 'manga_filename_style',
+            'manga_global_file_counter_ref' # Add new counter here
         ]
         ppw_optional_keys_with_defaults = {
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
@@ -3308,6 +3375,8 @@ class DownloaderApp(QWidget):
             'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style',
             'manga_date_file_counter_ref', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
         }
+        # Batching is generally for high worker counts.
+        # If num_post_workers is low (e.g., 1), the num_post_workers > POST_WORKER_BATCH_THRESHOLD condition will prevent batching.
         if num_post_workers > POST_WORKER_BATCH_THRESHOLD and self.total_posts_to_process > POST_WORKER_NUM_BATCHES :
             self.log_signal.emit(f"   High thread count ({num_post_workers}) detected. Batching post submissions into {POST_WORKER_NUM_BATCHES} parts.")
             

@@ -31,6 +31,7 @@ from io import BytesIO
 STYLE_POST_TITLE = "post_title"
 STYLE_ORIGINAL_NAME = "original_name"
 STYLE_DATE_BASED = "date_based" # For manga date-based sequential naming
+STYLE_POST_TITLE_GLOBAL_NUMBERING = "post_title_global_numbering" # For manga post title + global counter
 
 SKIP_SCOPE_FILES = "files"
 SKIP_SCOPE_POSTS = "posts"
@@ -276,7 +277,7 @@ def prepare_cookies_for_request(use_cookie_flag, cookie_text_input, selected_coo
         return None
 
 def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None):    
-    if cancellation_event and cancellation_event.is_set():
+    if cancellation_event and cancellation_event.is_set(): # type: ignore
         logger("   Fetch cancelled before request.")
         raise RuntimeError("Fetch operation cancelled by user.")
 
@@ -284,7 +285,7 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         logger("   Post fetching paused...")
         while pause_event.is_set():
             if cancellation_event and cancellation_event.is_set():
-                logger("   Post fetching cancelled while paused.")
+                logger("   Post fetching cancelled while paused.") # type: ignore
                 raise RuntimeError("Fetch operation cancelled by user.")
             time.sleep(0.5)
         logger("   Post fetching resumed.")
@@ -379,20 +380,36 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
     page_size = 50
 
     if is_creator_feed_for_manga:
-        logger("   Manga Mode: Fetching all posts to reverse order (oldest posts processed first)...")
+        logger("   Manga Mode: Fetching posts to sort by date (oldest processed first)...")
         all_posts_for_manga_mode = []
+        
         current_offset_manga = 0
+        # Determine starting page and offset for manga mode
+        if start_page and start_page > 1:
+            current_offset_manga = (start_page - 1) * page_size
+            logger(f"   Manga Mode: Starting fetch from page {start_page} (offset {current_offset_manga}).")
+        elif start_page: # start_page is 1
+            logger(f"   Manga Mode: Starting fetch from page 1 (offset 0).")
+        
+        if end_page:
+            logger(f"   Manga Mode: Will fetch up to page {end_page}.")
+
         while True:
             if pause_event and pause_event.is_set():
-                logger("   Manga mode post fetching paused...") # type: ignor
+                logger("   Manga mode post fetching paused...") # type: ignore
                 while pause_event.is_set():
                     if cancellation_event and cancellation_event.is_set():
-                        logger("   Manga mode post fetching cancelled while paused.")
+                        logger("   Manga mode post fetching cancelled while paused.") # type: ignore
                         break
                     time.sleep(0.5)
                 if not (cancellation_event and cancellation_event.is_set()): logger("   Manga mode post fetching resumed.")
             if cancellation_event and cancellation_event.is_set():
                 logger("   Manga mode post fetching cancelled.")
+                break
+
+            current_page_num_manga = (current_offset_manga // page_size) + 1
+            if end_page and current_page_num_manga > end_page:
+                logger(f"   Manga Mode: Reached specified end page ({end_page}). Stopping post fetch.")
                 break
             try:
                 posts_batch_manga = fetch_posts_paginated(api_base_url, headers, current_offset_manga, logger, cancellation_event, pause_event, cookies_dict=cookies_for_api)
@@ -401,7 +418,11 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
                     break
                 if not posts_batch_manga:
                     logger("✅ Reached end of posts (Manga Mode fetch all).")
-                    break
+                    if start_page and not end_page and current_page_num_manga < start_page: # Started on a page with no posts
+                        logger(f"   Manga Mode: No posts found on or after specified start page {start_page}.")
+                    elif end_page and current_page_num_manga <= end_page and not all_posts_for_manga_mode: # Range specified but no posts in it
+                        logger(f"   Manga Mode: No posts found within the specified page range ({start_page or 1}-{end_page}).")
+                    break # No more posts from API
                 all_posts_for_manga_mode.extend(posts_batch_manga)
                 current_offset_manga += page_size # Increment by page_size for the next API call's 'o' parameter
                 time.sleep(0.6)
@@ -420,7 +441,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
 
         if all_posts_for_manga_mode:
             logger(f"   Manga Mode: Fetched {len(all_posts_for_manga_mode)} total posts. Sorting by publication date (oldest first)...")
-
+            # ... (rest of sorting and yielding logic for manga mode remains the same) ...
             def sort_key_tuple(post):
                 published_date_str = post.get('published')
                 added_date_str = post.get('added')
@@ -584,7 +605,8 @@ class PostProcessorWorker:
                  selected_cookie_file=None, # Added missing parameter
                  app_base_dir=None, # New parameter for app's base directory
                  manga_date_file_counter_ref=None, # New parameter for date-based manga naming
-                 ):
+                 manga_global_file_counter_ref=None, # New parameter for global numbering
+                 ): # type: ignore
         self.post = post_data
         self.download_root = download_root
         self.known_names = known_names
@@ -630,6 +652,7 @@ class PostProcessorWorker:
         self.selected_cookie_file = selected_cookie_file # Store selected cookie file path       
         self.app_base_dir = app_base_dir # Store app base dir        
         self.cookie_text = cookie_text # Store cookie text
+        self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store global counter
         self.use_cookie = use_cookie # Store cookie setting
 
         if self.compress_images and Image is None:
@@ -666,7 +689,8 @@ class PostProcessorWorker:
     def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event, # skip_event is threading.Event
                               post_title="", file_index_in_post=0, num_files_in_this_post=1,
                               manga_date_file_counter_ref=None): # Added manga_date_file_counter_ref
-        was_original_name_kept_flag = False 
+        was_original_name_kept_flag = False
+        manga_global_file_counter_ref = None # Placeholder, will be passed from process()
         final_filename_saved_for_return = "" 
 
     def _get_current_character_filters(self):
@@ -677,7 +701,8 @@ class PostProcessorWorker:
     def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event,
                               post_title="", file_index_in_post=0, num_files_in_this_post=1, # Added manga_date_file_counter_ref
                               manga_date_file_counter_ref=None,
-                              forced_filename_override=None): # New for retries
+                              forced_filename_override=None, # New for retries
+                              manga_global_file_counter_ref=None): # New for global numbering
         was_original_name_kept_flag = False 
         final_filename_saved_for_return = "" 
         retry_later_details = None # For storing info if retryable failure
@@ -738,6 +763,19 @@ class PostProcessorWorker:
                     else:
                         self.logger(f"⚠️ Manga Date Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_date_file_counter_ref}")
                         filename_to_save_in_main_path = clean_filename(api_original_filename)
+                        self.logger(f"⚠️ Manga mode (Date Based Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
+                elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
+                    if manga_global_file_counter_ref is not None and len(manga_global_file_counter_ref) == 2:
+                        counter_val_for_filename = -1
+                        counter_lock = manga_global_file_counter_ref[1]
+                        with counter_lock:
+                            counter_val_for_filename = manga_global_file_counter_ref[0]
+                            manga_global_file_counter_ref[0] += 1
+                        
+                        cleaned_post_title_base_for_global = clean_filename(post_title.strip() if post_title and post_title.strip() else "post")
+                        filename_to_save_in_main_path = f"{cleaned_post_title_base_for_global}_{counter_val_for_filename:03d}{original_ext}"
+                    else:
+                        self.logger(f"⚠️ Manga Title+GlobalNum Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_global_file_counter_ref}")
                         self.logger(f"⚠️ Manga mode (Date Based Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
                 else: 
                     self.logger(f"⚠️ Manga mode: Unknown filename style '{self.manga_filename_style}'. Defaulting to original filename for '{api_original_filename}'.")
@@ -1429,6 +1467,14 @@ class PostProcessorWorker:
                 
                 target_folder_path_for_this_file = current_path_for_file
                 
+                manga_date_counter_to_pass = None
+                manga_global_counter_to_pass = None
+                if self.manga_mode_active:
+                    if self.manga_filename_style == STYLE_DATE_BASED:
+                        manga_date_counter_to_pass = self.manga_date_file_counter_ref
+                    elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
+                        manga_global_counter_to_pass = self.manga_global_file_counter_ref if self.manga_global_file_counter_ref is not None else self.manga_date_file_counter_ref
+
                 futures_list.append(file_pool.submit(
                     self._download_single_file,
                     file_info_to_dl,
@@ -1436,8 +1482,9 @@ class PostProcessorWorker:
                     headers,
                     post_id,
                     self.skip_current_file_flag,
-                    post_title=post_title, # Keyword argument
-                    manga_date_file_counter_ref=self.manga_date_file_counter_ref if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED else None,
+                    post_title=post_title,
+                    manga_date_file_counter_ref=manga_date_counter_to_pass,
+                    manga_global_file_counter_ref=manga_global_counter_to_pass,
                     file_index_in_post=file_idx, # Changed to keyword argument
                     num_files_in_this_post=num_files_in_this_post_for_naming # Changed to keyword argument
                 ))
@@ -1505,6 +1552,7 @@ class DownloadThread(QThread):
                  selected_cookie_file=None, # New parameter for selected cookie file
                  app_base_dir=None, # New parameter
                  manga_date_file_counter_ref=None, # New parameter
+                 manga_global_file_counter_ref=None, # New parameter for global numbering
                  use_cookie=False, # Added: Expected by main.py
                  cookie_text="",   # Added: Expected by main.py
                  ):
@@ -1555,6 +1603,7 @@ class DownloadThread(QThread):
         self.cookie_text = cookie_text # Store cookie text
         self.use_cookie = use_cookie # Store cookie setting
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker by DownloadThread
+        self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store for global numbering
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
             self.compress_images = False
@@ -1607,9 +1656,16 @@ class DownloadThread(QThread):
                     for filename_to_check in filenames_in_dir:
                         base_name_no_ext = os.path.splitext(filename_to_check)[0]
                         match = re.match(r"(\d{3,})", base_name_no_ext)
-                        if match: highest_num = max(highest_num, int(match.group(1)))
+                        if match: highest_num = max(highest_num, int(match.group(1))) # Corrected indentation
             current_manga_date_file_counter_ref = [highest_num + 1, threading.Lock()]
             self.logger(f"ℹ️ [Thread] Manga Date Mode: Initialized counter at {current_manga_date_file_counter_ref[0]}.")
+        elif self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and not self.extract_links_only and current_manga_date_file_counter_ref is None: # Use current_manga_date_file_counter_ref for STYLE_POST_TITLE_GLOBAL_NUMBERING as well
+            # For global numbering, we always start from 1 for the session unless a ref is passed.
+            # If you need to resume global numbering across sessions, similar scanning logic would be needed.
+            # For now, it starts at 1 per session if no ref is provided.
+            current_manga_date_file_counter_ref = [1, threading.Lock()] # Start global numbering at 1
+            self.logger(f"ℹ️ [Thread] Manga Title+GlobalNum Mode: Initialized counter at {current_manga_date_file_counter_ref[0]}.")
+
         worker_signals_obj = PostProcessorSignals()
         try:
             worker_signals_obj.progress_signal.connect(self.progress_signal)
@@ -1676,6 +1732,7 @@ class DownloadThread(QThread):
                          selected_cookie_file=self.selected_cookie_file, # Pass selected cookie file
                          app_base_dir=self.app_base_dir, # Pass app_base_dir
                          cookie_text=self.cookie_text, # Pass cookie text
+                         manga_global_file_counter_ref=self.manga_global_file_counter_ref, # Pass the ref
                          use_cookie=self.use_cookie, # Pass cookie setting to worker
                          manga_date_file_counter_ref=current_manga_date_file_counter_ref, # Pass the calculated or passed-in ref
                          )
