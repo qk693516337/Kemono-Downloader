@@ -2506,8 +2506,10 @@ class DownloaderApp(QWidget):
         is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
         is_only_audio = hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked()
 
-        can_enable_subfolder_per_post_checkbox = not is_only_links and not is_only_archives and not is_only_audio
-
+        # "Subfolder per Post" can be enabled if it's not "Only Links" and not "Only Archives".
+        # This means it CAN be enabled for "All", "Images/GIFs", "Videos", and "Only Audio" modes.
+        can_enable_subfolder_per_post_checkbox = not is_only_links and not is_only_archives
+        
         if self.use_subfolder_per_post_checkbox:
             self.use_subfolder_per_post_checkbox.setEnabled(can_enable_subfolder_per_post_checkbox)
 
