@@ -31,6 +31,7 @@ from io import BytesIO
 STYLE_POST_TITLE = "post_title"
 STYLE_ORIGINAL_NAME = "original_name"
 STYLE_DATE_BASED = "date_based" # For manga date-based sequential naming
+MANGA_DATE_PREFIX_DEFAULT = "" # Default for the new prefix
 STYLE_POST_TITLE_GLOBAL_NUMBERING = "post_title_global_numbering" # For manga post title + global counter
 
 SKIP_SCOPE_FILES = "files"
@@ -140,8 +141,8 @@ def clean_folder_name(name):
 def clean_filename(name):
     if not isinstance(name, str): name = str(name)
     cleaned = re.sub(r'[^\w\s\-\_\.\(\)]', '', name)
-    cleaned = cleaned.strip()
-    cleaned = re.sub(r'\s+', '_', cleaned)
+    cleaned = cleaned.strip() # Remove leading/trailing spaces first
+    cleaned = re.sub(r'\s+', ' ', cleaned) # Replace multiple internal spaces with a single space
     return cleaned if cleaned else "untitled_file"
 
 def strip_html_tags(html_text):
@@ -604,6 +605,7 @@ class PostProcessorWorker:
                  use_cookie=False, # Added missing parameter
                  selected_cookie_file=None, # Added missing parameter
                  app_base_dir=None, # New parameter for app's base directory
+                 manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT, # New parameter for date-based prefix
                  manga_date_file_counter_ref=None, # New parameter for date-based manga naming
                  manga_global_file_counter_ref=None, # New parameter for global numbering
                  ): # type: ignore
@@ -652,6 +654,7 @@ class PostProcessorWorker:
         self.selected_cookie_file = selected_cookie_file # Store selected cookie file path       
         self.app_base_dir = app_base_dir # Store app base dir        
         self.cookie_text = cookie_text # Store cookie text
+        self.manga_date_prefix = manga_date_prefix # Store the prefix
         self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store global counter
         self.use_cookie = use_cookie # Store cookie setting
 
@@ -734,6 +737,14 @@ class PostProcessorWorker:
             if self.manga_mode_active: # Note: duplicate_file_mode is overridden to "Delete" in main.py if manga_mode is on
                 if self.manga_filename_style == STYLE_ORIGINAL_NAME:
                     filename_to_save_in_main_path = clean_filename(api_original_filename)
+                    # Apply prefix if provided for Original Name style
+                    if self.manga_date_prefix and self.manga_date_prefix.strip():
+                        cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
+                        if cleaned_prefix:
+                            filename_to_save_in_main_path = f"{cleaned_prefix} {filename_to_save_in_main_path}"
+                        else:
+                            self.logger(f"⚠️ Manga Original Name Mode: Provided prefix '{self.manga_date_prefix}' was empty after cleaning. Using original name only.")
+
                     was_original_name_kept_flag = True
                 elif self.manga_filename_style == STYLE_POST_TITLE:
                     if post_title and post_title.strip():
@@ -759,7 +770,15 @@ class PostProcessorWorker:
                             counter_val_for_filename = manga_date_file_counter_ref[0]
                             manga_date_file_counter_ref[0] += 1
                         
-                        filename_to_save_in_main_path = f"{counter_val_for_filename:03d}{original_ext}"
+                        base_numbered_name = f"{counter_val_for_filename:03d}"
+                        if self.manga_date_prefix and self.manga_date_prefix.strip():
+                            cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
+                            if cleaned_prefix: # Ensure prefix is not empty after cleaning
+                                filename_to_save_in_main_path = f"{cleaned_prefix} {base_numbered_name}{original_ext}"
+                            else: # Prefix became empty after cleaning
+                                filename_to_save_in_main_path = f"{base_numbered_name}{original_ext}"; self.logger(f"⚠️ Manga Date Mode: Provided prefix '{self.manga_date_prefix}' was empty after cleaning. Using number only.")
+                        else: # No prefix provided
+                            filename_to_save_in_main_path = f"{base_numbered_name}{original_ext}"
                     else:
                         self.logger(f"⚠️ Manga Date Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_date_file_counter_ref}")
                         filename_to_save_in_main_path = clean_filename(api_original_filename)
@@ -796,8 +815,10 @@ class PostProcessorWorker:
                     if not word_to_remove: continue
                     pattern = re.compile(re.escape(word_to_remove), re.IGNORECASE)
                     modified_base_name = pattern.sub("", modified_base_name)
-                modified_base_name = re.sub(r'[_.\s-]+', '_', modified_base_name) 
-                modified_base_name = modified_base_name.strip('_') 
+                # After removals, normalize all seps (underscore, dot, multiple spaces, hyphen) to a single space, then strip.
+                modified_base_name = re.sub(r'[_.\s-]+', ' ', modified_base_name) # Convert all separators to spaces
+                modified_base_name = re.sub(r'\s+', ' ', modified_base_name)     # Condense multiple spaces to one
+                modified_base_name = modified_base_name.strip()                  # Remove leading/trailing spaces
                 if modified_base_name and modified_base_name != ext_for_removal.lstrip('.'):
                     filename_to_save_in_main_path = modified_base_name + ext_for_removal
                 else: 
@@ -1548,6 +1569,7 @@ class DownloadThread(QThread):
                  manga_filename_style=STYLE_POST_TITLE,
                  char_filter_scope=CHAR_SCOPE_FILES, # manga_date_file_counter_ref removed from here
                  remove_from_filename_words_list=None,
+                 manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT, # New parameter
                  allow_multipart_download=True,
                  selected_cookie_file=None, # New parameter for selected cookie file
                  app_base_dir=None, # New parameter
@@ -1597,6 +1619,7 @@ class DownloadThread(QThread):
         self.manga_filename_style = manga_filename_style
         self.char_filter_scope = char_filter_scope
         self.remove_from_filename_words_list = remove_from_filename_words_list
+        self.manga_date_prefix = manga_date_prefix # Store the prefix
         self.allow_multipart_download = allow_multipart_download
         self.selected_cookie_file = selected_cookie_file # Store selected cookie file
         self.app_base_dir = app_base_dir # Store app base dir
@@ -1726,6 +1749,7 @@ class DownloadThread(QThread):
                          skip_current_file_flag=self.skip_current_file_flag,
                          manga_mode_active=self.manga_mode_active,
                          manga_filename_style=self.manga_filename_style,
+                         manga_date_prefix=self.manga_date_prefix, # Pass the prefix
                          char_filter_scope=self.char_filter_scope,
                          remove_from_filename_words_list=self.remove_from_filename_words_list,
                          allow_multipart_download=self.allow_multipart_download,

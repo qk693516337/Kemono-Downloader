@@ -54,7 +54,8 @@ try:
         CHAR_SCOPE_FILES, # Ensure this is imported
         CHAR_SCOPE_BOTH, 
         CHAR_SCOPE_COMMENTS,
-        FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, # Import the new status
+        FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER,
+        STYLE_DATE_BASED, # Import new manga style
         STYLE_POST_TITLE_GLOBAL_NUMBERING # Import new manga style
     )
     print("Successfully imported names from downloader_utils.")
@@ -88,6 +89,7 @@ except ImportError as e:
     CHAR_SCOPE_BOTH = "both"
     CHAR_SCOPE_COMMENTS = "comments"
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER = "failed_retry_later"
+    STYLE_DATE_BASED = "date_based"
     STYLE_POST_TITLE_GLOBAL_NUMBERING = "post_title_global_numbering" # Mock for safety
 
 except Exception as e:
@@ -112,7 +114,7 @@ HTML_PREFIX = "<!HTML!>"
 CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
 CONFIG_APP_NAME_MAIN = "ApplicationSettings"
 MANGA_FILENAME_STYLE_KEY = "mangaFilenameStyleV1"
-STYLE_POST_TITLE = "post_title"
+STYLE_POST_TITLE = "post_title" # Already defined, but ensure it's STYLE_POST_TITLE
 STYLE_ORIGINAL_NAME = "original_name"
 STYLE_DATE_BASED = "date_based" # New style for date-based naming
 STYLE_POST_TITLE_GLOBAL_NUMBERING = STYLE_POST_TITLE_GLOBAL_NUMBERING # Use imported or mocked
@@ -585,9 +587,9 @@ class TourDialog(QDialog):
             "   <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:"
             "       <ul>"
             "       <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li><br>"
-            "       <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames.</li><br>"
+            "       <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_OriginalFile.jpg'.</li><br>"
             "       <li><b><i>Name: Title+G.Num (Post Title + Global Numbering):</i></b> All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. For example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li><br>"
-            "       <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>"
+            "       <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>"
             "       </ul>"
             "   </li><br>"
             "   <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>"
@@ -1563,6 +1565,14 @@ class DownloaderApp(QWidget):
         self.manga_rename_toggle_button.setStyleSheet("padding: 4px 8px;")
         self._update_manga_filename_style_button_text()
         log_title_layout.addWidget(self.manga_rename_toggle_button)
+        
+        # NEW: Manga Date Prefix Input
+        self.manga_date_prefix_input = QLineEdit()
+        self.manga_date_prefix_input.setPlaceholderText("Prefix for Manga Filenames") # Generalized
+        self.manga_date_prefix_input.setToolTip("Optional prefix for 'Date Based' or 'Original File' manga filenames (e.g., 'Series Name').\nIf empty, files will be named based on the style without a prefix.") # Generalized
+        self.manga_date_prefix_input.setVisible(False) # Initially hidden
+        self.manga_date_prefix_input.setFixedWidth(160) # Adjust as needed
+        log_title_layout.addWidget(self.manga_date_prefix_input) # Add to layout
         
         self.multipart_toggle_button = QPushButton()
         self.multipart_toggle_button.setToolTip("Toggle between Multi-part and Single-stream downloads for large files.")
@@ -2553,10 +2563,10 @@ class DownloaderApp(QWidget):
             elif self.manga_filename_style == STYLE_ORIGINAL_NAME:
                 self.manga_rename_toggle_button.setText("Name: Original File")
                 self.manga_rename_toggle_button.setToolTip(
-                    "Manga Filename Style: Original File Name\n\n"
+                    "Manga Filename Style: Original File Name\n\n" # Updated tooltip
                     "When Manga/Comic Mode is active for a creator feed:\n"
                     "- *All* files in a post will attempt to keep their original filenames as provided by the site (e.g., \"001.jpg\", \"page_02.png\").\n"
-                    "- This can be useful if original names are already well-structured and sequential.\n"
+                    "- An optional prefix can be entered in the field next to this button (e.g., 'MySeries_001.jpg').\n"
                     "- If original names are inconsistent, using \"Post Title\" style is often better.\n"
                     "- Example: Post \"Chapter 1: The Beginning\" with files \"001.jpg\", \"002.jpg\".\n"
                     "  Downloads as: \"001.jpg\", \"002.jpg\".\n\n"
@@ -2579,7 +2589,8 @@ class DownloaderApp(QWidget):
                 self.manga_rename_toggle_button.setToolTip(
                     "Manga Filename Style: Date Based\n\n"
                     "When Manga/Comic Mode is active for a creator feed:\n"
-                    "- Files will be named sequentially (001.ext, 002.ext, ...) based on post publication order (oldest to newest).\n"
+                    "- Files will be named sequentially (001.ext, 002.ext, ...) based on post publication order.\n"
+                    "- An optional prefix can be entered in the field next to this button (e.g., 'MySeries_001.jpg').\n"
                     "- To ensure correct numbering, multithreading for post processing is automatically disabled when this style is active.\n\n"
                     "Click to change to: Post Title"
                 )
@@ -2613,7 +2624,7 @@ class DownloaderApp(QWidget):
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
         self.settings.sync()
         self._update_manga_filename_style_button_text()
-        self._update_multithreading_for_date_mode() # Update multithreading state based on new style
+        self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False) # Update UI based on new style
         self.log_signal.emit(f"ℹ️ Manga filename style changed to: '{self.manga_filename_style}'")
 
 
@@ -2638,7 +2649,9 @@ class DownloaderApp(QWidget):
 
         # Always update page range enabled state, as it depends on URL type, not directly manga mode.
         self.update_page_range_enabled_state()
-        
+
+        current_filename_style = self.manga_filename_style
+
         file_download_mode_active = not (self.radio_only_links and self.radio_only_links.isChecked())
         # Character filter widgets should be enabled if it's a file download mode
         enable_char_filter_widgets = file_download_mode_active and not (self.radio_only_archives and self.radio_only_archives.isChecked())
@@ -2650,6 +2663,23 @@ class DownloaderApp(QWidget):
             self.char_filter_scope_toggle_button.setEnabled(enable_char_filter_widgets)
         if self.character_filter_widget: # Also ensure the main widget visibility is correct
             self.character_filter_widget.setVisible(enable_char_filter_widgets)        
+
+        # Visibility for manga date prefix input
+        show_date_prefix_input = (
+            manga_mode_effectively_on and
+            (current_filename_style == STYLE_DATE_BASED or current_filename_style == STYLE_ORIGINAL_NAME) and # MODIFIED
+            not (is_only_links_mode or is_only_archives_mode)
+        )
+        if hasattr(self, 'manga_date_prefix_input'):
+            self.manga_date_prefix_input.setVisible(show_date_prefix_input)
+            if not show_date_prefix_input: # Clear if not visible
+                self.manga_date_prefix_input.clear()
+
+        # Visibility for multipart toggle button
+        if hasattr(self, 'multipart_toggle_button'):
+            show_multipart_button = not (show_date_prefix_input or is_only_links_mode or is_only_archives_mode)
+            self.multipart_toggle_button.setVisible(show_multipart_button)
+
         self._update_multithreading_for_date_mode() # Update multithreading state based on manga mode
 
 
@@ -2820,7 +2850,7 @@ class DownloaderApp(QWidget):
         if not extract_links_only and not os.path.isdir(output_dir):
             reply = QMessageBox.question(self, "Create Directory?",
                                          f"The directory '{output_dir}' does not exist.\nCreate it now?",
-                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) # type: ignore
             if reply == QMessageBox.Yes:
                 try: os.makedirs(output_dir, exist_ok=True); self.log_signal.emit(f"ℹ️ Created directory: {output_dir}")
                 except Exception as e: QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}"); return
@@ -2830,8 +2860,18 @@ class DownloaderApp(QWidget):
             QMessageBox.warning(self, "Missing Dependency", "Pillow library (for image compression) not found. Compression will be disabled.")
             compress_images = False; self.compress_images_checkbox.setChecked(False)
 
+        # Initialize log_messages here, before it's potentially used by manga_date_prefix_text logging
+        log_messages = ["="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"   URL: {api_url}"]
+
         manga_mode = manga_mode_is_checked and not post_id_from_url
 
+        manga_date_prefix_text = ""
+        if manga_mode and \
+           (self.manga_filename_style == STYLE_DATE_BASED or self.manga_filename_style == STYLE_ORIGINAL_NAME) and \
+           hasattr(self, 'manga_date_prefix_input'):
+            manga_date_prefix_text = self.manga_date_prefix_input.text().strip()
+            if manga_date_prefix_text: # Log only if prefix is provided (log_messages is now initialized)
+                log_messages.append(f"     ↳ Manga Date Prefix: '{manga_date_prefix_text}'")
 
         start_page_str, end_page_str = self.start_page_input.text().strip(), self.end_page_input.text().strip()
         start_page, end_page = None, None
@@ -3032,7 +3072,7 @@ class DownloaderApp(QWidget):
                 effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS)) # For posts
                 effective_num_file_threads_per_worker = 1 # Files within each post worker are sequential
 
-        log_messages = ["="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"   URL: {api_url}"]
+        # log_messages initialization was moved earlier
         if not extract_links_only: log_messages.append(f"   Save Location: {output_dir}")
         
         if post_id_from_url:
@@ -3139,6 +3179,7 @@ class DownloaderApp(QWidget):
             'manga_mode_active': manga_mode,
             'unwanted_keywords': unwanted_keywords_for_folders,
             'cancellation_event': self.cancellation_event,
+            'manga_date_prefix': manga_date_prefix_text, # NEW ARGUMENT            
             'dynamic_character_filter_holder': self.dynamic_character_filter_holder, # Pass the holder
             'pause_event': self.pause_event, # Explicitly add pause_event here
             'manga_filename_style': self.manga_filename_style,
@@ -3170,7 +3211,7 @@ class DownloaderApp(QWidget):
                     'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
                     'manga_date_file_counter_ref', 
-                    'manga_global_file_counter_ref', # Pass new counter for single thread mode
+                    'manga_global_file_counter_ref', 'manga_date_prefix', # Pass new counter and prefix for single thread mode
                     'manga_mode_active', 'unwanted_keywords', 'manga_filename_style',
                     'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
                 ]
@@ -3367,14 +3408,14 @@ class DownloaderApp(QWidget):
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
             'show_external_links', 'extract_links_only', 'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', # Added selected_cookie_file
             'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
-            'manga_mode_active', 'manga_filename_style',
+            'manga_mode_active', 'manga_filename_style', 'manga_date_prefix', # ADD manga_date_prefix
             'manga_global_file_counter_ref' # Add new counter here
         ]
         ppw_optional_keys_with_defaults = {
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
             'show_external_links', 'extract_links_only', 'duplicate_file_mode', # Added duplicate_file_mode here
-            'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style',
-            'manga_date_file_counter_ref', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
+            'num_file_threads', 'skip_current_file_flag', 'manga_mode_active', 'manga_filename_style', 'manga_date_prefix', # ADD manga_date_prefix
+            'manga_date_file_counter_ref', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file'
         }
         # Batching is generally for high worker counts.
         # If num_post_workers is low (e.g., 1), the num_post_workers > POST_WORKER_BATCH_THRESHOLD condition will prevent batching.
@@ -3619,6 +3660,8 @@ class DownloaderApp(QWidget):
 
         self.skip_words_scope = SKIP_SCOPE_POSTS # Default
         self._update_skip_scope_button_text()
+
+        if hasattr(self, 'manga_date_prefix_input'): self.manga_date_prefix_input.clear() # Clear prefix input
 
         self.char_filter_scope = CHAR_SCOPE_TITLE # Default
         self._update_char_filter_scope_button_text()
@@ -3966,6 +4009,7 @@ class DownloaderApp(QWidget):
         self.missed_title_key_terms_examples.clear()
         self.logged_summary_for_key_term.clear()
         self.already_logged_bold_key_terms.clear()
+        if hasattr(self, 'manga_date_prefix_input'): self.manga_date_prefix_input.clear() # Clear prefix input        
         if self.pause_event: self.pause_event.clear()
         self.is_paused = False # Reset pause state
         self.missed_key_terms_buffer.clear()
@@ -4128,8 +4172,9 @@ class DownloaderApp(QWidget):
                                 <ul>
                                     <li><code>Name: Post Title (Default)</code>: The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li>
                                     <li><code>Name: Original File</code>: All files attempt to keep their original filenames.</li>
-                                    <li><code>Name: Title+G.Num (Post Title + Global Numbering)</code>: All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. For example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li>
-                                    <li><code>Name: Date Based</code>: Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. Multithreading for post processing is automatically disabled for this style.</li>
+                                    <li><code>Name: Original File</code>: All files attempt to keep their original filenames. When this style is active, an input field for an <b>optional filename prefix</b> (e.g., 'MySeries_') will appear next to this style button. Example: 'MySeries_OriginalFile.jpg'.</li>
+                                    <li><code>Name: Title+G.Num (Post Title + Global Numbering)</code>: All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. Example: Post 'Chapter 1' (2 files) -> 'Chapter 1 001.jpg', 'Chapter 1 002.png'. Next post 'Chapter 2' (1 file) -> 'Chapter 2 003.jpg'. Multithreading for post processing is automatically disabled for this style.</li>
+                                    <li><code>Name: Date Based</code>: Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. When this style is active, an input field for an <b>optional filename prefix</b> (e.g., 'MySeries_') will appear next to this style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>
                                 </ul>
                             </li>
                             <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>
@@ -4175,7 +4220,8 @@ class DownloaderApp(QWidget):
             <li><b>Name: [Style] Button (Manga Filename Style):</b>
                 <ul><li>Visible only when <b>Manga/Comic Mode</b> is active for a creator feed and not in 'Only Links' or 'Only Archives' mode.</li>
                     <li>Cycles through filename styles: <code>Post Title</code>, <code>Original File</code>, <code>Date Based</code>. (See Manga/Comic Mode section for details).</li>
-                </ul>
+                    <li>When 'Original File' or 'Date Based' style is active, an input field for an <b>optional filename prefix</b> will appear next to this button.</li>
+                </ul>                
             </li>
             <li><b>Multi-part: [ON/OFF] Button:</b>
                 <ul><li>Toggles multi-segment downloads for individual large files.
