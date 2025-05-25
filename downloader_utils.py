@@ -742,8 +742,8 @@ class PostProcessorWorker:
                             if file_index_in_post == 0:
                                 filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
                             else:
-                                filename_to_save_in_main_path = clean_filename(api_original_filename)
-                                was_original_name_kept_flag = True 
+                                filename_to_save_in_main_path = f"{cleaned_post_title_base}_{file_index_in_post}{original_ext}"
+                                was_original_name_kept_flag = False # Name is derived, not original
                         else:
                             filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
                     else:
