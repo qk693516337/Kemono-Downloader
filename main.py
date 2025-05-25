@@ -539,6 +539,7 @@ class TourDialog(QDialog):
             "   <li><i>Images/GIFs:</i> Only common image formats and GIFs.</li><br>"
             "   <li><i>Videos:</i> Only common video formats.</li><br>"
             "   <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li><br>"
+            "   <li><i>🎧 Only Audio:</i> Only common audio formats (MP3, WAV, FLAC, etc.).</li><br>"
             "   <li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled.</li>"
             "   </ul></li>"
             "</ul>"
@@ -1334,6 +1335,7 @@ class DownloaderApp(QWidget):
         self.radio_videos = QRadioButton("Videos")
         self.radio_videos.setToolTip("Download only common video formats (MP4, MKV, WEBM, MOV, etc.).")
         self.radio_only_archives = QRadioButton("📦 Only Archives")
+        self.radio_only_audio = QRadioButton("🎧 Only Audio") # New Radio Button
         self.radio_only_archives.setToolTip("Exclusively download .zip and .rar files. Other file-specific options are disabled.")
         self.radio_only_links = QRadioButton("🔗 Only Links")
         self.radio_only_links.setToolTip("Extract and display external links from post descriptions instead of downloading files.\nDownload-related options will be disabled.")
@@ -1342,11 +1344,13 @@ class DownloaderApp(QWidget):
         self.radio_group.addButton(self.radio_images)
         self.radio_group.addButton(self.radio_videos)
         self.radio_group.addButton(self.radio_only_archives)
+        self.radio_group.addButton(self.radio_only_audio) # Add to group
         self.radio_group.addButton(self.radio_only_links)
         radio_button_layout.addWidget(self.radio_all)
         radio_button_layout.addWidget(self.radio_images)
         radio_button_layout.addWidget(self.radio_videos)
         radio_button_layout.addWidget(self.radio_only_archives)
+        radio_button_layout.addWidget(self.radio_only_audio) # Add to layout
         radio_button_layout.addWidget(self.radio_only_links)
         radio_button_layout.addStretch(1)
         file_filter_layout.addLayout(radio_button_layout)
@@ -2001,11 +2005,13 @@ class DownloaderApp(QWidget):
 
         filter_mode_text = button.text()
         is_only_links = (filter_mode_text == "🔗 Only Links")
+        is_only_audio = (filter_mode_text == "🎧 Only Audio")
         is_only_archives = (filter_mode_text == "📦 Only Archives")
+
         if self.skip_scope_toggle_button:
-            self.skip_scope_toggle_button.setVisible(not (is_only_links or is_only_archives))
+            self.skip_scope_toggle_button.setVisible(not (is_only_links or is_only_archives or is_only_audio))
         if hasattr(self, 'multipart_toggle_button') and self.multipart_toggle_button:
-            self.multipart_toggle_button.setVisible(not (is_only_links or is_only_archives))
+            self.multipart_toggle_button.setVisible(not (is_only_links or is_only_archives or is_only_audio))
 
         if self.link_search_input: self.link_search_input.setVisible(is_only_links)
         if self.link_search_button: self.link_search_button.setVisible(is_only_links)
@@ -2020,7 +2026,7 @@ class DownloaderApp(QWidget):
                 self.download_btn.setText("⬇️ Start Download")
         if not is_only_links and self.link_search_input: self.link_search_input.clear()
 
-        file_download_mode_active = not is_only_links
+        file_download_mode_active = not is_only_links # Audio mode is a file download mode
 
         if self.dir_input: self.dir_input.setEnabled(file_download_mode_active)
         if self.dir_button: self.dir_button.setEnabled(file_download_mode_active)
@@ -2030,23 +2036,23 @@ class DownloaderApp(QWidget):
         if hasattr(self, 'remove_from_filename_input'): self.remove_from_filename_input.setEnabled(file_download_mode_active)
         
         if self.skip_zip_checkbox:
-            can_skip_zip = not is_only_links and not is_only_archives
+            can_skip_zip = file_download_mode_active and not is_only_archives # Audio mode allows skipping zip
             self.skip_zip_checkbox.setEnabled(can_skip_zip)
             if is_only_archives:
                 self.skip_zip_checkbox.setChecked(False)
         
         if self.skip_rar_checkbox:
-            can_skip_rar = not is_only_links and not is_only_archives
+            can_skip_rar = file_download_mode_active and not is_only_archives # Audio mode allows skipping rar
             self.skip_rar_checkbox.setEnabled(can_skip_rar)
             if is_only_archives:
                 self.skip_rar_checkbox.setChecked(False)
 
-        other_file_proc_enabled = not is_only_links and not is_only_archives
+        other_file_proc_enabled = file_download_mode_active and not is_only_archives # Thumbnails/compression relevant if not archives
         if self.download_thumbnails_checkbox: self.download_thumbnails_checkbox.setEnabled(other_file_proc_enabled)
         if self.compress_images_checkbox: self.compress_images_checkbox.setEnabled(other_file_proc_enabled)
         
         if self.external_links_checkbox: 
-            can_show_external_log_option = not is_only_links and not is_only_archives
+            can_show_external_log_option = file_download_mode_active and not is_only_archives # External links relevant if not archives
             self.external_links_checkbox.setEnabled(can_show_external_log_option)
             if not can_show_external_log_option:
                  self.external_links_checkbox.setChecked(False)
@@ -2067,6 +2073,12 @@ class DownloaderApp(QWidget):
             if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
             if self.main_log_output: self.main_log_output.clear()
             self.log_signal.emit("="*20 + " Mode changed to: Only Archives " + "="*20)
+        elif is_only_audio:
+            self.progress_log_label.setText("📜 Progress Log (Audio Only):")
+            if self.external_log_output: self.external_log_output.hide() # Typically no external log for specific content types unless explicitly enabled
+            if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
+            if self.main_log_output: self.main_log_output.clear()
+            self.log_signal.emit("="*20 + " Mode changed to: Only Archives " + "="*20)
         else:
             self.progress_log_label.setText("📜 Progress Log:")
             self.update_external_links_setting(self.external_links_checkbox.isChecked() if self.external_links_checkbox else False)
@@ -2077,7 +2089,7 @@ class DownloaderApp(QWidget):
 
         # Determine if character filter section should be active (visible and enabled)
         # It should be active if we are in a file downloading mode (not 'Only Links' or 'Only Archives')
-        character_filter_should_be_active = not is_only_links and not is_only_archives
+        character_filter_should_be_active = file_download_mode_active and not is_only_archives
 
         if self.character_filter_widget:
             self.character_filter_widget.setVisible(character_filter_should_be_active)
@@ -2171,6 +2183,8 @@ class DownloaderApp(QWidget):
             return 'video'
         elif self.radio_only_archives and self.radio_only_archives.isChecked():
             return 'archive'
+        elif hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked(): # New audio mode
+            return 'audio'
         elif self.radio_all.isChecked():
             return 'all'
         return 'all'
@@ -2474,7 +2488,8 @@ class DownloaderApp(QWidget):
         
         not_only_links_or_archives_mode = not (
             (self.radio_only_links and self.radio_only_links.isChecked()) or
-            (self.radio_only_archives and self.radio_only_archives.isChecked())
+            (self.radio_only_archives and self.radio_only_archives.isChecked()) or
+            (hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked()) # Audio mode also hides custom folder
         )
 
         should_show_custom_folder = is_single_post_url and subfolders_enabled and not_only_links_or_archives_mode
@@ -2489,8 +2504,9 @@ class DownloaderApp(QWidget):
     def update_ui_for_subfolders(self, separate_folders_by_name_title_checked: bool):
         is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
         is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
+        is_only_audio = hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked()
 
-        can_enable_subfolder_per_post_checkbox = not is_only_links and not is_only_archives
+        can_enable_subfolder_per_post_checkbox = not is_only_links and not is_only_archives and not is_only_audio
 
         if self.use_subfolder_per_post_checkbox:
             self.use_subfolder_per_post_checkbox.setEnabled(can_enable_subfolder_per_post_checkbox)
@@ -2631,10 +2647,11 @@ class DownloaderApp(QWidget):
     def update_ui_for_manga_mode(self, checked):
         is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
         is_only_archives_mode = self.radio_only_archives and self.radio_only_archives.isChecked()
+        is_only_audio_mode = hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked()
 
         url_text = self.link_input.text().strip() if self.link_input else ""
         _, _, post_id = extract_post_info(url_text)
-
+        
         is_creator_feed = not post_id if url_text else False
         if self.manga_mode_checkbox:
             self.manga_mode_checkbox.setEnabled(is_creator_feed)
@@ -2645,16 +2662,17 @@ class DownloaderApp(QWidget):
         manga_mode_effectively_on = is_creator_feed and checked
 
         if self.manga_rename_toggle_button:
-            self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode))
+            self.manga_rename_toggle_button.setVisible(manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode))
 
         # Always update page range enabled state, as it depends on URL type, not directly manga mode.
         self.update_page_range_enabled_state()
 
         current_filename_style = self.manga_filename_style
 
-        file_download_mode_active = not (self.radio_only_links and self.radio_only_links.isChecked())
-        # Character filter widgets should be enabled if it's a file download mode
-        enable_char_filter_widgets = file_download_mode_active and not (self.radio_only_archives and self.radio_only_archives.isChecked())
+        # Character filter widgets should be enabled if it's a file download mode where character
+        # filtering makes sense (i.e., not 'Only Links' and not 'Only Archives').
+        # 'Only Audio' mode is a file download mode where character filters are applicable.
+        enable_char_filter_widgets = not is_only_links_mode and not is_only_archives_mode
 
         if self.character_input:
             self.character_input.setEnabled(enable_char_filter_widgets)
@@ -2668,7 +2686,7 @@ class DownloaderApp(QWidget):
         show_date_prefix_input = (
             manga_mode_effectively_on and
             (current_filename_style == STYLE_DATE_BASED or current_filename_style == STYLE_ORIGINAL_NAME) and # MODIFIED
-            not (is_only_links_mode or is_only_archives_mode)
+            not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode)
         )
         if hasattr(self, 'manga_date_prefix_input'):
             self.manga_date_prefix_input.setVisible(show_date_prefix_input)
@@ -2677,7 +2695,7 @@ class DownloaderApp(QWidget):
 
         # Visibility for multipart toggle button
         if hasattr(self, 'multipart_toggle_button'):
-            show_multipart_button = not (show_date_prefix_input or is_only_links_mode or is_only_archives_mode)
+            show_multipart_button = not (show_date_prefix_input or is_only_links_mode or is_only_archives_mode or is_only_audio_mode)
             self.multipart_toggle_button.setVisible(show_multipart_button)
 
         self._update_multithreading_for_date_mode() # Update multithreading state based on manga mode
@@ -2828,7 +2846,8 @@ class DownloaderApp(QWidget):
         
         extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
         backend_filter_mode = self.get_filter_mode()
-        user_selected_filter_text = self.radio_group.checkedButton().text() if self.radio_group.checkedButton() else "All"
+        checked_radio_button = self.radio_group.checkedButton()
+        user_selected_filter_text = checked_radio_button.text() if checked_radio_button else "All"
         if selected_cookie_file_path_for_backend:
             cookie_text_from_input = ""
 
@@ -2838,6 +2857,9 @@ class DownloaderApp(QWidget):
         else:
             effective_skip_zip = self.skip_zip_checkbox.isChecked()
             effective_skip_rar = self.skip_rar_checkbox.isChecked()
+            if backend_filter_mode == 'audio': # If audio mode, don't skip archives by default unless user explicitly checks
+                effective_skip_zip = self.skip_zip_checkbox.isChecked() # Keep user's choice
+                effective_skip_rar = self.skip_rar_checkbox.isChecked() # Keep user's choice
 
         if not api_url: QMessageBox.critical(self, "Input Error", "URL is required."); return
         if not extract_links_only and not output_dir:
@@ -2862,7 +2884,11 @@ class DownloaderApp(QWidget):
 
         # Initialize log_messages here, before it's potentially used by manga_date_prefix_text logging
         log_messages = ["="*40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"   URL: {api_url}"]
-
+        
+        current_mode_log_text = "Download"
+        if extract_links_only: current_mode_log_text = "Link Extraction"
+        elif backend_filter_mode == 'archive': current_mode_log_text = "Archive Download"
+        elif backend_filter_mode == 'audio': current_mode_log_text = "Audio Download"
         manga_mode = manga_mode_is_checked and not post_id_from_url
 
         manga_date_prefix_text = ""
@@ -3195,7 +3221,7 @@ class DownloaderApp(QWidget):
 
         try:
             if should_use_multithreading_for_posts:
-                self.log_signal.emit(f"   Initializing multi-threaded {'link extraction' if extract_links_only else 'download'} with {effective_num_post_workers} post workers...")
+                self.log_signal.emit(f"   Initializing multi-threaded {current_mode_log_text.lower()} with {effective_num_post_workers} post workers...")
                 args_template['emitter'] = self.worker_to_gui_queue # For multi-threaded, use the queue
                 self.start_multi_threaded_download(num_post_workers=effective_num_post_workers, **args_template)
             else:
@@ -3554,7 +3580,8 @@ class DownloaderApp(QWidget):
         all_potentially_toggleable_widgets = [
             self.link_input, self.dir_input, self.dir_button,
             self.page_range_label, self.start_page_input, self.to_label, self.end_page_input,
-            self.character_input, self.char_filter_scope_toggle_button,
+            self.character_input, self.char_filter_scope_toggle_button, self.character_filter_widget, # Added character_filter_widget
+            self.filters_and_custom_folder_container_widget, # Added container
             self.custom_folder_label, self.custom_folder_input,
             self.skip_words_input, self.skip_scope_toggle_button, self.remove_from_filename_input,
             self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives, self.radio_only_links,
@@ -3562,7 +3589,7 @@ class DownloaderApp(QWidget):
             self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
             self.use_multithreading_checkbox, self.thread_count_input, self.thread_count_label,
             self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.use_cookie_checkbox, self.cookie_text_input, self.cookie_browse_button,
-            self.multipart_toggle_button,
+            self.multipart_toggle_button, self.radio_only_audio, # Added radio_only_audio
             self.character_search_input, self.new_char_input, self.add_char_button, self.delete_char_button,
             self.reset_button
         ]
@@ -3584,9 +3611,10 @@ class DownloaderApp(QWidget):
         if self.external_links_checkbox:
             is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
             is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
-            can_enable_ext_links = enabled and not is_only_links and not is_only_archives
+            is_only_audio = hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked()
+            can_enable_ext_links = enabled and not is_only_links and not is_only_archives and not is_only_audio
             self.external_links_checkbox.setEnabled(can_enable_ext_links)
-            if self.is_paused and not is_only_links and not is_only_archives:
+            if self.is_paused and not is_only_links and not is_only_archives and not is_only_audio:
                 self.external_links_checkbox.setEnabled(True)
         if hasattr(self, 'use_cookie_checkbox'):
             self.use_cookie_checkbox.setEnabled(enabled or self.is_paused)
@@ -4121,7 +4149,8 @@ class DownloaderApp(QWidget):
                     <li><code>Images/GIFs</code>: Only common image formats (JPG, PNG, GIF, WEBP, etc.) and GIFs.</li>
                     <li><code>Videos</code>: Only common video formats (MP4, MKV, WEBM, MOV, etc.).</li>
                     <li><code>📦 Only Archives</code>: Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li>
-                    <li><code>🔗 Only Links</code>: Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled. The main download button changes to '🔗 Extract Links'.</li>
+                    <li><code>🎧 Only Audio</code>: Downloads only common audio formats (MP3, WAV, FLAC, M4A, OGG, etc.). Other file-specific options behave as with 'Images' or 'Videos' mode.</li>
+                    <li><code>🔗 Only Links</code>: Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled. The main download button changes to '🔗 Extract Links'.</li>                    
                 </ul>
             </li>
         </ul></body></html>"""

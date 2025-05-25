@@ -52,6 +52,9 @@ KNOWN_NAMES = [] # This will now store dicts: {'name': str, 'is_group': bool, 'a
 
 MIN_SIZE_FOR_MULTIPART_DOWNLOAD = 10 * 1024 * 1024  # 10 MB - Stays the same
 MAX_PARTS_FOR_MULTIPART_DOWNLOAD = 15 # Max concurrent connections for a single file
+# Max length for a single filename or folder name component to ensure cross-OS compatibility
+# Windows MAX_PATH is 260 for the full path. Individual components are usually shorter.
+MAX_FILENAME_COMPONENT_LENGTH = 150
 
 IMAGE_EXTENSIONS = {
     '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
@@ -64,6 +67,11 @@ VIDEO_EXTENSIONS = {
 ARCHIVE_EXTENSIONS = {
     '.zip', '.rar', '.7z', '.tar', '.gz', '.bz2'
 }
+AUDIO_EXTENSIONS = {
+    '.mp3', '.wav', '.aac', '.flac', '.ogg', '.wma', '.m4a', '.opus',
+    '.aiff', '.ape', '.mid', '.midi'
+}
+
 def parse_cookie_string(cookie_string):
     """Parses a 'name=value; name2=value2' cookie string into a dict."""
     cookies = {}
@@ -132,9 +140,18 @@ def clean_folder_name(name):
 
     if not cleaned: # If empty after initial cleaning
         return "untitled_folder"
+
+    # Truncate if too long
+    if len(cleaned) > MAX_FILENAME_COMPONENT_LENGTH:
+        cleaned = cleaned[:MAX_FILENAME_COMPONENT_LENGTH]
+        # After truncation, it's possible a new trailing space/dot is at the end
+        # or an existing one remains. So, strip them using the loop below.
+
+    # Strip trailing dots/spaces (original logic, now applied to potentially truncated name)
     temp_name = cleaned
     while len(temp_name) > 0 and (temp_name.endswith('.') or temp_name.endswith(' ')):
         temp_name = temp_name[:-1]
+
     return temp_name if temp_name else "untitled_folder"
 
 
@@ -143,7 +160,26 @@ def clean_filename(name):
     cleaned = re.sub(r'[^\w\s\-\_\.\(\)]', '', name)
     cleaned = cleaned.strip() # Remove leading/trailing spaces first
     cleaned = re.sub(r'\s+', ' ', cleaned) # Replace multiple internal spaces with a single space
-    return cleaned if cleaned else "untitled_file"
+
+    if not cleaned: return "untitled_file"
+
+    base_name, ext = os.path.splitext(cleaned)
+
+    # Calculate max length for base_name, reserving space for the extension
+    max_base_len = MAX_FILENAME_COMPONENT_LENGTH - len(ext)
+
+    if len(base_name) > max_base_len:
+        if max_base_len > 0: # If there's space for at least some of the base name
+            base_name = base_name[:max_base_len]
+        else: # No space for base name (extension is too long or fills the entire allowed space)
+              # In this case, we have to truncate the original 'cleaned' string,
+              # which might cut into the extension, but it's necessary to meet the length.
+            return cleaned[:MAX_FILENAME_COMPONENT_LENGTH] if cleaned else "untitled_file"
+
+    final_name = base_name + ext
+    # Ensure the final reconstructed name isn't empty (e.g. if base_name became empty and ext was also empty)
+    return final_name if final_name else "untitled_file"
+
 
 def strip_html_tags(html_text):
     if not html_text: return ""
@@ -218,6 +254,12 @@ def is_archive(filename):
     if not filename: return False
     _, ext = os.path.splitext(filename)
     return ext.lower() in ARCHIVE_EXTENSIONS
+
+def is_audio(filename):
+    if not filename: return False
+    _, ext = os.path.splitext(filename)
+    return ext.lower() in AUDIO_EXTENSIONS
+
 
 
 def is_post_url(url):
@@ -828,6 +870,7 @@ class PostProcessorWorker:
             is_img_type = is_image(api_original_filename)
             is_vid_type = is_video(api_original_filename)
             is_archive_type = is_archive(api_original_filename)
+            is_audio_type = is_audio(api_original_filename)
 
             if self.filter_mode == 'archive':
                 if not is_archive_type:
@@ -840,6 +883,10 @@ class PostProcessorWorker:
             elif self.filter_mode == 'video':
                 if not is_vid_type:
                     self.logger(f"   -> Filter Skip: '{api_original_filename}' (Not Video).")
+                    return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
+            elif self.filter_mode == 'audio': # New audio filter mode
+                if not is_audio_type:
+                    self.logger(f"   -> Filter Skip: '{api_original_filename}' (Not Audio).")
                     return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
             if self.skip_zip and is_zip(api_original_filename):
