@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v4.0.1</h1>
+<h1 align="center">Kemono Downloader v4.1.1</h1>
 
 <div align="center">
   <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
@@ -11,7 +11,31 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-##  What's New in v4.0.1?
+##  What's New in v4.1.1?
+
+Version 4.1.1 introduces a smarter way to capture images that might be embedded directly within post descriptions, enhancing content discovery.
+
+###  "Scan Content for Images" Feature
+
+- **Enhanced Image Discovery:** A new checkbox, "**Scan Content for Images**," has been added to the UI (grouped with "Download Thumbnails Only" and "Compress Large Images").
+- **How it Works:**
+    - When enabled, the downloader scans the HTML content of posts (e.g., the description area).
+    - It looks for images embedded via HTML `<img>` tags or as direct absolute URL links (e.g., `https://.../image.png`).
+    - It intelligently resolves relative image paths found in `<img>` tags (like `/data/image.jpg`) into full, downloadable URLs.
+    - This is particularly useful for capturing images that are part of the post's narrative but not formally listed in the API's file or attachment sections.
+- **Default State:** This option is **unchecked by default**.
+- **Interaction with "Download Thumbnails Only":**
+    - If you check "Download Thumbnails Only":
+        - The "Scan Content for Images" checkbox will **automatically become checked and disabled** (locked).
+        - In this combined mode, the downloader will **only download images found by the content scan**. API-listed thumbnails will be ignored, prioritizing images from the post's body.
+    - If you uncheck "Download Thumbnails Only":
+        - The "Scan Content for Images" checkbox will become **enabled again and revert to being unchecked**. You can then manually enable it if you wish to scan content without being in thumbnail-only mode.
+
+This feature ensures a more comprehensive download experience, especially for posts where images are integrated directly into the text.
+
+---
+
+##  Previous Update: What's New in v4.0.1?
 
 Version 4.0.1 focuses on enhancing access to content and providing even smarter organization:
 
@@ -74,7 +98,7 @@ This field allows for dynamic filtering for the current download session and pro
 
 ---
 ##  What's in v3.5.0? (Previous Update)
-This version brings significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
+This version brought significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
 
 ###  Enhanced Manga/Comic Mode
 
@@ -232,11 +256,16 @@ This version brings significant enhancements to manga/comic downloading, filteri
 ---
 
 ### Thumbnail & Compression Tools
-
-- **Download Thumbnails Only**
-
+- **Download Thumbnails Only:**
+  - Downloads small preview images from the API instead of full-sized files (if available).
+  - **Interaction with "Scan Content for Images" (New in v4.1.1):** When "Download Thumbnails Only" is active, "Scan Content for Images" is auto-enabled, and only images found by the content scan are downloaded. See "What's New in v4.1.1" for details.
+- **Scan Content for Images (New in v4.1.1):**
+  - A UI option to scan the HTML content of posts for embedded image URLs (from `<img>` tags or direct links).
+  - Resolves relative paths and helps capture images not listed in the API's formal attachments.
+  - See the "What's New in v4.1.1?" section for a comprehensive explanation.
 - **Compress to WebP** (via Pillow)
   - Converts large images to smaller WebP versions
+
 
 ---
 

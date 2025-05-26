@@ -57,6 +57,7 @@ try:
         FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER,
         STYLE_DATE_BASED, # Import new manga style
         STYLE_POST_TITLE_GLOBAL_NUMBERING # Import new manga style
+        # IMAGE_EXTENSIONS will be used from downloader_utils directly
     )
     print("Successfully imported names from downloader_utils.")
 except ImportError as e:
@@ -124,6 +125,7 @@ ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 USE_COOKIE_KEY = "useCookieV1" # New setting key
 COOKIE_TEXT_KEY = "cookieTextV1" # New setting key for cookie text
 CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
+SCAN_CONTENT_IMAGES_KEY = "scanContentForImagesV1" # New setting key
 
 CONFIRM_ADD_ALL_ACCEPTED = 1
 CONFIRM_ADD_ALL_SKIP_ADDING = 2
@@ -815,6 +817,12 @@ class DownloaderApp(QWidget):
         self.prompt_mutex = QMutex()
         self._add_character_response = None
 
+        # Store original tooltips for dynamic updates. Label changed, tooltip content remains valid.
+        self._original_scan_content_tooltip = ("If checked, the downloader will scan the HTML content of posts for image URLs (from <img> tags or direct links).\n"
+            "This includes resolving relative paths from <img> tags to full URLs.\n"
+            "Relative paths in <img> tags (e.g., /data/image.jpg) will be resolved to full URLs.\n"
+            "Useful for cases where images are in the post description but not in the API's file/attachment list.")
+
         self.downloaded_files = set()
         self.downloaded_files_lock = threading.Lock()
         self.downloaded_file_hashes = set()
@@ -857,6 +865,7 @@ class DownloaderApp(QWidget):
         self.char_filter_scope = self.settings.value(CHAR_FILTER_SCOPE_KEY, CHAR_SCOPE_FILES, type=str) # Default to Files
         self.allow_multipart_download_setting = False 
         self.use_cookie_setting = False # Always default to False on launch
+        self.scan_content_images_setting = self.settings.value(SCAN_CONTENT_IMAGES_KEY, False, type=bool) # Load new setting        
         self.cookie_text_setting = ""   # Always default to empty on launch
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
@@ -878,6 +887,7 @@ class DownloaderApp(QWidget):
         self.log_signal.emit(f"ℹ️ Multi-part download defaults to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'} on launch")
         self.log_signal.emit(f"ℹ️ Cookie text defaults to: Empty on launch")
         self.log_signal.emit(f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
+        self.log_signal.emit(f"ℹ️ Scan post content for images defaults to: {'Enabled' if self.scan_content_images_setting else 'Disabled'}")
 
     def _get_tooltip_for_character_input(self):
         return (
@@ -902,6 +912,8 @@ class DownloaderApp(QWidget):
             self.cookie_browse_button.clicked.connect(self._browse_cookie_file)
         if hasattr(self, 'cookie_text_input'): # Connect text changed for manual clear detection
             self.cookie_text_input.textChanged.connect(self._handle_cookie_text_manual_change)
+        if hasattr(self, 'download_thumbnails_checkbox'): # Connect the new handler
+            self.download_thumbnails_checkbox.toggled.connect(self._handle_thumbnail_mode_change)        
         self.gui_update_timer.timeout.connect(self._process_worker_queue)
         self.gui_update_timer.start(100) # Check queue every 100ms
         self.log_signal.connect(self.handle_main_log)
@@ -1123,6 +1135,7 @@ class DownloaderApp(QWidget):
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
         self.settings.setValue(COOKIE_TEXT_KEY, self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "")
+        self.settings.setValue(SCAN_CONTENT_IMAGES_KEY, self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False)        
         self.settings.setValue(USE_COOKIE_KEY, self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False)
         self.settings.sync()
 
@@ -1371,12 +1384,23 @@ class DownloaderApp(QWidget):
         row1_layout.addWidget(self.skip_rar_checkbox)
         self.download_thumbnails_checkbox = QCheckBox("Download Thumbnails Only")
         self.download_thumbnails_checkbox.setChecked(False)
-        self.download_thumbnails_checkbox.setToolTip("Thumbnail download functionality is currently limited without the API.")
+        self.download_thumbnails_checkbox.setToolTip(
+            "Downloads small preview images from the API instead of full-sized files (if available).\n"
+            "If 'Scan Post Content for Image URLs' is also checked, this mode will *only* download images found by the content scan (ignoring API thumbnails)."
+        )
         row1_layout.addWidget(self.download_thumbnails_checkbox)
+
+        self.scan_content_images_checkbox = QCheckBox("Scan Content for Images") # Shortened Label
+        self.scan_content_images_checkbox.setToolTip(
+            self._original_scan_content_tooltip) # Use stored original tooltip
+        self.scan_content_images_checkbox.setChecked(self.scan_content_images_setting) # Set from loaded setting
+        row1_layout.addWidget(self.scan_content_images_checkbox) # Added to row1_layout
+
         self.compress_images_checkbox = QCheckBox("Compress Large Images (to WebP)")
         self.compress_images_checkbox.setChecked(False)
         self.compress_images_checkbox.setToolTip("Compress images > 1.5MB to WebP format (requires Pillow).")
         row1_layout.addWidget(self.compress_images_checkbox)
+
         row1_layout.addStretch(1)
         checkboxes_group_layout.addLayout(row1_layout)
 
@@ -1464,6 +1488,7 @@ class DownloaderApp(QWidget):
         self.manga_mode_checkbox = QCheckBox("Manga/Comic Mode")
         self.manga_mode_checkbox.setToolTip("Downloads posts from oldest to newest and renames files based on post title (for creator feeds only).")
         self.manga_mode_checkbox.setChecked(False)
+        
         advanced_row2_layout.addWidget(self.manga_mode_checkbox) # Keep manga mode checkbox here
 
         advanced_row2_layout.addStretch(1)
@@ -1684,6 +1709,8 @@ class DownloaderApp(QWidget):
         self._update_skip_scope_button_text()
         self._update_char_filter_scope_button_text()
         self._update_multithreading_for_date_mode() # Ensure correct initial state
+        if hasattr(self, 'download_thumbnails_checkbox'): # Set initial state for scan_content checkbox based on thumbnail checkbox
+            self._handle_thumbnail_mode_change(self.download_thumbnails_checkbox.isChecked())
         
     def _browse_cookie_file(self):
         """Opens a file dialog to select a cookie file."""
@@ -2838,6 +2865,7 @@ class DownloaderApp(QWidget):
         raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
         allow_multipart = self.allow_multipart_download_setting # Use the internal setting
         remove_from_filename_words_list = [word.strip() for word in raw_remove_filename_words.split(',') if word.strip()]
+        scan_content_for_images = self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False        
         use_cookie_from_checkbox = self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False
         app_base_dir_for_cookies = os.path.dirname(self.config_file) # Directory of Known.txt
         cookie_text_from_input = self.cookie_text_input.text().strip() if hasattr(self, 'cookie_text_input') and use_cookie_from_checkbox else ""
@@ -3141,6 +3169,7 @@ class DownloaderApp(QWidget):
                 f"   Compress Images: {'Enabled' if compress_images else 'Disabled'}",
                 f"   Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}" # Removed duplicate file handling log
             ])
+            log_messages.append(f"   Scan Post Content for Images: {'Enabled' if scan_content_for_images else 'Disabled'}")        
         else:
             log_messages.append(f"   Mode: Extracting Links Only")
 
@@ -3210,6 +3239,7 @@ class DownloaderApp(QWidget):
             'manga_date_prefix': manga_date_prefix_text, # NEW ARGUMENT            
             'dynamic_character_filter_holder': self.dynamic_character_filter_holder, # Pass the holder
             'pause_event': self.pause_event, # Explicitly add pause_event here
+            'scan_content_for_images': scan_content_for_images, # Pass new flag            
             'manga_filename_style': self.manga_filename_style,
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
             'manga_date_file_counter_ref': manga_date_file_counter_ref_for_thread,
@@ -3240,7 +3270,7 @@ class DownloaderApp(QWidget):
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
                     'manga_date_file_counter_ref', 
                     'manga_global_file_counter_ref', 'manga_date_prefix', # Pass new counter and prefix for single thread mode
-                    'manga_mode_active', 'unwanted_keywords', 'manga_filename_style',
+                    'manga_mode_active', 'unwanted_keywords', 'manga_filename_style', 'scan_content_for_images', # Added scan_content_for_images
                     'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file' # Added selected_cookie_file
                 ]
                 args_template['skip_current_file_flag'] = None
@@ -3435,7 +3465,7 @@ class DownloaderApp(QWidget):
             'downloaded_files_lock', 'downloaded_file_hashes_lock', 'remove_from_filename_words_list', 'dynamic_character_filter_holder', # Added holder
             'skip_words_list', 'skip_words_scope', 'char_filter_scope',
             'show_external_links', 'extract_links_only', 'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', # Added selected_cookie_file
-            'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref',
+            'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref', 'scan_content_for_images', # Added scan_content_for_images
             'manga_mode_active', 'manga_filename_style', 'manga_date_prefix', # ADD manga_date_prefix
             'manga_global_file_counter_ref' # Add new counter here
         ]
@@ -3573,7 +3603,8 @@ class DownloaderApp(QWidget):
             self.manga_rename_toggle_button, # Visibility handled by update_ui_for_manga_mode
             self.cookie_browse_button, # Add cookie browse button
             self.multipart_toggle_button,
-            self.cookie_text_input, # Add cookie text input
+            self.cookie_text_input, # Add cookie text input,
+            self.scan_content_images_checkbox, # Add scan content checkbox
             self.use_cookie_checkbox, # Add cookie checkbox here
             self.external_links_checkbox
         ]
@@ -3588,7 +3619,7 @@ class DownloaderApp(QWidget):
             self.skip_words_input, self.skip_scope_toggle_button, self.remove_from_filename_input,
             self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives, self.radio_only_links,
             self.skip_zip_checkbox, self.skip_rar_checkbox, self.download_thumbnails_checkbox, self.compress_images_checkbox,
-            self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox,
+            self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox, self.scan_content_images_checkbox, # Added scan_content_images_checkbox
             self.use_multithreading_checkbox, self.thread_count_input, self.thread_count_label,
             self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.use_cookie_checkbox, self.cookie_text_input, self.cookie_browse_button,
             self.multipart_toggle_button, self.radio_only_audio, # Added radio_only_audio
@@ -3679,6 +3710,7 @@ class DownloaderApp(QWidget):
         self.skip_zip_checkbox.setChecked(True); self.skip_rar_checkbox.setChecked(True); self.download_thumbnails_checkbox.setChecked(False);
         self.compress_images_checkbox.setChecked(False); self.use_subfolders_checkbox.setChecked(True);
         self.use_subfolder_per_post_checkbox.setChecked(False); self.use_multithreading_checkbox.setChecked(True);
+        if hasattr(self, 'scan_content_images_checkbox'): self.scan_content_images_checkbox.setChecked(False) # Reset new checkbox
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox: self.manga_mode_checkbox.setChecked(False)
         if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setChecked(self.use_cookie_setting) # Reset to loaded or False
@@ -3693,7 +3725,7 @@ class DownloaderApp(QWidget):
 
         if hasattr(self, 'manga_date_prefix_input'): self.manga_date_prefix_input.clear() # Clear prefix input
 
-        self.char_filter_scope = CHAR_SCOPE_TITLE # Default
+        self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files on soft reset
         self._update_char_filter_scope_button_text()
 
         self.manga_filename_style = STYLE_POST_TITLE # Reset to app default
@@ -3827,6 +3859,24 @@ class DownloaderApp(QWidget):
 
         self.set_ui_enabled(True) # Full UI reset if not retrying
 
+    def _handle_thumbnail_mode_change(self, thumbnails_checked):
+        """Handles UI changes when 'Download Thumbnails Only' is toggled."""
+        if not hasattr(self, 'scan_content_images_checkbox'):
+            return
+
+        if thumbnails_checked:
+            self.scan_content_images_checkbox.setChecked(True)
+            self.scan_content_images_checkbox.setEnabled(False)
+            self.scan_content_images_checkbox.setToolTip(
+                "Automatically enabled and locked because 'Download Thumbnails Only' is active.\n"
+                "In this mode, only images found by content scanning will be downloaded."
+            )
+        else:
+            self.scan_content_images_checkbox.setEnabled(True)
+            # Revert to unchecked when thumbnail mode is off. User can manually re-check if desired.
+            self.scan_content_images_checkbox.setChecked(False) 
+            self.scan_content_images_checkbox.setToolTip(self._original_scan_content_tooltip)
+
     def _start_failed_files_retry_session(self):
         self.log_signal.emit(f"🔄 Starting retry session for {len(self.retryable_failed_files_info)} file(s)...")
         self.set_ui_enabled(False) # Disable UI, but cancel button will be enabled
@@ -3900,6 +3950,12 @@ class DownloaderApp(QWidget):
             'api_url_input': job_details.get('api_url_input', ''), # Original post's API URL
             'manga_mode_active': job_details.get('manga_mode_active_for_file', False),
             'manga_filename_style': job_details.get('manga_filename_style_for_file', STYLE_POST_TITLE),
+            # Ensure scan_content_for_images is passed if it's part of common_args or needed
+            'scan_content_for_images': common_args.get('scan_content_for_images', False),
+            'use_cookie': common_args.get('use_cookie', False),
+            'cookie_text': common_args.get('cookie_text', ""),
+            'selected_cookie_file': common_args.get('selected_cookie_file', None),
+            'app_base_dir': common_args.get('app_base_dir', None),
         }
         worker = PostProcessorWorker(**ppw_init_args)
         
@@ -4069,10 +4125,16 @@ class DownloaderApp(QWidget):
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(False)
+        # Ensure scan_content_images_checkbox is reset and its state updated by thumbnail mode
+        if hasattr(self, 'scan_content_images_checkbox'):
+            self.scan_content_images_checkbox.setChecked(False) 
+        if hasattr(self, 'download_thumbnails_checkbox'):
+            self._handle_thumbnail_mode_change(self.download_thumbnails_checkbox.isChecked())
 
     def _show_feature_guide(self):
         # Define content for each page
         page1_title = "① Introduction & Main Inputs"
+
         page1_content = """<html><head/><body>
         <p>This guide provides an overview of the Kemono Downloader's features, fields, and buttons.</p>
 

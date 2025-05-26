@@ -649,6 +649,7 @@ class PostProcessorWorker:
                  app_base_dir=None, # New parameter for app's base directory
                  manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT, # New parameter for date-based prefix
                  manga_date_file_counter_ref=None, # New parameter for date-based manga naming
+                 scan_content_for_images=False, # New flag for scanning HTML content
                  manga_global_file_counter_ref=None, # New parameter for global numbering
                  ): # type: ignore
         self.post = post_data
@@ -699,6 +700,7 @@ class PostProcessorWorker:
         self.manga_date_prefix = manga_date_prefix # Store the prefix
         self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store global counter
         self.use_cookie = use_cookie # Store cookie setting
+        self.scan_content_for_images = scan_content_for_images # Store new flag
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
@@ -1386,14 +1388,14 @@ class PostProcessorWorker:
             if original_api_name:
                 all_files_from_post_api.append({
                     'url': f"https://{api_file_domain}{file_path}" if file_path.startswith('/') else f"https://{api_file_domain}/data/{file_path}",
-                    'name': original_api_name,
+                    'name': original_api_name, # This is the cleaned/API provided name
                     '_original_name_for_log': original_api_name,
-                    '_is_thumbnail': self.download_thumbnails and is_image(original_api_name)
+                    '_is_thumbnail': is_image(original_api_name) # Mark if it's an image from API
                 })
             else: self.logger(f"   ⚠️ Skipping main file for post {post_id}: Missing name (Path: {file_path})")
 
         for idx, att_info in enumerate(post_attachments):
-            if isinstance(att_info, dict) and att_info.get('path'):
+            if isinstance(att_info, dict) and att_info.get('path'): # Ensure att_info is a dict
                 att_path = att_info['path'].lstrip('/')
                 original_api_att_name = att_info.get('name') or os.path.basename(att_path)
                 if original_api_att_name:
@@ -1401,16 +1403,99 @@ class PostProcessorWorker:
                         'url': f"https://{api_file_domain}{att_path}" if att_path.startswith('/') else f"https://{api_file_domain}/data/{att_path}",
                         'name': original_api_att_name,
                         '_original_name_for_log': original_api_att_name,
-                        '_is_thumbnail': self.download_thumbnails and is_image(original_api_att_name)
+                        '_is_thumbnail': is_image(original_api_att_name) # Mark if it's an image from API
                     })
                 else: self.logger(f"   ⚠️ Skipping attachment {idx+1} for post {post_id}: Missing name (Path: {att_path})")
             else: self.logger(f"   ⚠️ Skipping invalid attachment {idx+1} for post {post_id}: {str(att_info)[:100]}")
 
+        # --- New: Scan post content for additional image URLs if enabled ---
+        if self.scan_content_for_images and post_content_html and not self.extract_links_only: # This block was duplicated, ensure only one exists
+            self.logger(f"   Scanning post content for additional image URLs (Post ID: {post_id})...")
+            
+            parsed_input_url = urlparse(self.api_url_input)
+            base_url_for_relative_paths = f"{parsed_input_url.scheme}://{parsed_input_url.netloc}"
+            img_ext_pattern = "|".join(ext.lstrip('.') for ext in IMAGE_EXTENSIONS)
+            
+            # 1. Regex for direct absolute image URLs in text
+            direct_url_pattern_str = r"""(?i)\b(https?://[^\s"'<>\[\]\{\}\|\^\\^~\[\]`]+\.(?:""" + img_ext_pattern + r"""))\b"""
+            # 2. Regex for <img> tags (captures src content)
+            img_tag_src_pattern_str = r"""<img\s+[^>]*?src\s*=\s*["']([^"']+)["']"""
+
+            found_image_sources = set()
+
+            for direct_url_match in re.finditer(direct_url_pattern_str, post_content_html):
+                found_image_sources.add(direct_url_match.group(1))
+
+            for img_tag_match in re.finditer(img_tag_src_pattern_str, post_content_html, re.IGNORECASE):
+                src_attr = img_tag_match.group(1).strip()
+                src_attr = html.unescape(src_attr)
+                if not src_attr: continue
+
+                resolved_src_url = ""
+                if src_attr.startswith(('http://', 'https://')):
+                    resolved_src_url = src_attr
+                elif src_attr.startswith('//'):
+                    resolved_src_url = f"{parsed_input_url.scheme}:{src_attr}"
+                elif src_attr.startswith('/'):
+                    resolved_src_url = f"{base_url_for_relative_paths}{src_attr}"
+                
+                if resolved_src_url:
+                    parsed_resolved_url = urlparse(resolved_src_url)
+                    if any(parsed_resolved_url.path.lower().endswith(ext) for ext in IMAGE_EXTENSIONS):
+                        found_image_sources.add(resolved_src_url)
+
+            if found_image_sources:
+                self.logger(f"      Found {len(found_image_sources)} potential image URLs/sources in content.")
+                existing_urls_in_api_list = {f_info['url'] for f_info in all_files_from_post_api}
+
+                for found_url in found_image_sources: # Iterate over the unique, resolved URLs
+                    if self.check_cancel(): break
+                    if found_url in existing_urls_in_api_list:
+                        self.logger(f"         Skipping URL from content (already in API list or previously added from content): {found_url[:70]}...")
+                        continue
+                    try:
+                        parsed_found_url = urlparse(found_url)
+                        url_filename = os.path.basename(parsed_found_url.path)
+                        if not url_filename or not is_image(url_filename):
+                            self.logger(f"         Skipping URL from content (no filename part or not an image extension): {found_url[:70]}...")
+                            continue
+
+                        self.logger(f"      Adding image from content: {url_filename} (URL: {found_url[:70]}...)")
+                        all_files_from_post_api.append({
+                            'url': found_url,
+                            'name': url_filename,
+                            '_original_name_for_log': url_filename,
+                            '_is_thumbnail': False, # Images from content are not API thumbnails
+                            '_from_content_scan': True 
+                        })
+                        existing_urls_in_api_list.add(found_url) 
+                    except Exception as e_url_parse:
+                        self.logger(f"         Error processing URL from content '{found_url[:70]}...': {e_url_parse}")
+            else:
+                self.logger(f"      No additional image URLs found in post content scan for post {post_id}.")
+        # --- End of new content scanning logic ---
+
+        # --- Final filtering based on download_thumbnails and scan_content_for_images flags ---
         if self.download_thumbnails:
-            all_files_from_post_api = [finfo for finfo in all_files_from_post_api if finfo['_is_thumbnail']]
-            if not all_files_from_post_api:
-                 self.logger(f"   -> No image thumbnails found for post {post_id} in thumbnail-only mode.")
-                 return 0, 0, [], []
+            if self.scan_content_for_images:
+                # Both "Download Thumbnails Only" AND "Scan Content for Images" are checked.
+                # Prioritize images from content scan.
+                self.logger(f"   Mode: 'Download Thumbnails Only' + 'Scan Content for Images' active. Prioritizing images from content scan for post {post_id}.")
+                all_files_from_post_api = [finfo for finfo in all_files_from_post_api if finfo.get('_from_content_scan')]
+                if not all_files_from_post_api:
+                    self.logger(f"   -> No images found via content scan for post {post_id} in this combined mode.")
+                    return 0, 0, [], [] # No files to download for this post
+            else:
+                # Only "Download Thumbnails Only" is checked. Filter for API thumbnails.
+                self.logger(f"   Mode: 'Download Thumbnails Only' active. Filtering for API thumbnails for post {post_id}.")
+                all_files_from_post_api = [finfo for finfo in all_files_from_post_api if finfo.get('_is_thumbnail')]
+                if not all_files_from_post_api:
+                    self.logger(f"   -> No API image thumbnails found for post {post_id} in thumbnail-only mode.")
+                    return 0, 0, [], [] # No files to download for this post
+        # If self.download_thumbnails is False, all_files_from_post_api remains as is.
+        # It will contain all API files (images marked with _is_thumbnail: True, others False)
+        # and potentially content-scanned images (marked with _from_content_scan: True).
+
         if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED:
             def natural_sort_key_for_files(file_api_info):
                 name = file_api_info.get('_original_name_for_log', '').lower()
@@ -1623,6 +1708,7 @@ class DownloadThread(QThread):
                  manga_date_file_counter_ref=None, # New parameter
                  manga_global_file_counter_ref=None, # New parameter for global numbering
                  use_cookie=False, # Added: Expected by main.py
+                 scan_content_for_images=False, # Added new flag
                  cookie_text="",   # Added: Expected by main.py
                  ):
         super().__init__()
@@ -1673,6 +1759,7 @@ class DownloadThread(QThread):
         self.cookie_text = cookie_text # Store cookie text
         self.use_cookie = use_cookie # Store cookie setting
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker by DownloadThread
+        self.scan_content_for_images = scan_content_for_images # Store new flag
         self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store for global numbering
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -1806,6 +1893,7 @@ class DownloadThread(QThread):
                          manga_global_file_counter_ref=self.manga_global_file_counter_ref, # Pass the ref
                          use_cookie=self.use_cookie, # Pass cookie setting to worker
                          manga_date_file_counter_ref=current_manga_date_file_counter_ref, # Pass the calculated or passed-in ref
+                         scan_content_for_images=self.scan_content_for_images, # Pass new flag
                          )
                     try:
                         dl_count, skip_count, kept_originals_this_post, retryable_failures = post_processing_worker.process()
