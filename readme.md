@@ -11,27 +11,43 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-##  What's New in v4.1.1?
+##  What's New in v4.1.1? - Enhanced Image Discovery & Audio Filtering
 
-Version 4.1.1 introduces a smarter way to capture images that might be embedded directly within post descriptions, enhancing content discovery.
+Version 4.1.1 brings significant enhancements, including smarter image capture from post content and a dedicated filter mode for audio files.
 
 ###  "Scan Content for Images" Feature
 
 - **Enhanced Image Discovery:** A new checkbox, "**Scan Content for Images**," has been added to the UI (grouped with "Download Thumbnails Only" and "Compress Large Images").
 - **How it Works:**
-    - When enabled, the downloader scans the HTML content of posts (e.g., the description area).
-    - It looks for images embedded via HTML `<img>` tags or as direct absolute URL links (e.g., `https://.../image.png`).
-    - It intelligently resolves relative image paths found in `<img>` tags (like `/data/image.jpg`) into full, downloadable URLs.
+    - When enabled, the downloader meticulously scans the HTML content of each post's description or body.
+    - It searches for images in two main ways:
+        - **Directly linked absolute URLs** (e.g., `https://externalsite.com/image.png`) that end with a common image extension (jpg, png, gif, etc.).
+        - **Images embedded using HTML `<img>` tags.** The downloader extracts the `src` attribute from these tags and can resolve various path types:
+            - Absolute URLs (e.g., `http://...` or `https://...`)
+            - Protocol-relative URLs (e.g., `//cdn.example.com/image.jpg`)
+            - Root-relative paths (e.g., `/data/user_content/image.gif`), which are resolved against the site's base URL (like `https://kemono.su/data/user_content/image.gif`).
     - This is particularly useful for capturing images that are part of the post's narrative but not formally listed in the API's file or attachment sections.
 - **Default State:** This option is **unchecked by default**.
-- **Interaction with "Download Thumbnails Only":**
-    - If you check "Download Thumbnails Only":
+- **Key Interaction with "Download Thumbnails Only":** This new feature works closely with the existing "Download Thumbnails Only" option:
+    - If you enable "Download Thumbnails Only":
         - The "Scan Content for Images" checkbox will **automatically become checked and disabled** (locked).
-        - In this combined mode, the downloader will **only download images found by the content scan**. API-listed thumbnails will be ignored, prioritizing images from the post's body.
-    - If you uncheck "Download Thumbnails Only":
+        - The downloader then **exclusively downloads images discovered through the content scan**. Any API-listed thumbnails are bypassed, giving priority to images embedded directly in the post.
+    - If you disable "Download Thumbnails Only":
         - The "Scan Content for Images" checkbox will become **enabled again and revert to being unchecked**. You can then manually enable it if you wish to scan content without being in thumbnail-only mode.
 
 This feature ensures a more comprehensive download experience, especially for posts where images are integrated directly into the text.
+
+### New "🎧 Only Audio" Filter Mode
+
+Alongside image discovery, v4.1.1 also introduces/enhances a dedicated filter mode for audio enthusiasts:
+
+-   **Focused Audio Downloads:** The "🎧 Only Audio" option in the "Filter Files" radio button group allows you to download exclusively common audio file types. This includes formats like MP3, WAV, FLAC, M4A, OGG, and more.
+-   **Streamlined UI:** When "🎧 Only Audio" mode is active:
+    -   Irrelevant UI options such as the "Skip Scope" button (for word-based post/file skipping) and the "Multi-part Download" toggle are hidden to simplify the interface.
+    -   The "Show External Links in Log" checkbox is automatically disabled, as link extraction is not the focus of this mode.
+-   **Archive Handling:** Unlike the "📦 Only Archives" mode (which disables archive skipping), the "Skip .zip" and "Skip .rar" checkboxes remain enabled and configurable when "🎧 Only Audio" is selected. This gives you the flexibility to also exclude any archives encountered while in audio-only mode if desired.
+-   **Purpose:** This mode is perfect for users who primarily want to collect audio tracks, podcasts, or sound effects from posts without downloading other media types.
+
 
 ---
 
