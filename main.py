@@ -870,7 +870,7 @@ class DownloaderApp(QWidget):
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
-        self.setWindowTitle("Kemono Downloader v4.0.0")
+        self.setWindowTitle("Kemono Downloader v4.1.1")
         # self.load_known_names_from_util() # This call is premature and causes the error.
         self.setStyleSheet(self.get_dark_theme())
 
