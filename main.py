@@ -237,6 +237,97 @@ class ConfirmAddAllDialog(QDialog):
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
 
+class KnownNamesFilterDialog(QDialog):
+    """A dialog to select names from Known.txt to add to the filter input."""
+    def __init__(self, known_names_list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add Known Names to Filter")
+        self.setModal(True)
+        # Store the full list of known name objects. Each object is a dict.
+        # Sort them by the 'name' field for consistent display.
+        self.all_known_name_entries = sorted(known_names_list, key=lambda x: x['name'].lower())
+        self.selected_entries_to_return = []
+
+        main_layout = QVBoxLayout(self)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search names...")
+        self.search_input.textChanged.connect(self._filter_list_display)
+        main_layout.addWidget(self.search_input)
+
+        self.names_list_widget = QListWidget()
+        self._populate_list_widget() # Populate with all entries initially
+        main_layout.addWidget(self.names_list_widget)
+
+        # Buttons layout: Select All, Deselect All, Add, Cancel
+        buttons_layout = QHBoxLayout()
+
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self._select_all_items)
+        buttons_layout.addWidget(self.select_all_button) # Add to main buttons_layout
+
+        self.deselect_all_button = QPushButton("Deselect All")
+        self.deselect_all_button.clicked.connect(self._deselect_all_items)
+        buttons_layout.addWidget(self.deselect_all_button) # Add to main buttons_layout
+        buttons_layout.addStretch(1) # Stretch between Deselect All and Add Selected
+
+        self.add_button = QPushButton("Add Selected")
+        self.add_button.clicked.connect(self._accept_selection_action)
+        buttons_layout.addWidget(self.add_button)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        buttons_layout.addWidget(self.cancel_button)
+        main_layout.addLayout(buttons_layout)
+
+        self.setMinimumWidth(350)
+        self.setMinimumHeight(400)
+        if parent and hasattr(parent, 'get_dark_theme'):
+            self.setStyleSheet(parent.get_dark_theme())
+        self.add_button.setDefault(True)
+
+    def _populate_list_widget(self, names_to_display=None):
+        self.names_list_widget.clear()
+        current_entries_source = names_to_display if names_to_display is not None else self.all_known_name_entries
+        for entry_obj in current_entries_source:
+            item = QListWidgetItem(entry_obj['name']) # Display the 'name' (folder name)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
+            item.setData(Qt.UserRole, entry_obj) # Store the full entry object
+            self.names_list_widget.addItem(item)
+
+    def _filter_list_display(self):
+        search_text = self.search_input.text().lower()
+        if not search_text:
+            self._populate_list_widget()
+            return
+        # Filter based on the 'name' field of each entry object
+        filtered_entries = [
+            entry_obj for entry_obj in self.all_known_name_entries if search_text in entry_obj['name'].lower()
+        ]
+        self._populate_list_widget(filtered_entries)
+
+    def _accept_selection_action(self):
+        self.selected_entries_to_return = []
+        for i in range(self.names_list_widget.count()):
+            item = self.names_list_widget.item(i)
+            if item.checkState() == Qt.Checked:
+                self.selected_entries_to_return.append(item.data(Qt.UserRole)) # Get the stored entry object
+        self.accept()
+
+    def _select_all_items(self):
+        """Checks all items in the list widget."""
+        for i in range(self.names_list_widget.count()):
+            self.names_list_widget.item(i).setCheckState(Qt.Checked)
+
+    def _deselect_all_items(self):
+        """Unchecks all items in the list widget."""
+        for i in range(self.names_list_widget.count()):
+            self.names_list_widget.item(i).setCheckState(Qt.Unchecked)
+
+    def get_selected_entries(self): # Renamed method
+        return self.selected_entries_to_return
+
 class HelpGuideDialog(QDialog):
     """A multi-page dialog for displaying the feature guide."""
     def __init__(self, steps_data, parent=None):
@@ -525,7 +616,8 @@ class TourDialog(QDialog):
             "   Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3' (after cleaning). All names in the group are used as aliases for matching.<br>"
             "   The <b>'Filter: [Type]'</b> button (next to this input) cycles how this filter applies:"
             "   <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename (if 'Separate Folders' is on).</li><br>"
-            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li><br>"
+            "       <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>"
+            "       <li><b>⤵️ Add to Filter Button (Known Names):</b> Next to the 'Add' button for Known Names (see Step 5), this opens a popup. Select names from your <code>Known.txt</code> list via checkboxes (with a search bar) to quickly add them to the 'Filter by Character(s)' field. Grouped names like <code>(Boa, Hancock)</code> from Known.txt will be added as <code>(Boa, Hancock)~</code> to the filter.</li><br>" # Added new feature here
             "       <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li><br>"
             "       <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li></ul>"
             "   This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled.</li><br>"
@@ -819,7 +911,7 @@ class DownloaderApp(QWidget):
 
         # Store original tooltips for dynamic updates. Label changed, tooltip content remains valid.
         self._original_scan_content_tooltip = ("If checked, the downloader will scan the HTML content of posts for image URLs (from <img> tags or direct links).\n"
-            "This includes resolving relative paths from <img> tags to full URLs.\n"
+            "now This includes resolving relative paths from <img> tags to full URLs.\n"
             "Relative paths in <img> tags (e.g., /data/image.jpg) will be resolved to full URLs.\n"
             "Useful for cases where images are in the post description but not in the API's file/attachment list.")
 
@@ -955,6 +1047,9 @@ class DownloaderApp(QWidget):
 
         if hasattr(self, 'open_known_txt_button'): # Connect the new button
             self.open_known_txt_button.clicked.connect(self._open_known_txt_file)
+        
+        if hasattr(self, 'add_to_filter_button'): # Connect the new "Add to Filter" button
+            self.add_to_filter_button.clicked.connect(self._show_add_to_filter_dialog)
 
     def _on_character_input_changed_live(self, text):
         """
@@ -1548,12 +1643,17 @@ class DownloaderApp(QWidget):
         self.new_char_input.setPlaceholderText("Add new show/character name")
         self.add_char_button = QPushButton("➕ Add")
         self.add_char_button.setToolTip("Add the name from the input field to the 'Known Shows/Characters' list.")
+        
+        self.add_to_filter_button = QPushButton("⤵️ Add to Filter") # New Button
+        self.add_to_filter_button.setToolTip("Select names from 'Known Shows/Characters' list to add to the 'Filter by Character(s)' field above.")
+
         self.delete_char_button = QPushButton("🗑️ Delete Selected")
         self.delete_char_button.setToolTip("Delete the selected name(s) from the 'Known Shows/Characters' list.")        
         # Connect add_char_button to a new handler that calls the refactored add_new_character
         self.add_char_button.clicked.connect(self._handle_ui_add_new_character)
         self.new_char_input.returnPressed.connect(self.add_char_button.click)
         self.delete_char_button.clicked.connect(self.delete_selected_character)
+
         char_manage_layout.addWidget(self.new_char_input, 2)
         char_manage_layout.addWidget(self.add_char_button, 0)
 
@@ -1565,6 +1665,7 @@ class DownloaderApp(QWidget):
         self.known_names_help_button.clicked.connect(self._show_feature_guide)
 
 
+        char_manage_layout.addWidget(self.add_to_filter_button, 0) # Add new button to layout
         char_manage_layout.addWidget(self.delete_char_button, 0)
         char_manage_layout.addWidget(self.known_names_help_button, 0) # Moved to the end (rightmost)
         left_layout.addLayout(char_manage_layout)
@@ -3623,7 +3724,7 @@ class DownloaderApp(QWidget):
             self.use_multithreading_checkbox, self.thread_count_input, self.thread_count_label,
             self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.use_cookie_checkbox, self.cookie_text_input, self.cookie_browse_button,
             self.multipart_toggle_button, self.radio_only_audio, # Added radio_only_audio
-            self.character_search_input, self.new_char_input, self.add_char_button, self.delete_char_button,
+            self.character_search_input, self.new_char_input, self.add_char_button, self.add_to_filter_button, self.delete_char_button, # Added add_to_filter_button
             self.reset_button
         ]
         
@@ -4298,6 +4399,18 @@ class DownloaderApp(QWidget):
                 </ul>
             </li>
             <li><b>➕ Add Button:</b> Adds the name/group from the input field above to the list and <code>Known.txt</code>.</li>
+            <li><b>⤵️ Add to Filter Button:</b>
+                <ul>
+                    <li>Located next to the '➕ Add' button for the 'Known Shows/Characters' list.</li>
+                    <li>Clicking this button opens a popup window displaying all names from your <code>Known.txt</code> file, each with a checkbox.</li>
+                    <li>The popup includes a search bar to quickly filter the list of names.</li>
+                    <li>You can select one or more names using the checkboxes.</li>
+                    <li>Click 'Add Selected' to insert the chosen names into the 'Filter by Character(s)' input field in the main window.</li>
+                    <li>If a selected name from <code>Known.txt</code> was originally a group (e.g., defined as <code>(Boa, Hancock)</code> in Known.txt), it will be added to the filter field as <code>(Boa, Hancock)~</code>. Simple names are added as-is.</li>
+                    <li>'Select All' and 'Deselect All' buttons are available in the popup for convenience.</li>
+                    <li>Click 'Cancel' to close the popup without any changes.</li>
+                </ul>
+            </li>
             <li><b>🗑️ Delete Selected Button:</b> Deletes the selected name(s) from the list and <code>Known.txt</code>.</li>
             <li><b>❓ Button (This one!):</b> Displays this comprehensive help guide.</li>
         </ul></body></html>"""
@@ -4488,6 +4601,46 @@ class DownloaderApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error Opening File", f"Could not open '{os.path.basename(self.config_file)}':\n{e}")
             self.log_signal.emit(f"❌ Error opening '{os.path.basename(self.config_file)}': {e}")
+
+    def _show_add_to_filter_dialog(self):
+        global KNOWN_NAMES
+        if not KNOWN_NAMES:
+            QMessageBox.information(self, "No Known Names", "Your 'Known.txt' list is empty. Add some names first.")
+            return
+
+        dialog = KnownNamesFilterDialog(KNOWN_NAMES, self)
+        if dialog.exec_() == QDialog.Accepted:
+            selected_entries = dialog.get_selected_entries() # Get list of entry objects
+            if selected_entries:
+                self._add_names_to_character_filter_input(selected_entries)
+
+    def _add_names_to_character_filter_input(self, selected_entries_list):
+        current_filter_text = self.character_input.text().strip()
+
+        # Split existing text by comma, trim, and filter out empty strings
+        existing_filter_parts = [part.strip() for part in current_filter_text.split(',') if part.strip()]
+
+        # Use a set for efficient checking of existing parts (case-insensitive)
+        existing_parts_lower_set = {part.lower() for part in existing_filter_parts}
+
+        newly_added_parts_for_field = []
+        for entry_obj in selected_entries_list:
+            text_for_field = ""
+            if entry_obj.get('is_group', False):
+                # For groups from Known.txt, format as (alias1, alias2)~
+                # entry_obj['aliases'] should contain the original terms like 'Boa', 'Hancock'
+                aliases_str = ", ".join(sorted(entry_obj.get('aliases', []), key=str.lower))
+                text_for_field = f"({aliases_str})~"
+            else:
+                text_for_field = entry_obj['name']
+
+            if text_for_field.lower() not in existing_parts_lower_set:
+                newly_added_parts_for_field.append(text_for_field)
+                existing_parts_lower_set.add(text_for_field.lower())
+
+        final_filter_parts = existing_filter_parts + newly_added_parts_for_field
+        self.character_input.setText(", ".join(final_filter_parts))
+        self.log_signal.emit(f"ℹ️ Added to filter: {', '.join(newly_added_parts_for_field)}")
 
 if __name__ == '__main__':
     import traceback
