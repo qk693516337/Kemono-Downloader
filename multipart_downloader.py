@@ -5,6 +5,7 @@ import hashlib
 import http.client
 import traceback
 import threading
+import queue # Import the missing 'queue' module
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 CHUNK_DOWNLOAD_RETRY_DELAY = 2 # Slightly reduced for faster retries if needed
