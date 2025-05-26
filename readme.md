@@ -95,6 +95,16 @@ This field allows for dynamic filtering for the current download session and pro
 - **Adding New Names from Filters:** When you use the "Filter by Character(s)" input, if any names or groups are new (not already in `Known.txt`), a dialog will appear after you start the download. This dialog allows you to select which of these new names/groups should be added to `Known.txt`, formatted according to the rules described above.
 - **Intelligent Fallback:** If "Separate Folders by Name/Title" is active, and content doesn't match the "Filter by Character(s)" UI input, the downloader consults your `Known.txt` file for folder naming.
 - **Direct Management:** You can add simple entries directly to `Known.txt` using the list and "Add" button in the UI's `Known.txt` management section. For creating or modifying complex grouped alias entries directly in the file, or for bulk edits, click the "Open Known.txt" button. The application reloads `Known.txt` on startup or before a download process begins.
+- **Using Known Names to Populate Filters (via "Add to Filter" Button):**
+  - Next to the "Add" button in the `Known.txt` management section, a "⤵️ Add to Filter" button provides a quick way to use your existing known names.
+  - Clicking this opens a popup window displaying all entries from your `Known.txt` file, each with a checkbox.
+  - The popup includes:
+    - A search bar to quickly filter the list of names.
+    - "Select All" and "Deselect All" buttons for convenience.
+  - After selecting the desired names, click "Add Selected".
+  - The chosen names will be inserted into the "Filter by Character(s)" input field.
+  - **Important Formatting:** If a selected entry from `Known.txt` is a group (e.g., originally `(Boa Hancock)` in `Known.txt`, which implies aliases "Boa" and "Hancock"), it will be added to the filter field as `(Boa, Hancock)~`. Simple names are added as-is.
+
 
 ---
 ##  What's in v3.5.0? (Previous Update)
@@ -207,6 +217,7 @@ This version brought significant enhancements to manga/comic downloading, filter
     - `Nami` (simple character)
     - `(Boa Hancock)~` (aliases for one character, session folder "Boa Hancock", adds `(Boa Hancock)` to `Known.txt`)
     - `(Vivi, Uta)` (distinct characters, session folder "Vivi Uta", adds `Vivi` and `Uta` separately to `Known.txt`)
+  - A "⤵️ Add to Filter" button (near the `Known.txt` management UI) allows you to quickly populate this field by selecting from your existing `Known.txt` entries via a popup with search and checkbox selection.
   - See "Advanced `Known.txt` and Character Filtering" for full details.
   - **Filter Scopes:**
     - `Files`
