@@ -653,7 +653,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
-    TOUR_SHOWN_KEY = "neverShowTourAgainV5"
+    TOUR_SHOWN_KEY = "neverShowTourAgainV6" # Changed V5 to V6 to re-trigger the tour
 
     def __init__(self, parent=None):
         super().__init__(parent)
