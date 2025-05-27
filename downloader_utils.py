@@ -305,19 +305,43 @@ def prepare_cookies_for_request(use_cookie_flag, cookie_text_input, selected_coo
     if not use_cookie_flag:
         return None
 
-    if cookie_text_input:
-        logger_func("   🍪 Using cookies from UI text input.")
-        return parse_cookie_string(cookie_text_input)
-    elif selected_cookie_file_path:
+    # Attempt 1: Selected cookie file
+    if selected_cookie_file_path:
         logger_func(f"   🍪 Attempting to load cookies from selected file: '{os.path.basename(selected_cookie_file_path)}'...")
-        return load_cookies_from_netscape_file(selected_cookie_file_path, logger_func)
-    elif app_base_dir:
-        cookies_filepath = os.path.join(app_base_dir, "cookies.txt")
-        logger_func(f"   🍪 No UI text or specific file selected. Attempting to load default '{os.path.basename(cookies_filepath)}' from app directory...")
-        return load_cookies_from_netscape_file(cookies_filepath, logger_func)
-    else:
-        logger_func("   🍪 Cookie usage enabled, but no text input, specific file, or app base directory provided for cookies.txt.")
-        return None
+        cookies = load_cookies_from_netscape_file(selected_cookie_file_path, logger_func)
+        if cookies:
+            return cookies
+        else:
+            logger_func(f"   ⚠️ Failed to load cookies from selected file: '{os.path.basename(selected_cookie_file_path)}'. Trying other methods.")
+            # Fall through if selected file is invalid or not found
+
+    # Attempt 2: Default cookies.txt in app directory
+    # This is tried if no specific file was selected OR if the selected file was provided but failed to load.
+    if app_base_dir: # Only proceed if app_base_dir is available
+        # Avoid re-logging "not found" or "failed" if a selected_cookie_file_path was already attempted and failed.
+        # Only log the attempt for default if no selected_cookie_file_path was given.
+        default_cookies_path = os.path.join(app_base_dir, "cookies.txt")
+        if os.path.exists(default_cookies_path): # Only attempt if it exists
+            if not selected_cookie_file_path: # Log attempt only if we didn't just try a selected file
+                logger_func(f"   🍪 No specific file selected. Attempting to load default '{os.path.basename(default_cookies_path)}' from app directory...")
+            cookies = load_cookies_from_netscape_file(default_cookies_path, logger_func)
+            if cookies:
+                return cookies
+            elif not selected_cookie_file_path: # Log failure only if we tried default as primary file method
+                 logger_func(f"   ⚠️ Failed to load cookies from default file: '{os.path.basename(default_cookies_path)}'. Trying text input.")
+            # Fall through if default file is invalid or not found
+
+    # Attempt 3: Cookies from UI text input
+    if cookie_text_input:
+        logger_func("   🍪 Using cookies from UI text input (as file methods failed or were not applicable).")
+        cookies = parse_cookie_string(cookie_text_input)
+        if cookies:
+            return cookies
+        else:
+            logger_func("   ⚠️ UI cookie text input was provided but was empty or invalid.")
+
+    logger_func("   🍪 Cookie usage enabled, but no valid cookies found from any source (selected file, default file, or text input).")
+    return None
 
 def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None):    
     if cancellation_event and cancellation_event.is_set(): # type: ignore
@@ -645,6 +669,7 @@ class PostProcessorWorker:
                  allow_multipart_download=True,
                  cookie_text="", # Added missing parameter
                  use_cookie=False, # Added missing parameter
+                 override_output_dir=None, # New parameter
                  selected_cookie_file=None, # Added missing parameter
                  app_base_dir=None, # New parameter for app's base directory
                  manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT, # New parameter for date-based prefix
@@ -652,7 +677,7 @@ class PostProcessorWorker:
                  scan_content_for_images=False, # New flag for scanning HTML content
                  manga_global_file_counter_ref=None, # New parameter for global numbering
                  ): # type: ignore
-        self.post = post_data
+        self.post = post_data # type: ignore
         self.download_root = download_root
         self.known_names = known_names
         self.filter_character_list_objects_initial = filter_character_list if filter_character_list else [] # Store initial
@@ -700,9 +725,11 @@ class PostProcessorWorker:
         self.manga_date_prefix = manga_date_prefix # Store the prefix
         self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store global counter
         self.use_cookie = use_cookie # Store cookie setting
+        self.override_output_dir = override_output_dir # Store the override directory
         self.scan_content_for_images = scan_content_for_images # Store new flag
 
         if self.compress_images and Image is None:
+            # type: ignore
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
 
@@ -723,9 +750,9 @@ class PostProcessorWorker:
         return self.cancellation_event.is_set()
 
     def _check_pause(self, context_message="Operation"):
-        if self.pause_event and self.pause_event.is_set():
+        if self.pause_event and self.pause_event.is_set(): # type: ignore
             self.logger(f"   {context_message} paused...")
-            while self.pause_event.is_set(): # Loop while pause_event is set
+            while self.pause_event.is_set(): # type: ignore # Loop while pause_event is set
                 if self.check_cancel():
                     self.logger(f"   {context_message} cancelled while paused.")
                     return True # Indicates cancellation occurred
@@ -1341,7 +1368,7 @@ class PostProcessorWorker:
                     self.logger(f"   -> Skip Post (Folder Keyword): Potential folder '{folder_name_to_check}' contains '{matched_skip}'.")
                     return 0, num_potential_files_in_post, [], []
 
-        if (self.show_external_links or self.extract_links_only) and post_content_html:
+        if (self.show_external_links or self.extract_links_only) and post_content_html: # type: ignore
             if self._check_pause(f"External link extraction for post {post_id}"): return 0, num_potential_files_in_post, [], []
             try:
                 unique_links_data = {} 
@@ -1597,7 +1624,7 @@ class PostProcessorWorker:
                     total_skipped_this_post += 1
                     continue
 
-                current_path_for_file = self.download_root
+                current_path_for_file = self.override_output_dir if self.override_output_dir else self.download_root # Use override if provided
 
                 if self.use_subfolders:
                     char_title_subfolder_name = None
@@ -1704,6 +1731,7 @@ class DownloadThread(QThread):
                  manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT, # New parameter
                  allow_multipart_download=True,
                  selected_cookie_file=None, # New parameter for selected cookie file
+                 override_output_dir=None, # New parameter
                  app_base_dir=None, # New parameter
                  manga_date_file_counter_ref=None, # New parameter
                  manga_global_file_counter_ref=None, # New parameter for global numbering
@@ -1714,7 +1742,7 @@ class DownloadThread(QThread):
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
-        self.known_names = list(known_names_copy)
+        self.known_names = list(known_names_copy) # type: ignore
         self.cancellation_event = cancellation_event
         self.pause_event = pause_event # Store pause_event
         self.skip_current_file_flag = skip_current_file_flag
@@ -1758,6 +1786,7 @@ class DownloadThread(QThread):
         self.app_base_dir = app_base_dir # Store app base dir
         self.cookie_text = cookie_text # Store cookie text
         self.use_cookie = use_cookie # Store cookie setting
+        self.override_output_dir = override_output_dir # Store override dir
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker by DownloadThread
         self.scan_content_for_images = scan_content_for_images # Store new flag
         self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store for global numbering
@@ -1890,6 +1919,7 @@ class DownloadThread(QThread):
                          selected_cookie_file=self.selected_cookie_file, # Pass selected cookie file
                          app_base_dir=self.app_base_dir, # Pass app_base_dir
                          cookie_text=self.cookie_text, # Pass cookie text
+                         override_output_dir=self.override_output_dir, # Pass override dir
                          manga_global_file_counter_ref=self.manga_global_file_counter_ref, # Pass the ref
                          use_cookie=self.use_cookie, # Pass cookie setting to worker
                          manga_date_file_counter_ref=current_manga_date_file_counter_ref, # Pass the calculated or passed-in ref
