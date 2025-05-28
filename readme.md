@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v4.1.1</h1>
+<h1 align="center">Kemono Downloader v4.2.0</h1>
 
 <div align="center">
   <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
@@ -11,8 +11,39 @@ Built with **PyQt5**, this tool is ideal for users who want deep filtering, cust
 
 ---
 
-##  What's New in v4.1.1? - Enhanced Image Discovery & Audio Filtering
+## 🚀 What's New in v4.2.0? - Favorite Mode & UI Enhancements!
 
+Version 4.2.0 introduces the highly anticipated **Favorite Mode**, allowing you to directly download content from artists you've favorited on Kemono.su. This update also includes several UI tweaks for a smoother experience.
+
+### ⭐ Favorite Mode: Download Your Kemono Favorites
+
+-   **Easy Access to Your Favorites:** A new "**⭐ Favorite Mode**" checkbox (located next to the "🔗 Only Links" radio button) activates this feature.
+-   **Dedicated Workflow:**
+    -   When enabled, the standard URL input is replaced with a message indicating Favorite Mode is active.
+    -   The main action buttons change to "**🖼️ Favorite Artists**" and "**📄 Favorite Posts**" (Note: "Favorite Posts" functionality is planned for a future release).
+    -   The "**🍪 Use Cookie**" option is automatically enabled and locked, as cookies are essential for fetching your favorites from Kemono.su.
+-   **🖼️ Favorite Artists Dialog:**
+    -   Clicking the "**🖼️ Favorite Artists**" button opens a new dialog.
+    -   This dialog fetches and displays a list of all artists you have favorited on Kemono.su.
+    -   You can search, select one or multiple artists, and then initiate downloads for their content.
+-   **🎯 Flexible Download Scopes:** A new toggle button, "**Scope: [Selected Location/Artist Folders]**", appears in Favorite Mode, allowing you to choose how the selected artists' content is organized:
+    -   **`Scope: Selected Location` (Default):** All content from the selected favorite artists will be downloaded into the main "Download Location" you've set in the UI. Filters (character, skip words, file type) will apply globally to all downloaded content.
+    -   **`Scope: Artist Folders`:** For each selected favorite artist, a new subfolder (named after the artist, e.g., "ArtistName") will be automatically created inside your main "Download Location". All content for that specific artist will be downloaded into their dedicated subfolder. Filters will apply *within* each artist's folder.
+-   **Filters Still Apply:** Your existing "Filter by Character(s)", "Skip with Words", and "Filter Files" settings will be applied to the content downloaded from your selected favorite artists, respecting the chosen download scope.
+
+### ⚙️ UI Defaults & Filter Cycling Order
+
+-   **Persistent Filter Defaults:**
+    -   The "Skip with Words" filter now always defaults to scoping by "**Posts**" on application startup.
+    -   The "Filter by Character(s)" filter now always defaults to scoping by "**Title**" on application startup.
+    -   *Note: Any changes made to these two scope settings during a session will not be saved, ensuring they revert to these defaults on the next launch.*
+-   **Updated Filter Cycling Order:**
+    -   **Filter by Character(s) Scope:** Cycles as `Title` -> `Files` -> `Both` -> `Comments (Beta)` -> `Title`.
+    -   **Skip with Words Scope:** Cycles as `Posts` -> `Files` -> `Both` -> `Posts`.
+
+---
+
+## 📜 Previous Update: What's New in v4.1.1? - Enhanced Image Discovery & Audio Filtering
 Version 4.1.1 brings significant enhancements, including smarter image capture from post content and a dedicated filter mode for audio files.
 
 ###  "Scan Content for Images" Feature
@@ -51,7 +82,7 @@ Alongside image discovery, v4.1.1 also introduces/enhances a dedicated filter mo
 
 ---
 
-##  Previous Update: What's New in v4.0.1?
+## 📜 Previous Update: What's New in v4.0.1? - Cookie Management & Advanced Known.txt
 
 Version 4.0.1 focuses on enhancing access to content and providing even smarter organization:
 
@@ -217,6 +248,9 @@ This version brought significant enhancements to manga/comic downloading, filter
 - **Download Modes:**
   - Single Post URL
   - Entire Creator Feed
+  - **Favorite Mode:**
+    - Download directly from your Kemono.su favorited artists.
+    - Choose to download to a central location or into individual artist-named subfolders.
 
 - **Flexible Options:**
   - Specify Page Range (disabled in Manga Mode)
@@ -320,18 +354,14 @@ This version brought significant enhancements to manga/comic downloading, filter
 
 ---
 
-###  Config System
+### Configuration & Settings
 
-- **`Known.txt` for Smart Folder Naming (Located in App Directory):**
-  - A user-editable file that stores a list of preferred names, series titles, or keywords.
-  - It's primarily used as an intelligent fallback for folder creation when "Separate Folders by Name/Title" is enabled.
-  - **Syntax:**
-    - Simple entries: `My Favorite Series` (creates folder "My Favorite Series", matches "My Favorite Series").
-    - Grouped entries: `(Desired Folder Name, alias1, alias2)` (creates folder "Desired Folder Name"; matches "Desired Folder Name", "alias1", or "alias2").
-
-- **Settings Stored in App Directory**
-
-- **Editable Within GUI**
+- **`Known.txt` for Smart Folder Naming:** (Located in the application's directory)
+  - User-editable file for preferred names, series titles, or keywords.
+  - Used as an intelligent fallback for folder creation when "Separate Folders by Name/Title" is enabled.
+  - Supports simple entries (e.g., `My Series`) and grouped entries for aliases (e.g., `(Folder Name, alias1, alias2)`).
+- **Application Settings:** UI preferences and some operational settings are saved by the application (e.g., manga filename style, multi-part download preference). Some settings, like cookie details or specific filter scopes, are session-based.
+- **Editable Within GUI:** Many settings and the `Known.txt` list (for simple entries) can be managed directly through the application interface.
 
 ---
 
@@ -371,10 +401,13 @@ pyinstaller --name "Kemono Downloader" --onefile --windowed --icon="Kemono.ico" 
 
 ***
 
-## ** Config Files**
-- `settings.json` — Stores your UI preferences and settings.
-- `Known.txt` — Stores character names, series titles, or keywords for organizing downloaded content into specific folders.
+## **Key Files**
+- **`Known.txt`:** (Located in the application's directory) Stores character names, series titles, or keywords for organizing downloaded content into specific folders.
+  
   - Supports simple entries (e.g., `My Series`) and grouped entries for aliases (e.g., `(Folder Name, alias1, alias2)` where "Folder Name" is the name of the created folder, and all terms are used for matching).
+
+- **Application Settings:** The application uses `QSettings` to store UI preferences and some operational settings. The actual storage location and format (e.g., .ini file, registry entry) depend on your operating system.
+- **`cookies.txt` (Optional):** If using the "Use Cookie" feature without specifying a direct string or file, the app looks for `cookies.txt` in its directory. Must be Netscape format.
 
 ***
 
