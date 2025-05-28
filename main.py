@@ -3080,7 +3080,7 @@ class DownloaderApp(QWidget):
 
         show_date_prefix_input = (
             manga_mode_effectively_on and
-            (current_filename_style == STYLE_DATE_BASED or current_filename_style == STYLE_ORIGINAL_NAME) and # MODIFIED
+            (current_filename_style == STYLE_DATE_BASED or current_filename_style == STYLE_ORIGINAL_NAME) and
             not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode)
         )
         if hasattr(self, 'manga_date_prefix_input'):
