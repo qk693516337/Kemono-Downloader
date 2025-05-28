@@ -372,6 +372,9 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         err_msg = f"Error fetching offset {offset} from {paginated_url}: {e}"
         if e.response is not None:
             err_msg += f" (Status: {e.response.status_code}, Body: {e.response.text[:200]})"
+        if isinstance(e, requests.exceptions.ConnectionError) and \
+           ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
+            err_msg += "\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
         raise RuntimeError(err_msg)
     except ValueError as e:
         raise RuntimeError(f"Error decoding JSON from offset {offset} ({paginated_url}): {e}. Response text: {response.text[:200]}")
@@ -407,6 +410,9 @@ def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, 
         err_msg = f"Error fetching comments for post {post_id} from {comments_api_url}: {e}"
         if e.response is not None:
             err_msg += f" (Status: {e.response.status_code}, Body: {e.response.text[:200]})"
+        if isinstance(e, requests.exceptions.ConnectionError) and \
+           ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
+            err_msg += "\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
         raise RuntimeError(err_msg)
     except ValueError as e: # JSONDecodeError inherits from ValueError
         raise RuntimeError(f"Error decoding JSON from comments API for post {post_id} ({comments_api_url}): {e}. Response text: {response.text[:200]}")
@@ -422,27 +428,65 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
         logger("   Download_from_api cancelled at start.")
         return
 
+    # --- Moved Up: Parse api_domain and prepare cookies early ---
+    parsed_input_url_for_domain = urlparse(api_url_input)
+    api_domain = parsed_input_url_for_domain.netloc
+    if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
+        logger(f"⚠️ Unrecognized domain '{api_domain}' from input URL. Defaulting to kemono.su for API calls.")
+        api_domain = "kemono.su" # Default domain if input is unusual
+
+    cookies_for_api = None
+    if use_cookie and app_base_dir: # app_base_dir is needed for cookies.txt path
+        cookies_for_api = prepare_cookies_for_request(use_cookie, cookie_text, selected_cookie_file, app_base_dir, logger)
+    # --- End Moved Up ---
+
+    # --- New: Attempt direct fetch for specific post URL first ---
+    if target_post_id:
+        direct_post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{target_post_id}"
+        logger(f"   Attempting direct fetch for target post: {direct_post_api_url}")
+        try:
+            direct_response = requests.get(direct_post_api_url, headers=headers, timeout=(10, 30), cookies=cookies_for_api)
+            direct_response.raise_for_status()
+            direct_post_data = direct_response.json()
+            
+            # The direct endpoint might return a single post object or a list containing one post.
+            # Check if it's a list and take the first item, or use the object directly.
+            if isinstance(direct_post_data, list) and direct_post_data:
+                direct_post_data = direct_post_data[0]
+
+            # Check if the data is a dict and contains a 'post' key (new format)
+            if isinstance(direct_post_data, dict) and 'post' in direct_post_data and isinstance(direct_post_data['post'], dict):
+                 direct_post_data = direct_post_data['post'] # Extract the nested post data
+
+            if isinstance(direct_post_data, dict) and direct_post_data.get('id') == target_post_id: # Now check the extracted/direct dict
+                logger(f"   ✅ Direct fetch successful for post {target_post_id}.")
+                yield [direct_post_data] # Yield the single post data as a list
+                return # Exit the generator, no need to paginate
+            else:
+                # Log more details about the unexpected response
+                response_type = type(direct_post_data).__name__
+                response_snippet = str(direct_post_data)[:200] # Log first 200 chars
+                logger(f"   ⚠️ Direct fetch for post {target_post_id} returned unexpected data (Type: {response_type}, Snippet: '{response_snippet}'). Falling back to pagination.")
+        except requests.exceptions.RequestException as e:
+            logger(f"   ⚠️ Direct fetch failed for post {target_post_id}: {e}. Falling back to pagination.")
+        except Exception as e:
+            logger(f"   ⚠️ Unexpected error during direct fetch for post {target_post_id}: {e}. Falling back to pagination.")
+    # --- End New: Attempt direct fetch ---
+
     if not service or not user_id:
         logger(f"❌ Invalid URL or could not extract service/user: {api_url_input}")
         return
 
     if target_post_id and (start_page or end_page):
         logger("⚠️ Page range (start/end page) is ignored when a specific post URL is provided (searching all pages for the post).")
-        start_page = end_page = None
+        # start_page = end_page = None # Keep these potentially for the fallback pagination
 
     is_creator_feed_for_manga = manga_mode and not target_post_id
 
-    parsed_input = urlparse(api_url_input)
-    api_domain = parsed_input.netloc
-    if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
-        logger(f"⚠️ Unrecognized domain '{api_domain}'. Defaulting to kemono.su for API calls.")
-        api_domain = "kemono.su"
+    # api_domain is already parsed and validated above
 
     api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
     
-    cookies_for_api = None
-    if use_cookie and app_base_dir: # app_base_dir is needed for cookies.txt path
-        cookies_for_api = prepare_cookies_for_request(use_cookie, cookie_text, selected_cookie_file, app_base_dir, logger)
 
     page_size = 50
 
@@ -544,7 +588,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
     current_offset = 0
     processed_target_post_flag = False
 
-    if start_page and start_page > 1 and not target_post_id:
+    if start_page and start_page > 1 and not target_post_id: # Only apply start_page if not targeting a specific post directly
         current_offset = (start_page - 1) * page_size
         current_page_num = start_page
         logger(f"   Starting from page {current_page_num} (calculated offset {current_offset}).")
@@ -586,11 +630,11 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
             break
 
         if not posts_batch:
-            if target_post_id and not processed_target_post_flag:
+            if target_post_id and not processed_target_post_flag: # Only log this if we were searching for a specific post
                 logger(f"❌ Target post {target_post_id} not found after checking all available pages (API returned no more posts at offset {current_offset}).")
             elif not target_post_id:
                 if current_page_num == (start_page or 1):
-                     logger(f"😕 No posts found on the first page checked (page {current_page_num}, offset {current_offset}).")
+                     logger(f"😕 No posts found on the first page checked (page {current_page_num}, offset {current_offset}).") # Log if the very first page of the range/feed is empty
                 else:
                      logger(f"✅ Reached end of posts (no more content from API at offset {current_offset}).")
             break
@@ -1011,10 +1055,15 @@ class PostProcessorWorker:
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
                 self.logger(f"   ❌ Download Error (Retryable): {api_original_filename}. Error: {e}")
                 last_exception_for_retry_later = e # Store this specific exception
+                if isinstance(e, requests.exceptions.ConnectionError) and \
+                   ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
+                    self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
                 if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close()
             except requests.exceptions.RequestException as e: 
                 self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
                 last_exception_for_retry_later = e # Store this too
+                if ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)): # More general check
+                    self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
                 if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
             except Exception as e:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")

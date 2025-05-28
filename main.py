@@ -23,7 +23,7 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton, QButtonGroup, QCheckBox, QSplitter,
-    QDialog, QStackedWidget, QScrollArea, QListWidgetItem, QSizePolicy,
+    QDialog, QStackedWidget, QScrollArea, QListWidgetItem, QSizePolicy, QProgressBar,
     QAbstractItemView,
     QFrame,
     QAbstractButton
@@ -491,6 +491,369 @@ class FavoriteArtistsDialog(QDialog):
 
     def get_selected_artists(self):
         return self.selected_artists_data
+
+class FavoritePostsFetcherThread(QThread):
+    """Worker thread to fetch favorite posts and creator names."""
+    status_update = pyqtSignal(str)
+    progress_bar_update = pyqtSignal(int, int) # value, maximum
+    finished = pyqtSignal(list, str) # list of posts, error message (or None)
+
+    def __init__(self, cookies_config, parent_logger_func, parent_get_domain_func):
+        super().__init__()
+        self.cookies_config = cookies_config
+        self.parent_logger_func = parent_logger_func
+        self.parent_get_domain_func = parent_get_domain_func
+        self.cancellation_event = threading.Event() # For potential future cancellation
+
+    def _logger(self, message):
+        self.parent_logger_func(f"[FavPostsFetcherThread] {message}")
+
+    def run(self):
+        fav_url = "https://kemono.su/api/v1/account/favorites?type=post"
+        self._logger(f"Attempting to fetch favorite posts from: {fav_url}")
+        self.status_update.emit("Fetching list of favorite posts...")
+        self.progress_bar_update.emit(0, 0) # Indeterminate state for initial fetch
+
+        cookies_dict = prepare_cookies_for_request(
+            self.cookies_config['use_cookie'],
+            self.cookies_config['cookie_text'],
+            self.cookies_config['selected_cookie_file'],
+            self.cookies_config['app_base_dir'],
+            self._logger
+        )
+
+        if self.cookies_config['use_cookie'] and not cookies_dict:
+            self.finished.emit([], "Error: Cookies enabled but could not be loaded.")
+            return
+
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(fav_url, headers=headers, cookies=cookies_dict, timeout=20)
+            response.raise_for_status()
+            posts_data_from_api = response.json()
+
+            if not isinstance(posts_data_from_api, list):
+                self.finished.emit([], f"Error: API did not return a list of posts (got {type(posts_data_from_api)}).")
+                return
+            
+            # --- This is the creator name fetching logic, moved from FavoritePostsDialog ---
+            all_fetched_posts_temp = []
+            for post_entry in posts_data_from_api:
+                post_id = post_entry.get("id")
+                post_title = html.unescape(post_entry.get("title", "Untitled Post").strip())
+                service = post_entry.get("service")
+                creator_id = post_entry.get("user")
+                added_date_str = post_entry.get("added", post_entry.get("published", ""))
+
+                if post_id and post_title and service and creator_id:
+                    all_fetched_posts_temp.append({
+                        'post_id': post_id, 'title': post_title, 'service': service,
+                        'creator_id': creator_id, 'added_date': added_date_str
+                    })
+                else:
+                    self._logger(f"Warning: Skipping favorite post entry due to missing data: {post_entry}")
+
+            unique_creators = {}
+            for post_data in all_fetched_posts_temp:
+                creator_key = (post_data['service'], post_data['creator_id'])
+                if creator_key not in unique_creators:
+                    unique_creators[creator_key] = None
+
+            creator_name_cache_local = {}
+            if unique_creators:
+                self.status_update.emit(f"Found {len(all_fetched_posts_temp)} posts. Fetching {len(unique_creators)} unique creator names...")
+                self.progress_bar_update.emit(0, len(unique_creators)) # Set max for creator name fetching
+
+                fetched_names_count = 0
+                total_unique_creators = len(unique_creators)
+                for (service, creator_id_val) in unique_creators.keys():
+                    if self.cancellation_event.is_set():
+                        self.finished.emit([], "Fetching cancelled.")
+                        return
+                    
+                    creator_api_url = f"https://{self.parent_get_domain_func(service)}/api/v1/{service}/user/{creator_id_val}?o=0"
+                    try:
+                        creator_response = requests.get(creator_api_url, headers=headers, cookies=cookies_dict, timeout=10)
+                        creator_response.raise_for_status()
+                        creator_info_list = creator_response.json()
+                        if isinstance(creator_info_list, list) and creator_info_list:
+                            creator_name_from_api = creator_info_list[0].get("user_name")
+                            creator_name = html.unescape(creator_name_from_api.strip()) if creator_name_from_api else creator_id_val
+                            creator_name_cache_local[(service, creator_id_val)] = creator_name
+                            fetched_names_count += 1
+                            self.status_update.emit(f"Fetched {fetched_names_count}/{total_unique_creators} creator names...")
+                            self.progress_bar_update.emit(fetched_names_count, total_unique_creators)
+                        else:
+                            self._logger(f"Warning: Could not get name for {service}/{creator_id_val}. API response not a list or empty.")
+                            creator_name_cache_local[(service, creator_id_val)] = creator_id_val
+                        time.sleep(0.1) # Be polite
+                    except requests.exceptions.RequestException as e_creator:
+                        self._logger(f"Error fetching name for {service}/{creator_id_val}: {e_creator}")
+                        creator_name_cache_local[(service, creator_id_val)] = creator_id_val # Fallback
+                    except Exception as e_gen_creator:
+                        self._logger(f"Unexpected error fetching name for {service}/{creator_id_val}: {e_gen_creator}")
+                        creator_name_cache_local[(service, creator_id_val)] = creator_id_val # Fallback
+
+            for post_data in all_fetched_posts_temp:
+                post_data['creator_name'] = creator_name_cache_local.get(
+                    (post_data['service'], post_data['creator_id']), post_data['creator_id']
+                )
+
+            all_fetched_posts_temp.sort(key=lambda x: x.get('added_date', ''), reverse=True)
+            self.finished.emit(all_fetched_posts_temp, None)
+
+        except requests.exceptions.RequestException as e:
+            self.finished.emit([], f"Error fetching favorite posts: {e}")
+        except Exception as e:
+            self.finished.emit([], f"An unexpected error occurred: {e}")
+
+class PostListItemWidget(QWidget):
+    """Custom widget for displaying a single post in the FavoritePostsDialog list."""
+    def __init__(self, post_data_dict, parent_dialog_ref, parent=None):
+        super().__init__(parent)
+        self.post_data = post_data_dict
+        self.parent_dialog = parent_dialog_ref # Reference to FavoritePostsDialog
+
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(5, 3, 5, 3) # Reduced vertical margins slightly
+        self.layout.setSpacing(10)
+
+        self.checkbox = QCheckBox()
+        self.layout.addWidget(self.checkbox)
+
+        self.info_label = QLabel()
+        self.info_label.setWordWrap(True)
+        self.info_label.setTextFormat(Qt.RichText)
+        self.layout.addWidget(self.info_label, 1) 
+
+        self._setup_display_text()
+
+    def _setup_display_text(self):
+        creator_display = self.post_data.get('creator_name', self.post_data.get('creator_id', 'N/A'))
+        post_title_text = self.post_data.get('title', 'Untitled Post')
+        
+        known_char_name = self.parent_dialog._find_known_character_in_title(post_title_text)
+        known_line_text = f"Known - {known_char_name}" if known_char_name else "Known - "
+        
+        service_val = self.post_data.get('service', 'N/A').capitalize()
+        added_date_str = self.post_data.get('added_date', 'N/A')
+        added_date_formatted = added_date_str.split('T')[0] if added_date_str and 'T' in added_date_str else added_date_str
+        details_line_text = f"{service_val} - Added: {added_date_formatted}"
+
+        line1_html = f"<b>{html.escape(creator_display)} - {html.escape(post_title_text)}</b>"
+        line2_html = html.escape(known_line_text)
+        line3_html = html.escape(details_line_text)
+        
+        display_html = f"{line1_html}<br>{line2_html}<br>{line3_html}"
+        self.info_label.setText(display_html)
+
+    def isChecked(self): return self.checkbox.isChecked()
+    def setCheckState(self, state): self.checkbox.setCheckState(state)
+    def get_post_data(self): return self.post_data
+
+class FavoritePostsDialog(QDialog):
+    """Dialog to display and select favorite posts."""
+    def __init__(self, parent_app, cookies_config, known_names_list_ref):
+        super().__init__(parent_app)
+        self.parent_app = parent_app
+        self.cookies_config = cookies_config
+        self.all_fetched_posts = []
+        self.selected_posts_data = []
+        self.known_names_list_ref = known_names_list_ref # Store reference to global KNOWN_NAMES
+        self.fetcher_thread = None # For the worker thread
+        
+        self.setWindowTitle("Favorite Posts")
+        self.setModal(True)
+        self.setMinimumSize(600, 600) # Slightly wider for post titles
+        if hasattr(self.parent_app, 'get_dark_theme'):
+            self.setStyleSheet(self.parent_app.get_dark_theme())
+
+        self._init_ui()
+        self._start_fetching_favorite_posts() # Changed to start thread
+
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+
+        self.status_label = QLabel("Loading favorite posts...")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(self.status_label)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False) # Or True if you want text on the bar
+        self.progress_bar.setVisible(False) # Initially hidden
+        main_layout.addWidget(self.progress_bar)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search posts (title, creator ID, service)...")
+        self.search_input.textChanged.connect(self._filter_post_list_display)
+        main_layout.addWidget(self.search_input)
+
+        self.post_list_widget = QListWidget()
+        self.post_list_widget.setStyleSheet("""
+            QListWidget::item {
+                border-bottom: 1px solid #4A4A4A;
+                padding-top: 4px;
+                padding-bottom: 4px;
+            }""")
+        main_layout.addWidget(self.post_list_widget)
+
+        combined_buttons_layout = QHBoxLayout()
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self._select_all_items)
+        combined_buttons_layout.addWidget(self.select_all_button)
+
+        self.deselect_all_button = QPushButton("Deselect All")
+        self.deselect_all_button.clicked.connect(self._deselect_all_items)
+        combined_buttons_layout.addWidget(self.deselect_all_button)
+
+        self.download_button = QPushButton("Download Selected")
+        self.download_button.clicked.connect(self._accept_selection_action)
+        self.download_button.setEnabled(False)
+        self.download_button.setDefault(True)
+        combined_buttons_layout.addWidget(self.download_button)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        combined_buttons_layout.addWidget(self.cancel_button)
+        combined_buttons_layout.addStretch(1)
+        main_layout.addLayout(combined_buttons_layout)
+
+    def _logger(self, message):
+        if hasattr(self.parent_app, 'log_signal') and self.parent_app.log_signal:
+            self.parent_app.log_signal.emit(f"[FavPostsDialog] {message}")
+        else:
+            print(f"[FavPostsDialog] {message}")
+
+    def _start_fetching_favorite_posts(self):
+        self.download_button.setEnabled(False) # Disable download button during fetch
+        self.status_label.setText("Initializing favorite posts fetch...")
+        
+        self.fetcher_thread = FavoritePostsFetcherThread(
+            self.cookies_config, 
+            self.parent_app.log_signal.emit, # Pass parent's logger
+            self._get_domain_for_service # Pass method reference
+        )
+        self.fetcher_thread.progress_bar_update.connect(self._set_progress_bar_value)
+        self.fetcher_thread.status_update.connect(self.status_label.setText)
+        self.fetcher_thread.finished.connect(self._on_fetch_completed)
+        self.progress_bar.setVisible(True)
+        self.fetcher_thread.start()
+
+    def _set_progress_bar_value(self, value, maximum):
+        if maximum == 0: # Indeterminate
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setValue(0) # Some styles might need value set for indeterminate
+        else:
+            self.progress_bar.setRange(0, maximum)
+            self.progress_bar.setValue(value)
+
+    def _on_fetch_completed(self, fetched_posts_list, error_msg):
+        if error_msg:
+            self.status_label.setText(error_msg)
+            self._logger(error_msg) # Log to main app log
+            QMessageBox.critical(self, "Fetch Error", error_msg)
+            # Keep download button disabled or handle as appropriate
+            return
+
+        self.progress_bar.setVisible(False)
+        self.all_fetched_posts = fetched_posts_list
+        self._populate_post_list_widget()
+        self.status_label.setText(f"{len(self.all_fetched_posts)} favorite post(s) found.")
+        self.download_button.setEnabled(len(self.all_fetched_posts) > 0)
+
+        if self.fetcher_thread:
+            self.fetcher_thread.quit()
+            self.fetcher_thread.wait()
+            self.fetcher_thread = None
+
+
+    def _get_domain_for_service(self, service_name):
+        # Basic heuristic, might need refinement if more domains are supported
+        if service_name and "coomer" in service_name.lower(): # e.g. if service is 'coomer_onlyfans'
+            return "coomer.su" # Or coomer.party
+        return "kemono.su" # Default
+
+    def _find_known_character_in_title(self, post_title):
+        if not post_title or not self.known_names_list_ref:
+            return None
+        
+        # Sort by length of primary name to prioritize more specific matches.
+        sorted_known_names = sorted(self.known_names_list_ref, key=lambda x: len(x.get("name", "")), reverse=True)
+
+        for known_entry in sorted_known_names:
+            aliases_to_check = known_entry.get("aliases", [])
+            if not aliases_to_check and known_entry.get("name"):
+                aliases_to_check = [known_entry.get("name")]
+
+            for alias in aliases_to_check:
+                if not alias:
+                    continue
+                pattern = r"(?i)\b" + re.escape(alias) + r"\b"
+                if re.search(pattern, post_title):
+                    return known_entry.get("name") 
+        return None
+
+    def _populate_post_list_widget(self, posts_to_display=None):
+        self.post_list_widget.clear()
+        source_list = posts_to_display if posts_to_display is not None else self.all_fetched_posts
+        for post_data in source_list:
+            creator_display = post_data.get('creator_name', post_data.get('creator_id', 'N/A')) # Use creator_name
+            post_title_text = post_data.get('title', 'Untitled Post')
+            # The HTML generation is now inside PostListItemWidget
+
+            list_item = QListWidgetItem(self.post_list_widget) # Parent it to the list widget
+            custom_widget = PostListItemWidget(post_data, self) # Pass self (FavoritePostsDialog)
+            
+            list_item.setSizeHint(custom_widget.sizeHint()) # Set size hint for the QListWidgetItem
+            list_item.setData(Qt.UserRole, post_data)
+            self.post_list_widget.addItem(list_item)
+            self.post_list_widget.setItemWidget(list_item, custom_widget) # Set the custom widget
+
+    def _filter_post_list_display(self):
+        search_text = self.search_input.text().lower().strip()
+        if not search_text:
+            self._populate_post_list_widget()
+            return
+        
+        filtered_posts = [
+            post for post in self.all_fetched_posts
+            if search_text in post['title'].lower() or \
+               search_text in post.get('creator_name', post.get('creator_id', '')).lower() or \
+               search_text in post['service'].lower()
+        ]
+        self._populate_post_list_widget(filtered_posts)
+
+    def _select_all_items(self):
+        for i in range(self.post_list_widget.count()):
+            item = self.post_list_widget.item(i)
+            widget = self.post_list_widget.itemWidget(item)
+            if widget and hasattr(widget, 'setCheckState'):
+                widget.setCheckState(Qt.Checked)
+
+    def _deselect_all_items(self):
+        for i in range(self.post_list_widget.count()):
+            item = self.post_list_widget.item(i)
+            widget = self.post_list_widget.itemWidget(item)
+            if widget and hasattr(widget, 'setCheckState'):
+                widget.setCheckState(Qt.Unchecked)
+
+    def _accept_selection_action(self):
+        self.selected_posts_data = []
+        for i in range(self.post_list_widget.count()):
+            item = self.post_list_widget.item(i)
+            widget = self.post_list_widget.itemWidget(item) # Get the custom widget
+            if widget and hasattr(widget, 'isChecked') and widget.isChecked():
+                # Retrieve post_data from the custom widget or the item's UserRole
+                post_data_for_download = widget.get_post_data() if hasattr(widget, 'get_post_data') else item.data(Qt.UserRole)
+                self.selected_posts_data.append(post_data_for_download)
+        
+        if not self.selected_posts_data:
+            QMessageBox.information(self, "No Selection", "Please select at least one post to download.")
+            return
+        self.accept()
+
+    def get_selected_posts(self):
+        return self.selected_posts_data
 
 class HelpGuideDialog(QDialog):
     """A multi-page dialog for displaying the feature guide."""
@@ -1264,6 +1627,8 @@ class DownloaderApp(QWidget):
             self.add_to_filter_button.clicked.connect(self._show_add_to_filter_dialog)
         if hasattr(self, 'favorite_mode_artists_button'):
             self.favorite_mode_artists_button.clicked.connect(self._show_favorite_artists_dialog)
+        if hasattr(self, 'favorite_mode_posts_button'): # New connection
+            self.favorite_mode_posts_button.clicked.connect(self._show_favorite_posts_dialog)
         if hasattr(self, 'favorite_scope_toggle_button'):
             self.favorite_scope_toggle_button.clicked.connect(self._cycle_favorite_scope)
 
@@ -1538,7 +1903,7 @@ class DownloaderApp(QWidget):
         self.favorite_mode_artists_button = QPushButton("🖼️ Favorite Artists")
         self.favorite_mode_artists_button.setToolTip("Browse and manage favorite artists (functionality TBD).")
         self.favorite_mode_artists_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
-        self.favorite_mode_posts_button = QPushButton("📄 Favorite Posts")
+        self.favorite_mode_posts_button = QPushButton("📄 Favorite Posts") # Ensure this button is created
         self.favorite_mode_posts_button.setToolTip("Browse and manage favorite posts (functionality TBD).")
         self.favorite_mode_posts_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
         
@@ -3166,14 +3531,15 @@ class DownloaderApp(QWidget):
         global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
         
         if self._is_download_active():
-            QMessageBox.warning(self, "Busy", "A download is already running."); return
+            QMessageBox.warning(self, "Busy", "A download is already running.")
+            return False # Indicate failure to start
         
         if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url:
             QMessageBox.information(self, "Favorite Mode Active",
                                     "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
             self.set_ui_enabled(True)
             return
-
+            return False # Indicate failure to start
         api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
         main_ui_download_dir = self.dir_input.text().strip() # Always get the main dir from UI
         
@@ -3188,8 +3554,8 @@ class DownloaderApp(QWidget):
             if num_threads_from_gui < 1: num_threads_from_gui = 1
         except ValueError:
             QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
-            self.set_ui_enabled(True)
-            return
+            # self.set_ui_enabled(True) # Removed
+            return False # Indicate failure to start
 
         if use_multithreading_enabled_by_checkbox:
             if num_threads_from_gui > MAX_THREADS:
@@ -3227,8 +3593,8 @@ class DownloaderApp(QWidget):
                 if soft_warning_msg_box.clickedButton() == change_button:
                     self.log_signal.emit(f"ℹ️ User opted to change thread count from {num_threads_from_gui} after advisory.")
                     self.thread_count_input.setFocus()
-                    self.thread_count_input.selectAll()
-                    return # Exit start_download to allow user to change value
+                    self.thread_count_input.selectAll() # type: ignore
+                    return False # Indicate failure to start, user needs to adjust
 
         raw_skip_words = self.skip_words_input.text().strip()
         skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
@@ -3265,33 +3631,34 @@ class DownloaderApp(QWidget):
                 effective_skip_zip = self.skip_zip_checkbox.isChecked() # Keep user's choice
                 effective_skip_rar = self.skip_rar_checkbox.isChecked() # Keep user's choice
 
-        if not api_url: QMessageBox.critical(self, "Input Error", "URL is required."); return
+        if not api_url:
+            QMessageBox.critical(self, "Input Error", "URL is required.")
+            return False # Indicate failure to start
+
         if override_output_dir:
             if not main_ui_download_dir:
                 QMessageBox.critical(self, "Configuration Error",
                                     "The main 'Download Location' must be set in the UI "
                                     "before downloading favorites with 'Artist Folders' scope.")
-                self.set_ui_enabled(True)
+                # self.set_ui_enabled(True) # Removed
                 if self.is_processing_favorites_queue: # Ensure queue logic can proceed
                     self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory not set.")
-                    self.download_finished(0, 0, True, []) # Simulate cancellation for this item
-                return
+                return False # Indicate failure to start
 
             if not os.path.isdir(main_ui_download_dir):
                 QMessageBox.critical(self, "Directory Error",
                                     f"The main 'Download Location' ('{main_ui_download_dir}') "
                                     "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
-                self.set_ui_enabled(True)
+                # self.set_ui_enabled(True) # Removed
                 if self.is_processing_favorites_queue:
                     self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory invalid.")
-                    self.download_finished(0, 0, True, [])
-                return
+                return False # Indicate failure to start
             effective_output_dir_for_run = override_output_dir
         else:
             if not extract_links_only and not main_ui_download_dir:
                 QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode.")
-                self.set_ui_enabled(True)
-                return
+                # self.set_ui_enabled(True) # Removed
+                return False # Indicate failure to start
 
             if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
                 reply = QMessageBox.question(self, "Create Directory?",
@@ -3303,17 +3670,18 @@ class DownloaderApp(QWidget):
                         self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
                     except Exception as e:
                         QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
-                        self.set_ui_enabled(True)
-                        return
+                        # self.set_ui_enabled(True) # Removed
+                        return False # Indicate failure to start
                 else:
                     self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
-                    self.set_ui_enabled(True)
-                    return
+                    # self.set_ui_enabled(True) # Removed
+                    return False # Indicate failure to start
             effective_output_dir_for_run = main_ui_download_dir
 
         service, user_id, post_id_from_url = extract_post_info(api_url)
         if not service or not user_id:
-            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format."); return
+            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
+            return False # Indicate failure to start
 
 
         if compress_images and Image is None:
@@ -3370,10 +3738,12 @@ class DownloaderApp(QWidget):
 
                     if msg_box.clickedButton() == cancel_button:
                         self.log_signal.emit("❌ Download cancelled by user due to Manga Mode & Page Range warning.")
-                        self.set_ui_enabled(True); return # Re-enable UI and stop
+                        # self.set_ui_enabled(True); # Removed
+                        return False # Indicate failure to start
             except ValueError as e:
                 QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}")
-                self.set_ui_enabled(True); return # Re-enable UI and stop
+                # self.set_ui_enabled(True); # Removed
+                return False # Indicate failure to start
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
 
         raw_character_filters_text = self.character_input.text().strip() # Get current text
@@ -3426,7 +3796,8 @@ class DownloaderApp(QWidget):
 
                     if dialog_result == CONFIRM_ADD_ALL_CANCEL_DOWNLOAD:
                         self.log_signal.emit("❌ Download cancelled by user at new name confirmation stage.")
-                        self.set_ui_enabled(True); return
+                        # self.set_ui_enabled(True); # Removed
+                        return False # Indicate failure to start
                     elif isinstance(dialog_result, list): # User chose to add selected items
                         if dialog_result: # If the list of selected filter_objects is not empty
                             self.log_signal.emit(f"ℹ️ User chose to add {len(dialog_result)} new entry/entries to Known.txt.")
@@ -3469,7 +3840,8 @@ class DownloaderApp(QWidget):
             cancel_button = msg_box.addButton("Cancel Download", QMessageBox.RejectRole)
             msg_box.exec_()
             if msg_box.clickedButton() == cancel_button:
-                self.log_signal.emit("❌ Download cancelled due to Manga Mode filter warning."); return
+                self.log_signal.emit("❌ Download cancelled due to Manga Mode filter warning.")
+                return False # Indicate failure to start
             else:
                 self.log_signal.emit("⚠️ Proceeding with Manga Mode without a specific title filter.")
         self.dynamic_character_filter_holder.set_filters(actual_filters_to_use_for_run)
@@ -3676,6 +4048,7 @@ class DownloaderApp(QWidget):
             self.download_finished(0,0,False, [])
             if self.pause_event: self.pause_event.clear()
             self.is_paused = False # Ensure pause state is reset on error
+        return True # Indicate successful start
 
 
     def start_single_threaded_download(self, **kwargs):
@@ -4056,7 +4429,7 @@ class DownloaderApp(QWidget):
         if self.favorite_mode_artists_button:
             self.favorite_mode_artists_button.setEnabled(enabled and is_fav_mode_active)
         if self.favorite_mode_posts_button:
-            self.favorite_mode_posts_button.setEnabled(enabled and is_fav_mode_active)
+            self.favorite_mode_posts_button.setEnabled(enabled and is_fav_mode_active) # Enable/disable this button
 
         if self.download_btn:
             self.download_btn.setEnabled(enabled and not is_fav_mode_active) # Only if UI enabled AND not in fav mode
@@ -4213,11 +4586,11 @@ class DownloaderApp(QWidget):
 
     def download_finished(self, total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list=None):
         if kept_original_names_list is None:
-            kept_original_names_list = self.all_kept_original_filenames if hasattr(self, 'all_kept_original_filenames') else []
+            kept_original_names_list = list(self.all_kept_original_filenames) if hasattr(self, 'all_kept_original_filenames') else []
         if kept_original_names_list is None:
             kept_original_names_list = []
 
-        status_message = "Cancelled by user" if cancelled_by_user else "Finished"
+        status_message = "Cancelled by user" if cancelled_by_user else "Completed"
         if cancelled_by_user and self.retryable_failed_files_info:
             self.log_signal.emit(f"    Download cancelled, discarding {len(self.retryable_failed_files_info)} file(s) that were pending retry.")
             self.retryable_failed_files_info.clear()
@@ -4292,7 +4665,7 @@ class DownloaderApp(QWidget):
         if self.is_processing_favorites_queue:
             if not self.favorite_download_queue: # No more items in the queue
                 self.is_processing_favorites_queue = False
-                self.log_signal.emit("✅ All queued favorite artist downloads have been initiated.")
+                self.log_signal.emit(f"✅ All {self.current_processing_favorite_item_info.get('type', 'item')} downloads from favorite queue have been processed.")
                 self.set_ui_enabled(True) # All favorites done, reset UI to idle
             else: # More items in the queue, start the next one
                 self._process_next_favorite_download()
@@ -5090,40 +5463,98 @@ class DownloaderApp(QWidget):
 
                 self.log_signal.emit(f"ℹ️ Queuing {len(selected_artists)} favorite artist(s) for download.")
                 for artist_data in selected_artists: # Iterate over list of dicts
-                    self.favorite_download_queue.append(artist_data) # Append the dict
+                    self.favorite_download_queue.append({'url': artist_data['url'], 'name': artist_data['name'], 'name_for_folder': artist_data['name'], 'type': 'artist'})
                 
                 if not self.is_processing_favorites_queue:
-                    self.is_processing_favorites_queue = True
+                    # self.is_processing_favorites_queue = True # This will be set in _process_next_favorite_download
                     self._process_next_favorite_download()
             else:
                 self.log_signal.emit("ℹ️ No favorite artists were selected for download.")
         else:
             self.log_signal.emit("ℹ️ Favorite artists selection cancelled.")
 
-    def _process_next_favorite_download(self):
-        if not self.is_processing_favorites_queue or not self.favorite_download_queue:
-            if self.is_processing_favorites_queue and not self.favorite_download_queue:
-                self.is_processing_favorites_queue = False
-                self.log_signal.emit("✅ All favorite artist downloads from queue have been initiated.")
+    def _show_favorite_posts_dialog(self):
+        if self._is_download_active() or self.is_processing_favorites_queue:
+            QMessageBox.warning(self, "Busy", "Another download operation is already in progress.")
             return
 
+        cookies_config = {
+            'use_cookie': self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False,
+            'cookie_text': self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "",
+            'selected_cookie_file': self.selected_cookie_filepath,
+            'app_base_dir': self.app_base_dir
+        }
+        global KNOWN_NAMES # Ensure we have access to the global
+
+        dialog = FavoritePostsDialog(self, cookies_config, KNOWN_NAMES) # Pass KNOWN_NAMES
+        if dialog.exec_() == QDialog.Accepted:
+            selected_posts = dialog.get_selected_posts()
+            if selected_posts:
+                self.log_signal.emit(f"ℹ️ Queuing {len(selected_posts)} favorite post(s) for download.")
+                for post_data in selected_posts:
+                    # Construct direct post URL: https://<domain>/<service>/user/<creator_id>/post/<post_id>
+                    # For now, assume kemono.su. TODO: Handle coomer.su if applicable
+                    domain = "kemono.su" # Or determine from service/parent app settings
+                    direct_post_url = f"https://{domain}/{post_data['service']}/user/{post_data['creator_id']}/post/{post_data['post_id']}"
+                    
+                    queue_item = {
+                        'url': direct_post_url,
+                        'name': post_data['title'], # For logging purposes
+                        'name_for_folder': post_data['creator_id'], # Use creator_id for folder name
+                        'type': 'post'
+                    }
+                    self.favorite_download_queue.append(queue_item)
+                
+                if not self.is_processing_favorites_queue:
+                    # self.is_processing_favorites_queue = True # This will be set in _process_next_favorite_download
+                    self._process_next_favorite_download()
+            else:
+                self.log_signal.emit("ℹ️ No favorite posts were selected for download.")
+        else:
+            self.log_signal.emit("ℹ️ Favorite posts selection cancelled.")
+
+    def _process_next_favorite_download(self):
+        # If a download is already active (could be a regular download or a previous favorite item),
+        # wait for it to complete. download_finished will re-trigger this method.
         if self._is_download_active():
             self.log_signal.emit("ℹ️ Waiting for current download to finish before starting next favorite.")
             return
 
-        self.current_processing_favorite_artist_info = self.favorite_download_queue.popleft() # Store the dict
-        next_url = self.current_processing_favorite_artist_info['url']
-        artist_name_for_log = self.current_processing_favorite_artist_info.get('name', 'Unknown Artist')
+        # If the queue is empty, it means all favorites (if any were queued) are done.
+        if not self.favorite_download_queue:
+            if self.is_processing_favorites_queue: # If we were in the middle of processing favorites
+                self.is_processing_favorites_queue = False
+                self.log_signal.emit("✅ All favorite items from queue have been processed.")
+                self.set_ui_enabled(True) # Re-enable UI fully
+            return
 
-        self.log_signal.emit(f"▶️ Processing next favorite from queue: '{artist_name_for_log}' ({next_url})")
+        # If we reach here, queue is not empty and no other download is active.
+        # This is where we commit to processing the next favorite item.
+        if not self.is_processing_favorites_queue: # Set flag if starting a new queue processing
+            self.is_processing_favorites_queue = True
+        self.current_processing_favorite_item_info = self.favorite_download_queue.popleft()
+        next_url = self.current_processing_favorite_item_info['url']
+        item_display_name = self.current_processing_favorite_item_info.get('name', 'Unknown Item') # This is artist name or post title
+
+        self.log_signal.emit(f"▶️ Processing next favorite from queue: '{item_display_name}' ({next_url})")
 
         override_dir = None
         if self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS and self.dir_input.text().strip(): # Ensure main dir is set
             main_download_dir = self.dir_input.text().strip()
-            artist_folder_name = clean_folder_name(artist_name_for_log)
-            override_dir = os.path.join(main_download_dir, artist_folder_name)
+            folder_name_key = self.current_processing_favorite_item_info.get('name_for_folder', 'Unknown_Folder')
+            item_specific_folder_name = clean_folder_name(folder_name_key) # artist_name or creator_id
+            override_dir = os.path.join(main_download_dir, item_specific_folder_name)
             self.log_signal.emit(f"    Favorite Scope: Artist Folders. Target directory: '{override_dir}'")
-        self.start_download(direct_api_url=next_url, override_output_dir=override_dir) # Pass direct_api_url and override_dir
+        
+        success_starting_download = self.start_download(direct_api_url=next_url, override_output_dir=override_dir)
+
+        if not success_starting_download:
+            # If start_download failed (e.g., due to a QMessageBox validation error),
+            # we need to manually trigger the logic that download_finished would handle
+            # to ensure the queue continues or terminates correctly.
+            self.log_signal.emit(f"⚠️ Failed to initiate download for '{item_display_name}'. Skipping this item in queue.")
+            # Simulate a "cancelled" finish for this item to process the next or end the queue.
+            self.download_finished(total_downloaded=0, total_skipped=1, cancelled_by_user=True, kept_original_names_list=[])
 
 if __name__ == '__main__':
     import traceback

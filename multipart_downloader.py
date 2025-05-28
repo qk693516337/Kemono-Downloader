@@ -122,14 +122,20 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
 
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Retryable error: {e}")
+            if isinstance(e, requests.exceptions.ConnectionError) and \
+               ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
+                logger_func("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
             if attempt == MAX_CHUNK_DOWNLOAD_RETRIES:
                 logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Failed after {MAX_CHUNK_DOWNLOAD_RETRIES} retries.")
                 return bytes_this_chunk, False
         except requests.exceptions.RequestException as e: # Includes 4xx/5xx errors after raise_for_status
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Non-retryable error: {e}")
+            if ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)): # More general check
+                logger_func("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
             return bytes_this_chunk, False
         except Exception as e:
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Unexpected error: {e}\n{traceback.format_exc(limit=1)}")
+
             return bytes_this_chunk, False
     with progress_data['lock']:
         progress_data['chunks_status'][part_num]['active'] = False
