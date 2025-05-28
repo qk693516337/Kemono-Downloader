@@ -8,9 +8,10 @@ import queue
 import hashlib
 import http.client
 import traceback
-import subprocess # Added for opening files cross-platform
+import html
+import subprocess
 import random
-from collections import deque # Ensure deque is imported
+from collections import deque
 
 from concurrent.futures import ThreadPoolExecutor, CancelledError, Future
 
@@ -22,8 +23,8 @@ from PyQt5.QtGui import (
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton, QButtonGroup, QCheckBox, QSplitter,
-    QDialog, QStackedWidget, QScrollArea, QListWidgetItem,
-    QAbstractItemView, # Added for QListWidget.NoSelection
+    QDialog, QStackedWidget, QScrollArea, QListWidgetItem, QSizePolicy,
+    QAbstractItemView,
     QFrame,
     QAbstractButton
 )
@@ -45,6 +46,7 @@ try:
         extract_post_info,
         download_from_api,
         PostProcessorSignals,
+        prepare_cookies_for_request,
         PostProcessorWorker,
         DownloadThread as BackendDownloadThread,
         SKIP_SCOPE_FILES,
@@ -126,6 +128,8 @@ CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
 SCAN_CONTENT_IMAGES_KEY = "scanContentForImagesV1"
 
 CONFIRM_ADD_ALL_ACCEPTED = 1
+FAVORITE_SCOPE_SELECTED_LOCATION = "selected_location"
+FAVORITE_SCOPE_ARTIST_FOLDERS = "artist_folders"
 CONFIRM_ADD_ALL_SKIP_ADDING = 2
 CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3
 
@@ -315,6 +319,179 @@ class KnownNamesFilterDialog(QDialog):
     def get_selected_entries(self):
         return self.selected_entries_to_return
 
+class FavoriteArtistsDialog(QDialog):
+    """Dialog to display and select favorite artists."""
+    def __init__(self, parent_app, cookies_config):
+        super().__init__(parent_app)
+        self.parent_app = parent_app
+        self.cookies_config = cookies_config
+        self.all_fetched_artists = []
+        self.selected_artist_urls = []
+
+        self.setWindowTitle("Favorite Artists")
+        self.setModal(True)
+        self.setMinimumSize(500, 600)
+        if hasattr(self.parent_app, 'get_dark_theme'):
+            self.setStyleSheet(self.parent_app.get_dark_theme())
+
+        self._init_ui()
+        self._fetch_favorite_artists()
+
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+
+        self.status_label = QLabel("Loading favorite artists...")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(self.status_label)
+
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search artists...")
+        self.search_input.textChanged.connect(self._filter_artist_list_display)
+        main_layout.addWidget(self.search_input)
+
+        self.artist_list_widget = QListWidget()
+        self.artist_list_widget.setStyleSheet("""
+            QListWidget::item {
+                border-bottom: 1px solid #4A4A4A; /* Slightly softer line */
+                padding-top: 4px;
+                padding-bottom: 4px;
+            }""")
+        main_layout.addWidget(self.artist_list_widget)
+
+        combined_buttons_layout = QHBoxLayout()
+
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self._select_all_items)
+        combined_buttons_layout.addWidget(self.select_all_button)
+
+        self.deselect_all_button = QPushButton("Deselect All")
+        self.deselect_all_button.clicked.connect(self._deselect_all_items)
+        combined_buttons_layout.addWidget(self.deselect_all_button)
+
+
+        self.download_button = QPushButton("Download Selected")
+        self.download_button.clicked.connect(self._accept_selection_action)
+        self.download_button.setEnabled(False)
+        self.download_button.setDefault(True)
+        combined_buttons_layout.addWidget(self.download_button)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+        combined_buttons_layout.addWidget(self.cancel_button)
+
+        combined_buttons_layout.addStretch(1)
+
+        main_layout.addLayout(combined_buttons_layout)
+
+    def _logger(self, message):
+        """Helper to log messages, either to parent app or console."""
+        if hasattr(self.parent_app, 'log_signal') and self.parent_app.log_signal:
+            self.parent_app.log_signal.emit(f"[FavArtistsDialog] {message}")
+        else:
+            print(f"[FavArtistsDialog] {message}")
+
+    def _fetch_favorite_artists(self):
+        fav_url = "https://kemono.su/api/v1/account/favorites?type=artist"
+        self._logger(f"Attempting to fetch favorite artists from: {fav_url}")
+
+        cookies_dict = prepare_cookies_for_request(
+            self.cookies_config['use_cookie'],
+            self.cookies_config['cookie_text'],
+            self.cookies_config['selected_cookie_file'],
+            self.cookies_config['app_base_dir'],
+            self._logger
+        )
+
+        if self.cookies_config['use_cookie'] and not cookies_dict:
+            self.status_label.setText("Error: Cookies enabled but could not be loaded. Cannot fetch favorites.")
+            self._logger("Error: Cookies enabled but could not be loaded.")
+            QMessageBox.warning(self, "Cookie Error", "Cookies are enabled, but no valid cookies could be loaded. Please check your cookie settings or file.")
+            return
+
+        try:
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            response = requests.get(fav_url, headers=headers, cookies=cookies_dict, timeout=20)
+            response.raise_for_status()
+
+            artists_data = response.json()
+
+            if not isinstance(artists_data, list):
+                self.status_label.setText("Error: API did not return a list of artists.")
+                self._logger(f"Error: Expected a list from API, got {type(artists_data)}")
+                QMessageBox.critical(self, "API Error", "The favorite artists API did not return the expected data format (list).")
+                return
+
+            self.all_fetched_artists = []
+            for artist_entry in artists_data:
+                artist_id = artist_entry.get("id")
+                artist_name = html.unescape(artist_entry.get("name", "Unknown Artist").strip())
+                artist_service = artist_entry.get("service")
+
+                if artist_id and artist_name and artist_service:
+                    full_url = f"https://kemono.su/{artist_service}/user/{artist_id}"
+                    self.all_fetched_artists.append({'name': artist_name, 'url': full_url, 'service': artist_service})
+                else:
+                    self._logger(f"Warning: Skipping favorite artist entry due to missing data: {artist_entry}")
+
+            self.all_fetched_artists.sort(key=lambda x: x['name'].lower())
+            self._populate_artist_list_widget()
+            self.status_label.setText(f"{len(self.all_fetched_artists)} favorite artist(s) found.")
+            self.download_button.setEnabled(len(self.all_fetched_artists) > 0)
+
+        except requests.exceptions.RequestException as e:
+            self.status_label.setText(f"Error fetching favorites: {e}")
+            self._logger(f"Error fetching favorites: {e}")
+            QMessageBox.critical(self, "Fetch Error", f"Could not fetch favorite artists: {e}")
+        except Exception as e:
+            self.status_label.setText(f"An unexpected error occurred: {e}")
+            self._logger(f"Unexpected error: {e}")
+            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+
+    def _populate_artist_list_widget(self, artists_to_display=None):
+        self.artist_list_widget.clear()
+        source_list = artists_to_display if artists_to_display is not None else self.all_fetched_artists
+        for artist_data in source_list:
+            item = QListWidgetItem(f"{artist_data['name']} ({artist_data.get('service', 'N/A').capitalize()})") # type: ignore
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setCheckState(Qt.Unchecked)
+            item.setData(Qt.UserRole, artist_data)
+            self.artist_list_widget.addItem(item)
+
+    def _filter_artist_list_display(self):
+        search_text = self.search_input.text().lower().strip()
+        if not search_text:
+            self._populate_artist_list_widget()
+            return
+        
+        filtered_artists = [
+            artist for artist in self.all_fetched_artists
+            if search_text in artist['name'].lower() or search_text in artist['url'].lower()
+        ]
+        self._populate_artist_list_widget(filtered_artists)
+
+    def _select_all_items(self):
+        for i in range(self.artist_list_widget.count()):
+            self.artist_list_widget.item(i).setCheckState(Qt.Checked)
+
+    def _deselect_all_items(self):
+        for i in range(self.artist_list_widget.count()):
+            self.artist_list_widget.item(i).setCheckState(Qt.Unchecked)
+
+    def _accept_selection_action(self):
+        self.selected_artists_data = []
+        for i in range(self.artist_list_widget.count()):
+            item = self.artist_list_widget.item(i)
+            if item.checkState() == Qt.Checked:
+                self.selected_artists_data.append(item.data(Qt.UserRole))
+        
+        if not self.selected_artists_data:
+            QMessageBox.information(self, "No Selection", "Please select at least one artist to download.")
+            return
+        self.accept()
+
+    def get_selected_artists(self):
+        return self.selected_artists_data
+
 class HelpGuideDialog(QDialog):
     """A multi-page dialog for displaying the feature guide."""
     def __init__(self, steps_data, parent=None):
@@ -476,7 +653,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
-    TOUR_SHOWN_KEY = "neverShowTourAgainV6"
+    TOUR_SHOWN_KEY = "neverShowTourAgainV5"
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -609,33 +786,29 @@ class TourDialog(QDialog):
             "  </ul></li>"
             "</ul>"
         )
-        self.step3 = TourStepWidget("② Filtering Downloads", step3_content)
+        self.step3_filtering = TourStepWidget("② Filtering Downloads", step3_content)
 
         step_favorite_mode_content = (
             "The application offers a 'Favorite Mode' for downloading content from artists you've favorited on Kemono.su."
             "<ul>"
             "<li><b>⭐ Favorite Mode Checkbox:</b><br>"
-            "   Located next to the '🔗 Only Links' radio button. Check this to activate Favorite Mode.</li><br>"
+            "  Located next to the '🔗 Only Links' radio button. Check this to activate Favorite Mode.</li><br>"
             "<li><b>What Happens in Favorite Mode:</b>"
-            "   <ul><li>The '🔗 Kemono Creator/Post URL' input area is replaced with a message indicating Favorite Mode is active.</li><br>"
-            "       <li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with '🖼️ Favorite Artists' and '📄 Favorite Posts' buttons (Note: 'Favorite Posts' is planned for the future).</li><br>"
-            "       <li>The '🍪 Use Cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li></ul></li><br>"
+            "  <ul><li>The '🔗 Kemono Creator/Post URL' input area is replaced with a message indicating Favorite Mode is active.</li><br>"
+            "    <li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with '🖼️ Favorite Artists' and '📄 Favorite Posts' buttons (Note: 'Favorite Posts' is planned for the future).</li><br>"
+            "    <li>The '🍪 Use Cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li></ul></li><br>"
             "<li><b>🖼️ Favorite Artists Button:</b><br>"
-            "   Click this to open a dialog listing your favorited artists from Kemono.su. You can select one or more artists to download.</li><br>"
+            "  Click this to open a dialog listing your favorited artists from Kemono.su. You can select one or more artists to download.</li><br>"
             "<li><b>Favorite Download Scope (Button):</b><br>"
-            "   This button (next to 'Favorite Posts') controls where selected favorites are downloaded:"
-            "   <ul><li><i>Scope: Selected Location:</i> All selected artists are downloaded into the main 'Download Location' you've set. Filters apply globally.</li><br>"
-            "       <li><i>Scope: Artist Folders:</i> A subfolder (named after the artist) is created inside your main 'Download Location' for each selected artist. Content for that artist goes into their specific subfolder. Filters apply within each artist's folder.</li></ul></li><br>"
+            "  This button (next to 'Favorite Posts') controls where selected favorites are downloaded:"
+            "  <ul><li><i>Scope: Selected Location:</i> All selected artists are downloaded into the main 'Download Location' you've set. Filters apply globally.</li><br>"
+            "    <li><i>Scope: Artist Folders:</i> A subfolder (named after the artist) is created inside your main 'Download Location' for each selected artist. Content for that artist goes into their specific subfolder. Filters apply within each artist's folder.</li></ul></li><br>"
             "<li><b>Filters in Favorite Mode:</b><br>"
-            "   The 'Filter by Character(s)', 'Skip with Words', and 'Filter Files' options still apply to the content downloaded from your selected favorite artists.</li>"
+            "  The 'Filter by Character(s)', 'Skip with Words', and 'Filter Files' options still apply to the content downloaded from your selected favorite artists.</li>"
             "</ul>"
         )
         self.step_favorite_mode = TourStepWidget("③ Favorite Mode (Alternative Download)", step_favorite_mode_content)
 
-        # Adjusting subsequent step titles due to new step insertion
-        # Original Step 3 (Filtering) is now self.step3_filtering
-        # Original Step 4 (Fine-Tuning) becomes Step 4
-        # Original Step 5 (Organization) becomes Step 5, etc.
         step4_content = (
             "More options to customize your downloads:"
             "<ul>"
@@ -655,7 +828,7 @@ class TourDialog(QDialog):
             "If 'Use Cookie' is checked but both the text field and browsed file are empty, it will try to load 'cookies.txt' from the app's directory.</li>"
             "</ul>"
         )
-        self.step4 = TourStepWidget("③ Fine-Tuning Downloads", step4_content)
+        self.step4_fine_tuning = TourStepWidget("④ Fine-Tuning Downloads", step4_content)
 
         step5_content = (
             "Organize your downloads and manage performance:"
@@ -697,7 +870,7 @@ class TourDialog(QDialog):
             "</li>"
             "</ul>"
         )
-        self.step5 = TourStepWidget("④ Organization & Performance", step5_content)
+        self.step5_organization = TourStepWidget("⑤ Organization & Performance", step5_content)
 
         step6_errors_content = (
             "Sometimes, downloads might encounter issues. Here are a few common ones:"
@@ -722,7 +895,7 @@ class TourDialog(QDialog):
             "</ul>"
         )
         self.step6_errors = TourStepWidget("⑥ Common Errors & Troubleshooting", step6_errors_content)
-
+        
         step7_final_controls_content = (
             "Monitoring and Controls:"
             "<ul>"
@@ -738,10 +911,17 @@ class TourDialog(QDialog):
             "</ul>"
             "<br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader."
         )
-        self.step7_final_controls = TourStepWidget("⑦ Logs & Final Controls", step7_final_controls_content) # Title remains same, number changes
+        self.step7_final_controls = TourStepWidget("⑦ Logs & Final Controls", step7_final_controls_content)
 
 
-        self.tour_steps = [self.step1, self.step2, self.step3, self.step4, self.step5, self.step6_errors, self.step7_final_controls]
+        self.tour_steps = [
+            self.step1,
+            self.step2,
+            self.step3_filtering,
+            self.step_favorite_mode,
+            self.step4_fine_tuning,
+            self.step5_organization,
+            self.step6_errors, self.step7_final_controls]
         for step_widget in self.tour_steps:
             self.stacked_widget.addWidget(step_widget)
 
@@ -815,11 +995,12 @@ class TourDialog(QDialog):
             self.settings.setValue(self.TOUR_SHOWN_KEY, True)
         else:
             self.settings.setValue(self.TOUR_SHOWN_KEY, False)
+        self.settings.sync() # Ensure settings are written immediately
 
     @staticmethod
     def should_show_tour(parent_app_settings=None):
         settings_to_use = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
-        
+
         never_show = settings_to_use.value(TourDialog.TOUR_SHOWN_KEY, False, type=bool)
         return not never_show
 
@@ -827,43 +1008,12 @@ class TourDialog(QDialog):
         self._skip_tour_action()
         super().closeEvent(event)
 
-        if self.never_show_again_checkbox.isChecked():
-            self.settings.setValue(self.TOUR_SHOWN_KEY, True)
-            self.settings.sync()
-    def _next_step_action(self):
-        if self.current_step < len(self.tour_steps) - 1:
-            self.current_step += 1
-            self.stacked_widget.setCurrentIndex(self.current_step)
-        else:
-            self._handle_exit_actions()
-            self.tour_finished_normally.emit()
-            self.accept()
-        self._update_button_states()
-
-    def _previous_step(self):
-        if self.current_step > 0:
-            self.current_step -= 1
-            self.stacked_widget.setCurrentIndex(self.current_step)
-        self._update_button_states()
-
-    def _skip_tour_action(self):
-        self._handle_exit_actions()
-        self.tour_skipped.emit()
-        self.reject()
-
-    def _update_button_states(self):
-        if self.current_step == len(self.tour_steps) - 1:
-            self.next_button.setText("Finish")
-        else:
-            self.next_button.setText("Next")
-        self.back_button.setEnabled(self.current_step > 0)
-
     @staticmethod
     def run_tour_if_needed(parent_app_window):
         try:
             settings = QSettings(TourDialog.CONFIG_ORGANIZATION_NAME, TourDialog.CONFIG_APP_NAME_TOUR)
             never_show_again_from_settings = settings.value(TourDialog.TOUR_SHOWN_KEY, False, type=bool)
-            
+
             primary_screen = QApplication.primaryScreen()
             if not primary_screen:
                 screens = QApplication.screens()
@@ -878,7 +1028,7 @@ class TourDialog(QDialog):
                 pref_h = int(screen_h * 0.60)
                 min_w, max_w = 550, 700
                 min_h, max_h = 580, 750
-                
+
                 dialog_width = max(min_w, min(pref_w, max_w))
                 dialog_height = max(min_h, min(pref_h, max_h))
 
@@ -920,7 +1070,6 @@ class DownloaderApp(QWidget):
     def __init__(self):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
-        # Determine and store app_base_dir
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             self.app_base_dir = os.path.dirname(sys.executable)
         else:
@@ -935,9 +1084,16 @@ class DownloaderApp(QWidget):
         self.total_posts_to_process = 0
         self.dynamic_character_filter_holder = DynamicFilterHolder()
         self.processed_posts_count = 0
+        self.favorite_download_queue = deque()
+        self.is_processing_favorites_queue = False         
         self.download_counter = 0
-        self.skip_counter = 0        
-        self.all_kept_original_filenames = [] # Initialize this attribute
+        self.favorite_download_queue = deque()
+        self.is_fetcher_thread_running = False
+        self.is_processing_favorites_queue = False
+        self.skip_counter = 0         
+        self.all_kept_original_filenames = []
+        self.favorite_scope_toggle_button = None
+        self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
 
         self.manga_mode_checkbox = None 
 
@@ -969,7 +1125,15 @@ class DownloaderApp(QWidget):
         self._current_link_post_title = None
         self.extracted_links_cache = []
         self.manga_rename_toggle_button = None
-        
+        self.favorite_mode_checkbox = None
+        self.url_or_placeholder_stack = None
+        self.url_input_widget = None
+        self.url_placeholder_widget = None
+        self.favorite_action_buttons_widget = None
+        self.favorite_mode_artists_button = None
+        self.favorite_mode_posts_button = None
+        self.standard_action_buttons_widget = None
+        self.bottom_action_buttons_stack = None         
         self.main_log_output = None
         self.external_log_output = None
         self.log_splitter = None
@@ -995,9 +1159,11 @@ class DownloaderApp(QWidget):
         self.missed_key_terms_buffer = []
         self.char_filter_scope_toggle_button = None
 
+        # --- MODIFICATION: Set fixed default scopes, do not load from settings ---
+        self.skip_words_scope = SKIP_SCOPE_POSTS
+        self.char_filter_scope = CHAR_SCOPE_TITLE
+        # --- END MODIFICATION ---
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
-        self.skip_words_scope = self.settings.value(SKIP_WORDS_SCOPE_KEY, SKIP_SCOPE_POSTS, type=str)
-        self.char_filter_scope = self.settings.value(CHAR_FILTER_SCOPE_KEY, CHAR_SCOPE_FILES, type=str)
         self.allow_multipart_download_setting = False 
         self.use_cookie_setting = False
         self.scan_content_images_setting = self.settings.value(SCAN_CONTENT_IMAGES_KEY, False, type=bool)         
@@ -1005,7 +1171,7 @@ class DownloaderApp(QWidget):
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
-        self.setWindowTitle("Kemono Downloader v4.1.1")
+        self.setWindowTitle("Kemono Downloader v4.2.0")
         self.setStyleSheet(self.get_dark_theme())
 
         self.init_ui()
@@ -1017,8 +1183,8 @@ class DownloaderApp(QWidget):
             self.character_input.setToolTip("Names, comma-separated. Group aliases: (alias1, alias2, alias3) becomes folder name 'alias1 alias2 alias3' (after cleaning).\nAll names in the group are used as aliases for matching.\nE.g., yor, (Boa, Hancock, Snake Princess)")
         self.log_signal.emit(f"ℹ️ Manga filename style loaded: '{self.manga_filename_style}'")
         self.log_signal.emit(f"ℹ️ Skip words scope loaded: '{self.skip_words_scope}'")
-        self.log_signal.emit(f"ℹ️ Character filter scope loaded: '{self.char_filter_scope}'")
-        self.log_signal.emit(f"ℹ️ Multi-part download defaults to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'} on launch")
+        self.log_signal.emit(f"ℹ️ Character filter scope set to default: '{self.char_filter_scope}'")
+        self.log_signal.emit(f"ℹ️ Multi-part download defaults to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'}")
         self.log_signal.emit(f"ℹ️ Cookie text defaults to: Empty on launch")
         self.log_signal.emit(f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
         self.log_signal.emit(f"ℹ️ Scan post content for images defaults to: {'Enabled' if self.scan_content_images_setting else 'Disabled'}")
@@ -1091,7 +1257,7 @@ class DownloaderApp(QWidget):
         if hasattr(self, 'favorite_mode_checkbox'):
             self.favorite_mode_checkbox.toggled.connect(self._handle_favorite_mode_toggle)
 
-        if hasattr(self, 'open_known_txt_button'): # Connect the new button
+        if hasattr(self, 'open_known_txt_button'):
             self.open_known_txt_button.clicked.connect(self._open_known_txt_file)
         
         if hasattr(self, 'add_to_filter_button'):
@@ -1264,8 +1430,8 @@ class DownloaderApp(QWidget):
     def closeEvent(self, event):
         self.save_known_names()
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
-        self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
-        self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
+        # self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope) # Do not save to persist default
+        # self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope) # Do not save to persist default
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
         self.settings.setValue(COOKIE_TEXT_KEY, self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "")
         self.settings.setValue(SCAN_CONTENT_IMAGES_KEY, self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False)         
@@ -1324,9 +1490,11 @@ class DownloaderApp(QWidget):
         right_layout.setContentsMargins(10, 10, 10, 10)
 
 
-        url_page_layout = QHBoxLayout()
-        url_page_layout.setContentsMargins(0,0,0,0)
-        url_page_layout.addWidget(QLabel("🔗 Kemono Creator/Post URL:"))
+        self.url_input_widget = QWidget()
+        url_input_layout = QHBoxLayout(self.url_input_widget)
+        url_input_layout.setContentsMargins(0,0,0,0)
+
+        url_input_layout.addWidget(QLabel("🔗 Kemono Creator/Post URL:"))
         self.link_input = QLineEdit()
         self.link_input.setPlaceholderText("e.g., https://kemono.su/patreon/user/12345 or .../post/98765")
         self.link_input.setToolTip("Enter the full URL of a Kemono/Coomer creator's page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765")
@@ -1350,11 +1518,38 @@ class DownloaderApp(QWidget):
         self.end_page_input.setFixedWidth(50)
         self.end_page_input.setToolTip("For creator URLs: Specify the ending page number to download up to (e.g., 5, 10).\nLeave blank to download all pages from the start page.\nDisabled for single post URLs or Manga/Comic Mode.")
         self.end_page_input.setValidator(QIntValidator(1, 99999))
-        url_page_layout.addWidget(self.page_range_label)
-        url_page_layout.addWidget(self.start_page_input)
-        url_page_layout.addWidget(self.to_label)
-        url_page_layout.addWidget(self.end_page_input)
-        left_layout.addLayout(url_page_layout)
+        url_input_layout.addWidget(self.end_page_input)
+
+        self.url_placeholder_widget = QWidget()
+        placeholder_layout = QHBoxLayout(self.url_placeholder_widget)
+        placeholder_layout.setContentsMargins(0,0,0,0)
+        fav_mode_active_label = QLabel("⭐ Favorite Mode is active. Please select filters below before choosing your favorite artists. Select action below.")
+        fav_mode_active_label.setAlignment(Qt.AlignCenter)
+        placeholder_layout.addWidget(fav_mode_active_label)
+
+        self.url_or_placeholder_stack = QStackedWidget()
+        self.url_or_placeholder_stack.addWidget(self.url_input_widget)
+        self.url_or_placeholder_stack.addWidget(self.url_placeholder_widget)
+        left_layout.addWidget(self.url_or_placeholder_stack)
+
+        self.favorite_action_buttons_widget = QWidget()
+        favorite_buttons_layout = QHBoxLayout(self.favorite_action_buttons_widget)
+        favorite_buttons_layout.setContentsMargins(0,0,0,0)
+        self.favorite_mode_artists_button = QPushButton("🖼️ Favorite Artists")
+        self.favorite_mode_artists_button.setToolTip("Browse and manage favorite artists (functionality TBD).")
+        self.favorite_mode_artists_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
+        self.favorite_mode_posts_button = QPushButton("📄 Favorite Posts")
+        self.favorite_mode_posts_button.setToolTip("Browse and manage favorite posts (functionality TBD).")
+        self.favorite_mode_posts_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
+        
+        self.favorite_scope_toggle_button = QPushButton()
+        self.favorite_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
+        self.favorite_scope_toggle_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+                
+        favorite_buttons_layout.addWidget(self.favorite_mode_artists_button)
+        favorite_buttons_layout.addWidget(self.favorite_mode_posts_button)
+        favorite_buttons_layout.addWidget(self.favorite_scope_toggle_button)
+
 
         left_layout.addWidget(QLabel("📁 Download Location:"))
         self.dir_input = QLineEdit()
@@ -1499,12 +1694,16 @@ class DownloaderApp(QWidget):
         radio_button_layout.addWidget(self.radio_images)
         radio_button_layout.addWidget(self.radio_videos)
         radio_button_layout.addWidget(self.radio_only_archives)
-        radio_button_layout.addWidget(self.radio_only_audio) # Add to layout
-        radio_button_layout.addWidget(self.radio_only_links)
-        radio_button_layout.addStretch(1)
+        radio_button_layout.addWidget(self.radio_only_audio)
         file_filter_layout.addLayout(radio_button_layout)
         left_layout.addLayout(file_filter_layout)
 
+        self.favorite_mode_checkbox = QCheckBox("⭐ Favorite Mode")
+        self.favorite_mode_checkbox.setToolTip("Enable Favorite Mode to browse saved artists/posts.\nThis will replace the URL input with Favorite selection buttons (functionality TBD).")
+        self.favorite_mode_checkbox.setChecked(False)
+        radio_button_layout.addWidget(self.radio_only_links)
+        radio_button_layout.addWidget(self.favorite_mode_checkbox)
+        radio_button_layout.addStretch(1)
         checkboxes_group_layout = QVBoxLayout()
         checkboxes_group_layout.setSpacing(10)
         
@@ -1528,11 +1727,11 @@ class DownloaderApp(QWidget):
 
         self.scan_content_images_checkbox = QCheckBox("Scan Content for Images")
         self.scan_content_images_checkbox.setToolTip(
-            self._original_scan_content_tooltip)
+        self._original_scan_content_tooltip)
         self.scan_content_images_checkbox.setChecked(self.scan_content_images_setting)
         row1_layout.addWidget(self.scan_content_images_checkbox)
 
-        self.compress_images_checkbox = QCheckBox("Compress Large Images (to WebP)")
+        self.compress_images_checkbox = QCheckBox("Compress to WebP")
         self.compress_images_checkbox.setChecked(False)
         self.compress_images_checkbox.setToolTip("Compress images > 1.5MB to WebP format (requires Pillow).")
         row1_layout.addWidget(self.compress_images_checkbox)
@@ -1625,24 +1824,28 @@ class DownloaderApp(QWidget):
         self.manga_mode_checkbox.setToolTip("Downloads posts from oldest to newest and renames files based on post title (for creator feeds only).")
         self.manga_mode_checkbox.setChecked(False)
         
-        advanced_row2_layout.addWidget(self.manga_mode_checkbox) # Keep manga mode checkbox here
+        advanced_row2_layout.addWidget(self.manga_mode_checkbox)
+
 
         advanced_row2_layout.addStretch(1)
         checkboxes_group_layout.addLayout(advanced_row2_layout)
         left_layout.addLayout(checkboxes_group_layout)
 
-
+        self.standard_action_buttons_widget = QWidget()
         btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0,0,0,0)
         btn_layout.setSpacing(10)
         self.download_btn = QPushButton("⬇️ Start Download")
         self.download_btn.setToolTip("Click to start the download or link extraction process with the current settings.")
         self.download_btn.setStyleSheet("padding: 8px 15px; font-weight: bold;")
         self.download_btn.clicked.connect(self.start_download)
-        self.cancel_btn = QPushButton("❌ Cancel & Reset UI") # Updated button text for clarity
+        
         self.pause_btn = QPushButton("⏸️ Pause Download")
         self.pause_btn.setToolTip("Click to pause the ongoing download process.")
         self.pause_btn.setEnabled(False)
         self.pause_btn.clicked.connect(self._handle_pause_resume_action)
+        
+        self.cancel_btn = QPushButton("❌ Cancel & Reset UI")
 
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.setToolTip("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
@@ -1650,7 +1853,12 @@ class DownloaderApp(QWidget):
         btn_layout.addWidget(self.download_btn)
         btn_layout.addWidget(self.pause_btn)
         btn_layout.addWidget(self.cancel_btn)
-        left_layout.addLayout(btn_layout)
+        self.standard_action_buttons_widget.setLayout(btn_layout)
+
+        self.bottom_action_buttons_stack = QStackedWidget()
+        self.bottom_action_buttons_stack.addWidget(self.standard_action_buttons_widget)
+        self.bottom_action_buttons_stack.addWidget(self.favorite_action_buttons_widget)
+        left_layout.addWidget(self.bottom_action_buttons_stack)
         left_layout.addSpacing(10)
 
 
@@ -1854,7 +2062,7 @@ class DownloaderApp(QWidget):
         
     def _browse_cookie_file(self):
         """Opens a file dialog to select a cookie file."""
-        start_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+        start_dir = QStandardPaths.writableLocation(QStandardPaths.DownloadLocation)
         if not start_dir:
             start_dir = os.path.dirname(self.config_file) # App directory
 
@@ -2011,8 +2219,10 @@ class DownloaderApp(QWidget):
 
     def _is_download_active(self):
         single_thread_active = self.download_thread and self.download_thread.isRunning()
-        pool_active = self.thread_pool is not None and any(not f.done() for f in self.active_futures if f is not None)
-        return single_thread_active or pool_active
+        fetcher_active = hasattr(self, 'is_fetcher_thread_running') and self.is_fetcher_thread_running
+        pool_has_active_tasks = self.thread_pool is not None and any(not f.done() for f in self.active_futures if f is not None)
+        multi_thread_active = fetcher_active or pool_has_active_tasks
+        return single_thread_active or multi_thread_active
 
     def handle_external_link_signal(self, post_title, link_text, link_url, platform):
         link_data = (post_title, link_text, link_url, platform)
@@ -2365,9 +2575,9 @@ class DownloaderApp(QWidget):
                     "Skips individual files if their names contain any of the 'Skip with Words'.\n"
                     "Example: Skip words \"WIP, sketch\".\n"
                     "- File \"art_WIP.jpg\" -> SKIPPED.\n"
-                    "- File \"final_art.png\" -> DOWNLOADED (if other conditions met).\n"
-                    "Post is still processed for other non-skipped files.\n\n"
-                    "Click to cycle to: Posts"
+                    "- File \"final_art.png\" -> DOWNLOADED (if other conditions met).\n\n"
+                    "Post is still processed for other non-skipped files.\n"
+                    "Click to cycle to: Both"
                 )
             elif self.skip_words_scope == SKIP_SCOPE_POSTS:
                 self.skip_scope_toggle_button.setText("Scope: Posts")
@@ -2378,7 +2588,7 @@ class DownloaderApp(QWidget):
                     "Example: Skip words \"preview, announcement\".\n"
                     "- Post \"Exciting Announcement!\" -> SKIPPED.\n"
                     "- Post \"Finished Artwork\" -> PROCESSED (if other conditions met).\n\n"
-                    "Click to cycle to: Both"
+                    "Click to cycle to: Files"
                 )
             elif self.skip_words_scope == SKIP_SCOPE_BOTH:
                 self.skip_scope_toggle_button.setText("Scope: Both")
@@ -2392,25 +2602,26 @@ class DownloaderApp(QWidget):
                     "    - \"character_WIP.jpg\" (file match) -> SKIPPED.\n"
                     "    - \"final_scene.png\" (file OK) -> DOWNLOADED.\n\n"
                     "Click to cycle to: Files"
+                    "Click to cycle to: Posts"
                 )
             else:
                 self.skip_scope_toggle_button.setText("Scope: Unknown")
                 self.skip_scope_toggle_button.setToolTip(
                     "Current Skip Scope: Unknown\n\n"
                     "The skip words scope is in an unknown state. Please cycle or reset.\n\n"
-                    "Click to cycle to: Files"
+                    "Click to cycle to: Posts"
                 )
 
 
     def _cycle_skip_scope(self):
-        if self.skip_words_scope == SKIP_SCOPE_FILES:
-            self.skip_words_scope = SKIP_SCOPE_POSTS
-        elif self.skip_words_scope == SKIP_SCOPE_POSTS:
+        if self.skip_words_scope == SKIP_SCOPE_POSTS: # Posts -> Files
+            self.skip_words_scope = SKIP_SCOPE_FILES
+        elif self.skip_words_scope == SKIP_SCOPE_FILES: # Files -> Both
             self.skip_words_scope = SKIP_SCOPE_BOTH
-        elif self.skip_words_scope == SKIP_SCOPE_BOTH:
-            self.skip_words_scope = SKIP_SCOPE_FILES
-        else:
-            self.skip_words_scope = SKIP_SCOPE_FILES
+        elif self.skip_words_scope == SKIP_SCOPE_BOTH: # Both -> Posts
+            self.skip_words_scope = SKIP_SCOPE_POSTS
+        else: # Default fallback
+            self.skip_words_scope = SKIP_SCOPE_POSTS
         
         self._update_skip_scope_button_text()
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
@@ -2429,7 +2640,7 @@ class DownloaderApp(QWidget):
                     "Only matching files from that post are downloaded.\n"
                     "Example: Filter 'Tifa'. File 'Tifa_artwork.jpg' matches and is downloaded.\n"
                     "Folder Naming: Uses character from matching filename.\n\n"
-                    "Click to cycle to: Title"
+                    "Click to cycle to: Both"
                 )
             elif self.char_filter_scope == CHAR_SCOPE_TITLE:
                 self.char_filter_scope_toggle_button.setText("Filter: Title")
@@ -2438,7 +2649,7 @@ class DownloaderApp(QWidget):
                     "Filters entire posts by their title. All files from a matching post are downloaded.\n"
                     "Example: Filter 'Aerith'. Post titled 'Aerith's Garden' matches; all its files are downloaded.\n"
                     "Folder Naming: Uses character from matching post title.\n\n"
-                    "Click to cycle to: Both"
+                    "Click to cycle to: Files"
                 )
             elif self.char_filter_scope == CHAR_SCOPE_BOTH:
                 self.char_filter_scope_toggle_button.setText("Filter: Both")
@@ -2463,26 +2674,27 @@ class DownloaderApp(QWidget):
                     " - Post B: Files 'dyne.jpg', 'weapon.gif'. Comments: '...a drawing of Barret Wallace...'. No file match for 'Barret'. Comment matches. All files from Post B downloaded.\n"
                     "Folder Naming: Prioritizes character from file match, then from comment match.\n\n"
                     "Click to cycle to: Files"
+                    "Click to cycle to: Title"
                 )
             else:
                 self.char_filter_scope_toggle_button.setText("Filter: Unknown")
                 self.char_filter_scope_toggle_button.setToolTip(
                     "Current Scope: Unknown\n\n"
                     "The character filter scope is in an unknown state. Please cycle or reset.\n\n"
-                    "Click to cycle to: Files"
+                    "Click to cycle to: Title"
                 )
 
     def _cycle_char_filter_scope(self):
-        if self.char_filter_scope == CHAR_SCOPE_FILES:
-            self.char_filter_scope = CHAR_SCOPE_TITLE
-        elif self.char_filter_scope == CHAR_SCOPE_TITLE:
-            self.char_filter_scope = CHAR_SCOPE_BOTH
-        elif self.char_filter_scope == CHAR_SCOPE_BOTH:
-            self.char_filter_scope = CHAR_SCOPE_COMMENTS
-        elif self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+        if self.char_filter_scope == CHAR_SCOPE_TITLE: # Title -> Files
             self.char_filter_scope = CHAR_SCOPE_FILES
-        else:
-            self.char_filter_scope = CHAR_SCOPE_FILES # Default fallback
+        elif self.char_filter_scope == CHAR_SCOPE_FILES: # Files -> Both
+            self.char_filter_scope = CHAR_SCOPE_BOTH
+        elif self.char_filter_scope == CHAR_SCOPE_BOTH: # Both -> Comments
+            self.char_filter_scope = CHAR_SCOPE_COMMENTS
+        elif self.char_filter_scope == CHAR_SCOPE_COMMENTS: # Comments -> Title
+            self.char_filter_scope = CHAR_SCOPE_TITLE
+        else: # Default fallback
+            self.char_filter_scope = CHAR_SCOPE_TITLE
         
         self._update_char_filter_scope_button_text()
         self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope)
@@ -2792,6 +3004,43 @@ class DownloaderApp(QWidget):
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False) # Update UI based on new style
         self.log_signal.emit(f"ℹ️ Manga filename style changed to: '{self.manga_filename_style}'")
 
+    def _handle_favorite_mode_toggle(self, checked):
+        if not self.url_or_placeholder_stack or not self.bottom_action_buttons_stack: # Check both stacks
+            return
+
+        self.url_or_placeholder_stack.setCurrentIndex(1 if checked else 0)
+        self.bottom_action_buttons_stack.setCurrentIndex(1 if checked else 0)
+
+        if checked: # Favorite Mode ON
+            if self.link_input:
+                self.link_input.clear()
+                self.link_input.setEnabled(False) # Explicitly disable
+            for widget in [self.page_range_label, self.start_page_input, self.to_label, self.end_page_input]:
+                if widget: widget.setEnabled(False)
+            if self.start_page_input: self.start_page_input.clear()
+            if self.end_page_input: self.end_page_input.clear()
+            
+            self.update_custom_folder_visibility() # Will hide if URL is effectively gone
+            self.update_page_range_enabled_state() # Redundant due to above, but safe
+            if self.manga_mode_checkbox: # Manga mode depends on creator URL
+                self.manga_mode_checkbox.setChecked(False) # Turn off manga mode
+                self.manga_mode_checkbox.setEnabled(False)
+            if hasattr(self, 'use_cookie_checkbox'):
+                self.use_cookie_checkbox.setChecked(True)
+                self.use_cookie_checkbox.setEnabled(False) # Lock it
+            if hasattr(self, 'use_cookie_checkbox'): # Update visibility based on forced True state
+                self._update_cookie_input_visibility(True)            
+            self.update_ui_for_manga_mode(False) # Refresh manga UI elements
+        else: # Favorite Mode OFF (URL input visible)
+            if self.link_input: self.link_input.setEnabled(True)
+            self.update_page_range_enabled_state() # Re-evaluate based on current link_input text
+            self.update_custom_folder_visibility()
+            self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
+
+            if hasattr(self, 'use_cookie_checkbox'):
+                self.use_cookie_checkbox.setEnabled(True) # Unlock it
+            if hasattr(self, 'use_cookie_checkbox'): # Update visibility based on current state
+                self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked())
 
     def update_ui_for_manga_mode(self, checked):
         is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
@@ -2918,9 +3167,15 @@ class DownloaderApp(QWidget):
         
         if self._is_download_active():
             QMessageBox.warning(self, "Busy", "A download is already running."); return
+        
+        if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url:
+            QMessageBox.information(self, "Favorite Mode Active",
+                                    "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
+            self.set_ui_enabled(True)
+            return
 
-        api_url = self.link_input.text().strip()
-        output_dir = self.dir_input.text().strip()
+        api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
+        main_ui_download_dir = self.dir_input.text().strip() # Always get the main dir from UI
         
         use_subfolders = self.use_subfolders_checkbox.isChecked()
         use_post_subfolders = self.use_subfolder_per_post_checkbox.isChecked()
@@ -2993,6 +3248,10 @@ class DownloaderApp(QWidget):
         backend_filter_mode = self.get_filter_mode()
         checked_radio_button = self.radio_group.checkedButton()
         user_selected_filter_text = checked_radio_button.text() if checked_radio_button else "All"
+        
+        
+        effective_output_dir_for_run = ""
+        
         if selected_cookie_file_path_for_backend:
             cookie_text_from_input = ""
 
@@ -3007,9 +3266,51 @@ class DownloaderApp(QWidget):
                 effective_skip_rar = self.skip_rar_checkbox.isChecked() # Keep user's choice
 
         if not api_url: QMessageBox.critical(self, "Input Error", "URL is required."); return
-        if not extract_links_only and not output_dir:
-             QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode."); return
-        
+        if override_output_dir:
+            if not main_ui_download_dir:
+                QMessageBox.critical(self, "Configuration Error",
+                                    "The main 'Download Location' must be set in the UI "
+                                    "before downloading favorites with 'Artist Folders' scope.")
+                self.set_ui_enabled(True)
+                if self.is_processing_favorites_queue: # Ensure queue logic can proceed
+                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory not set.")
+                    self.download_finished(0, 0, True, []) # Simulate cancellation for this item
+                return
+
+            if not os.path.isdir(main_ui_download_dir):
+                QMessageBox.critical(self, "Directory Error",
+                                    f"The main 'Download Location' ('{main_ui_download_dir}') "
+                                    "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
+                self.set_ui_enabled(True)
+                if self.is_processing_favorites_queue:
+                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory invalid.")
+                    self.download_finished(0, 0, True, [])
+                return
+            effective_output_dir_for_run = override_output_dir
+        else:
+            if not extract_links_only and not main_ui_download_dir:
+                QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode.")
+                self.set_ui_enabled(True)
+                return
+
+            if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
+                reply = QMessageBox.question(self, "Create Directory?",
+                                            f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
+                                            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if reply == QMessageBox.Yes:
+                    try:
+                        os.makedirs(main_ui_download_dir, exist_ok=True)
+                        self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
+                    except Exception as e:
+                        QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
+                        self.set_ui_enabled(True)
+                        return
+                else:
+                    self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
+                    self.set_ui_enabled(True)
+                    return
+            effective_output_dir_for_run = main_ui_download_dir
+
         service, user_id, post_id_from_url = extract_post_info(api_url)
         if not service or not user_id:
             QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format."); return
@@ -3025,6 +3326,8 @@ class DownloaderApp(QWidget):
         if extract_links_only: current_mode_log_text = "Link Extraction"
         elif backend_filter_mode == 'archive': current_mode_log_text = "Archive Download"
         elif backend_filter_mode == 'audio': current_mode_log_text = "Audio Download"
+
+        current_char_filter_scope = self.get_char_filter_scope()
         manga_mode = manga_mode_is_checked and not post_id_from_url
         
         manga_date_prefix_text = ""
@@ -3220,8 +3523,7 @@ class DownloaderApp(QWidget):
                 effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS)) # For posts
                 effective_num_file_threads_per_worker = 1 # Files within each post worker are sequential
 
-        # log_messages initialization was moved earlier
-        if not extract_links_only: log_messages.append(f"   Save Location: {output_dir}")
+        if not extract_links_only: log_messages.append(f"    Save Location: {effective_output_dir_for_run}")
         
         if post_id_from_url:
             log_messages.append(f"    Mode: Single Post")
@@ -3531,6 +3833,9 @@ class DownloaderApp(QWidget):
         except Exception as e:
             self.log_signal.emit(f"❌ Error during post fetching: {e}\n{traceback.format_exc(limit=2)}"); fetch_error_occurred = True
 
+        finally:
+            self.is_fetcher_thread_running = False # Reset the flag when this thread's main work is done
+            self.log_signal.emit(f"ℹ️ Post fetcher thread (_fetch_and_queue_posts) has completed its task. is_fetcher_thread_running set to False.")
 
         if self.cancellation_event.is_set() or fetch_error_occurred:
             self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
@@ -3714,6 +4019,7 @@ class DownloaderApp(QWidget):
             self.skip_zip_checkbox, self.skip_rar_checkbox, self.download_thumbnails_checkbox, self.compress_images_checkbox,
             self.use_subfolders_checkbox, self.use_subfolder_per_post_checkbox, self.scan_content_images_checkbox, # Added scan_content_images_checkbox
             self.use_multithreading_checkbox, self.thread_count_input, self.thread_count_label,
+            self.favorite_mode_checkbox, # Add favorite_mode_checkbox here
             self.external_links_checkbox, self.manga_mode_checkbox, self.manga_rename_toggle_button, self.use_cookie_checkbox, self.cookie_text_input, self.cookie_browse_button,
             self.multipart_toggle_button, self.radio_only_audio, # Added radio_only_audio
             self.character_search_input, self.new_char_input, self.add_char_button, self.add_to_filter_button, self.delete_char_button, # Added add_to_filter_button
@@ -3724,19 +4030,40 @@ class DownloaderApp(QWidget):
         is_fav_mode_active = self.favorite_mode_checkbox.isChecked() if self.favorite_mode_checkbox else False
         download_is_active_or_paused = not enabled # True if a download is running or paused
 
+        if not enabled: # Download is active or starting
+            if self.bottom_action_buttons_stack:
+                self.bottom_action_buttons_stack.setCurrentIndex(0) # Show standard Pause/Cancel
+        else: # UI is idle or download finished
+            pass
+
         for widget in all_potentially_toggleable_widgets:
             if not widget: continue
 
             if self.is_paused and widget in widgets_to_enable_on_pause:
                 widget.setEnabled(True) # Re-enable specific widgets if paused
+            elif widget is self.favorite_mode_checkbox: # Favorite mode checkbox can only be changed when idle
+                widget.setEnabled(enabled)            
+            elif widget is self.use_cookie_checkbox and is_fav_mode_active:
+                widget.setEnabled(False)
+            elif widget is self.use_cookie_checkbox and self.is_paused and widget in widgets_to_enable_on_pause:
+                widget.setEnabled(True) # Allow toggling cookies if paused and not in fav mode            
             else:
                 widget.setEnabled(enabled) # Standard behavior: enable if idle, disable if running
+
+        if self.link_input:
+            self.link_input.setEnabled(enabled and not is_fav_mode_active)
+
+        if self.favorite_mode_artists_button:
+            self.favorite_mode_artists_button.setEnabled(enabled and is_fav_mode_active)
+        if self.favorite_mode_posts_button:
+            self.favorite_mode_posts_button.setEnabled(enabled and is_fav_mode_active)
+
+        if self.download_btn:
+            self.download_btn.setEnabled(enabled and not is_fav_mode_active) # Only if UI enabled AND not in fav mode
         
-        if enabled:
-            self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
-        
-        if self.external_links_checkbox:
-            is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
+
+        if self.external_links_checkbox: # This logic seems fine as is
+            is_only_links = self.radio_only_links and self.radio_only_links.isChecked() # Define is_only_links
             is_only_archives = self.radio_only_archives and self.radio_only_archives.isChecked()
             is_only_audio = hasattr(self, 'radio_only_audio') and self.radio_only_audio.isChecked()
             can_enable_ext_links = enabled and not is_only_links and not is_only_archives and not is_only_audio
@@ -3744,10 +4071,7 @@ class DownloaderApp(QWidget):
             if self.is_paused and not is_only_links and not is_only_archives and not is_only_audio:
                 self.external_links_checkbox.setEnabled(True)
         if hasattr(self, 'use_cookie_checkbox'):
-            self.use_cookie_checkbox.setEnabled(enabled or self.is_paused)
-            self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked()) # This will handle cookie_text_input's enabled state
-
-        if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setEnabled(enabled or self.is_paused)
+            self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked())
 
         if self.log_verbosity_toggle_button: self.log_verbosity_toggle_button.setEnabled(True) # New button, always enabled
 
@@ -3758,8 +4082,7 @@ class DownloaderApp(QWidget):
         subfolders_currently_on = self.use_subfolders_checkbox.isChecked()
         if self.use_subfolder_per_post_checkbox:
             self.use_subfolder_per_post_checkbox.setEnabled(enabled or (self.is_paused and self.use_subfolder_per_post_checkbox in widgets_to_enable_on_pause))
-        self.download_btn.setEnabled(enabled) # Start Download only enabled when fully idle
-        self.cancel_btn.setEnabled(download_is_active_or_paused) # Cancel enabled if running or paused
+        if self.cancel_btn: self.cancel_btn.setEnabled(download_is_active_or_paused) # Cancel enabled if running or paused
         if self.pause_btn:
             self.pause_btn.setEnabled(download_is_active_or_paused) # Pause enabled if running or paused
             if download_is_active_or_paused:
@@ -3819,9 +4142,9 @@ class DownloaderApp(QWidget):
         self.skip_words_scope = SKIP_SCOPE_POSTS # Default
         self._update_skip_scope_button_text()
 
-        if hasattr(self, 'manga_date_prefix_input'): self.manga_date_prefix_input.clear() # Clear prefix input
+        if hasattr(self, 'manga_date_prefix_input'): self.manga_date_prefix_input.clear()
 
-        self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files on soft reset
+        self.char_filter_scope = CHAR_SCOPE_TITLE # Default to Title on soft reset
         self._update_char_filter_scope_button_text()
 
         self.manga_filename_style = STYLE_POST_TITLE # Reset to app default
@@ -3837,7 +4160,6 @@ class DownloaderApp(QWidget):
         self.download_counter = 0; self.skip_counter = 0
         self.all_kept_original_filenames = []
         self.is_paused = False # Reset pause state on soft reset
-        self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         self.favorite_download_queue.clear()
         self.is_processing_favorites_queue = False
@@ -3864,7 +4186,8 @@ class DownloaderApp(QWidget):
         current_dir = self.dir_input.text()
 
         self.cancellation_event.set()
-        if self.download_thread and self.download_thread.isRunning(): self.download_thread.requestInterruption(); self.log_signal.emit("   Signaled single download thread to interrupt.")
+        self.is_fetcher_thread_running = False # Ensure it's reset on cancel
+        if self.download_thread and self.download_thread.isRunning(): self.download_thread.requestInterruption(); self.log_signal.emit("    Signaled single download thread to interrupt.")
         if self.thread_pool:
             self.log_signal.emit("    Initiating non-blocking shutdown and cancellation of worker pool tasks...")
             self.thread_pool.shutdown(wait=False, cancel_futures=True)
@@ -3964,7 +4287,17 @@ class DownloaderApp(QWidget):
                 self.log_signal.emit("ℹ️ User chose not to retry failed files.")
                 self.retryable_failed_files_info.clear() # Clear if not retrying
 
-        self.set_ui_enabled(True) # Full UI reset if not retrying
+        self.is_fetcher_thread_running = False # Ensure it's reset
+
+        if self.is_processing_favorites_queue:
+            if not self.favorite_download_queue: # No more items in the queue
+                self.is_processing_favorites_queue = False
+                self.log_signal.emit("✅ All queued favorite artist downloads have been initiated.")
+                self.set_ui_enabled(True) # All favorites done, reset UI to idle
+            else: # More items in the queue, start the next one
+                self._process_next_favorite_download()
+        else: # Not processing favorites queue (e.g., a regular URL download finished)
+            self.set_ui_enabled(True)
 
     def _handle_thumbnail_mode_change(self, thumbnails_checked):
         """Handles UI changes when 'Download Thumbnails Only' is toggled."""
@@ -4177,9 +4510,9 @@ class DownloaderApp(QWidget):
         self.skip_words_scope = SKIP_SCOPE_POSTS
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
         self._update_skip_scope_button_text()
-
-        self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files on full reset
-        self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope) 
+        
+        self.char_filter_scope = CHAR_SCOPE_TITLE # Default to Title on full reset
+        # self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope) # Already removed from saving
         self._update_char_filter_scope_button_text() 
 
         self.settings.sync()
@@ -4216,7 +4549,7 @@ class DownloaderApp(QWidget):
 
         self.skip_words_scope = SKIP_SCOPE_POSTS
         self._update_skip_scope_button_text()
-        self.char_filter_scope = CHAR_SCOPE_FILES # Default to Files
+        self.char_filter_scope = CHAR_SCOPE_TITLE # Default to Title
         self._update_char_filter_scope_button_text()
 
         self.current_log_view = 'progress' # Reset to progress log view
@@ -4673,33 +5006,124 @@ class DownloaderApp(QWidget):
             if selected_entries:
                 self._add_names_to_character_filter_input(selected_entries)
 
-    def _add_names_to_character_filter_input(self, selected_entries_list):
-        current_filter_text = self.character_input.text().strip()
+    def _add_names_to_character_filter_input(self, selected_entries):
+        """
+        Adds the selected known name entries to the character filter input field.
+        """
+        if not selected_entries:
+            return
 
-        # Split existing text by comma, trim, and filter out empty strings
-        existing_filter_parts = [part.strip() for part in current_filter_text.split(',') if part.strip()]
-
-        # Use a set for efficient checking of existing parts (case-insensitive)
-        existing_parts_lower_set = {part.lower() for part in existing_filter_parts}
-
-        newly_added_parts_for_field = []
-        for entry_obj in selected_entries_list:
-            text_for_field = ""
-            if entry_obj.get('is_group', False):
-                # For groups from Known.txt, format as (alias1, alias2)~
-                # entry_obj['aliases'] should contain the original terms like 'Boa', 'Hancock'
-                aliases_str = ", ".join(sorted(entry_obj.get('aliases', []), key=str.lower))
-                text_for_field = f"({aliases_str})~"
+        names_to_add_str_list = []
+        for entry in selected_entries:
+            if entry.get("is_group"):
+                aliases_str = ", ".join(entry.get("aliases", []))
+                names_to_add_str_list.append(f"({aliases_str})~")
             else:
-                text_for_field = entry_obj['name']
+                names_to_add_str_list.append(entry.get("name", ""))
 
-            if text_for_field.lower() not in existing_parts_lower_set:
-                newly_added_parts_for_field.append(text_for_field)
-                existing_parts_lower_set.add(text_for_field.lower())
+        names_to_add_str_list = [s for s in names_to_add_str_list if s]
 
-        final_filter_parts = existing_filter_parts + newly_added_parts_for_field
-        self.character_input.setText(", ".join(final_filter_parts))
-        self.log_signal.emit(f"ℹ️ Added to filter: {', '.join(newly_added_parts_for_field)}")
+        if not names_to_add_str_list:
+            return
+
+        current_filter_text = self.character_input.text().strip()
+        new_text_to_append = ", ".join(names_to_add_str_list)
+
+        self.character_input.setText(f"{current_filter_text}, {new_text_to_append}" if current_filter_text else new_text_to_append)
+        self.log_signal.emit(f"ℹ️ Added to character filter: {new_text_to_append}")
+
+    def _update_favorite_scope_button_text(self):
+        if not hasattr(self, 'favorite_scope_toggle_button') or not self.favorite_scope_toggle_button:
+            return
+        if self.favorite_download_scope == FAVORITE_SCOPE_SELECTED_LOCATION:
+            self.favorite_scope_toggle_button.setText("Scope: Selected Location")
+            self.favorite_scope_toggle_button.setToolTip(
+                "Current Favorite Download Scope: Selected Location\n\n"
+                "All selected favorite artists will be downloaded into the main 'Download Location' specified in the UI.\n"
+                "Filters (character, skip words, file type) will apply globally to all content from these artists.\n\n"
+                "Click to change to: Artist Folders"
+            )
+        elif self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS:
+            self.favorite_scope_toggle_button.setText("Scope: Artist Folders")
+            self.favorite_scope_toggle_button.setToolTip(
+                "Current Favorite Download Scope: Artist Folders\n\n"
+                "For each selected favorite artist, a new subfolder (named after the artist) will be created inside the main 'Download Location'.\n"
+                "Content for that artist will be downloaded into their specific subfolder.\n"
+                "Filters (character, skip words, file type) will apply *within* each artist's folder.\n\n"
+                "Click to change to: Selected Location"
+            )
+        else: # Fallback
+            self.favorite_scope_toggle_button.setText("Scope: Unknown")
+            self.favorite_scope_toggle_button.setToolTip("Favorite download scope is unknown. Click to cycle.")
+
+    def _cycle_favorite_scope(self):
+        if self.favorite_download_scope == FAVORITE_SCOPE_SELECTED_LOCATION:
+            self.favorite_download_scope = FAVORITE_SCOPE_ARTIST_FOLDERS
+        else:
+            self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
+        self._update_favorite_scope_button_text()
+        self.log_signal.emit(f"ℹ️ Favorite download scope changed to: '{self.favorite_download_scope}'")
+
+    def _show_favorite_artists_dialog(self):
+        if self._is_download_active() or self.is_processing_favorites_queue:
+            QMessageBox.warning(self, "Busy", "Another download operation is already in progress.")
+            return
+
+        cookies_config = {
+            'use_cookie': self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False,
+            'cookie_text': self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "",
+            'selected_cookie_file': self.selected_cookie_filepath,
+            'app_base_dir': self.app_base_dir
+        }
+
+        dialog = FavoriteArtistsDialog(self, cookies_config)
+        if dialog.exec_() == QDialog.Accepted:
+            selected_artists = dialog.get_selected_artists() # Changed method name
+            if selected_artists:
+                if len(selected_artists) > 1:
+                    display_names = ", ".join([artist['name'] for artist in selected_artists])
+                    self.link_input.setText(display_names)
+                    self.log_signal.emit(f"ℹ️ Multiple favorite artists selected. Displaying names: {display_names}")
+                elif len(selected_artists) == 1:
+                    self.link_input.setText(selected_artists[0]['url']) # Show the single URL
+                    self.log_signal.emit(f"ℹ️ Single favorite artist selected: {selected_artists[0]['name']}")
+
+                self.log_signal.emit(f"ℹ️ Queuing {len(selected_artists)} favorite artist(s) for download.")
+                for artist_data in selected_artists: # Iterate over list of dicts
+                    self.favorite_download_queue.append(artist_data) # Append the dict
+                
+                if not self.is_processing_favorites_queue:
+                    self.is_processing_favorites_queue = True
+                    self._process_next_favorite_download()
+            else:
+                self.log_signal.emit("ℹ️ No favorite artists were selected for download.")
+        else:
+            self.log_signal.emit("ℹ️ Favorite artists selection cancelled.")
+
+    def _process_next_favorite_download(self):
+        if not self.is_processing_favorites_queue or not self.favorite_download_queue:
+            if self.is_processing_favorites_queue and not self.favorite_download_queue:
+                self.is_processing_favorites_queue = False
+                self.log_signal.emit("✅ All favorite artist downloads from queue have been initiated.")
+            return
+
+        if self._is_download_active():
+            self.log_signal.emit("ℹ️ Waiting for current download to finish before starting next favorite.")
+            return
+
+        self.current_processing_favorite_artist_info = self.favorite_download_queue.popleft() # Store the dict
+        next_url = self.current_processing_favorite_artist_info['url']
+        artist_name_for_log = self.current_processing_favorite_artist_info.get('name', 'Unknown Artist')
+
+        self.log_signal.emit(f"▶️ Processing next favorite from queue: '{artist_name_for_log}' ({next_url})")
+
+        override_dir = None
+        if self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS and self.dir_input.text().strip(): # Ensure main dir is set
+            main_download_dir = self.dir_input.text().strip()
+            artist_folder_name = clean_folder_name(artist_name_for_log)
+            override_dir = os.path.join(main_download_dir, artist_folder_name)
+            self.log_signal.emit(f"    Favorite Scope: Artist Folders. Target directory: '{override_dir}'")
+        self.start_download(direct_api_url=next_url, override_output_dir=override_dir) # Pass direct_api_url and override_dir
 
 if __name__ == '__main__':
     import traceback
