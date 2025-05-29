@@ -329,8 +329,8 @@ class FavoriteArtistsDialog(QDialog):
         self.selected_artist_urls = []
 
         self.setWindowTitle("Favorite Artists")
-        self.setModal(True)
-        self.setMinimumSize(500, 600)
+        self.setModal(True) # type: ignore
+        self.setMinimumSize(500, 500) # Reduced minimum height
         if hasattr(self.parent_app, 'get_dark_theme'):
             self.setStyleSheet(self.parent_app.get_dark_theme())
 
@@ -349,6 +349,7 @@ class FavoriteArtistsDialog(QDialog):
         self.search_input.textChanged.connect(self._filter_artist_list_display)
         main_layout.addWidget(self.search_input)
 
+
         self.artist_list_widget = QListWidget()
         self.artist_list_widget.setStyleSheet("""
             QListWidget::item {
@@ -357,7 +358,14 @@ class FavoriteArtistsDialog(QDialog):
                 padding-bottom: 4px;
             }""")
         main_layout.addWidget(self.artist_list_widget)
+        self.artist_list_widget.setAlternatingRowColors(True)
 
+        # Initially hide list and search until content is loaded
+        self.search_input.setVisible(False)
+        self.artist_list_widget.setVisible(False)
+
+        self.status_label.setText("⏳ Loading favorite artists...") # Initial loading message
+        self.status_label.setAlignment(Qt.AlignCenter)
         combined_buttons_layout = QHBoxLayout()
 
         self.select_all_button = QPushButton("Select All")
@@ -390,6 +398,11 @@ class FavoriteArtistsDialog(QDialog):
         else:
             print(f"[FavArtistsDialog] {message}")
 
+    def _show_content_elements(self, show):
+        """Helper to show/hide content-related widgets."""
+        self.search_input.setVisible(show)
+        self.artist_list_widget.setVisible(show)
+
     def _fetch_favorite_artists(self):
         fav_url = "https://kemono.su/api/v1/account/favorites?type=artist"
         self._logger(f"Attempting to fetch favorite artists from: {fav_url}")
@@ -404,8 +417,10 @@ class FavoriteArtistsDialog(QDialog):
 
         if self.cookies_config['use_cookie'] and not cookies_dict:
             self.status_label.setText("Error: Cookies enabled but could not be loaded. Cannot fetch favorites.")
+            self._show_content_elements(False)
             self._logger("Error: Cookies enabled but could not be loaded.")
             QMessageBox.warning(self, "Cookie Error", "Cookies are enabled, but no valid cookies could be loaded. Please check your cookie settings or file.")
+            self.download_button.setEnabled(False)
             return
 
         try:
@@ -417,6 +432,7 @@ class FavoriteArtistsDialog(QDialog):
 
             if not isinstance(artists_data, list):
                 self.status_label.setText("Error: API did not return a list of artists.")
+                self._show_content_elements(False)
                 self._logger(f"Error: Expected a list from API, got {type(artists_data)}")
                 QMessageBox.critical(self, "API Error", "The favorite artists API did not return the expected data format (list).")
                 return
@@ -435,17 +451,28 @@ class FavoriteArtistsDialog(QDialog):
 
             self.all_fetched_artists.sort(key=lambda x: x['name'].lower())
             self._populate_artist_list_widget()
-            self.status_label.setText(f"{len(self.all_fetched_artists)} favorite artist(s) found.")
-            self.download_button.setEnabled(len(self.all_fetched_artists) > 0)
+
+            if self.all_fetched_artists:
+                self.status_label.setText(f"Found {len(self.all_fetched_artists)} favorite artist(s).")
+                self._show_content_elements(True)
+                self.download_button.setEnabled(True)
+            else:
+                self.status_label.setText("No favorite artists found.")
+                self._show_content_elements(False)
+                self.download_button.setEnabled(False)
 
         except requests.exceptions.RequestException as e:
             self.status_label.setText(f"Error fetching favorites: {e}")
+            self._show_content_elements(False)
             self._logger(f"Error fetching favorites: {e}")
             QMessageBox.critical(self, "Fetch Error", f"Could not fetch favorite artists: {e}")
+            self.download_button.setEnabled(False)
         except Exception as e:
             self.status_label.setText(f"An unexpected error occurred: {e}")
+            self._show_content_elements(False)
             self._logger(f"Unexpected error: {e}")
             QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+            self.download_button.setEnabled(False)
 
     def _populate_artist_list_widget(self, artists_to_display=None):
         self.artist_list_widget.clear()
@@ -498,12 +525,11 @@ class FavoritePostsFetcherThread(QThread):
     progress_bar_update = pyqtSignal(int, int) # value, maximum
     finished = pyqtSignal(list, str) # list of posts, error message (or None)
 
-    def __init__(self, cookies_config, parent_logger_func, parent_get_domain_func):
+    def __init__(self, cookies_config, parent_logger_func): # Removed parent_get_domain_func
         super().__init__()
         self.cookies_config = cookies_config
         self.parent_logger_func = parent_logger_func
-        self.parent_get_domain_func = parent_get_domain_func
-        self.cancellation_event = threading.Event() # For potential future cancellation
+        self.cancellation_event = threading.Event()
 
     def _logger(self, message):
         self.parent_logger_func(f"[FavPostsFetcherThread] {message}")
@@ -553,53 +579,9 @@ class FavoritePostsFetcherThread(QThread):
                 else:
                     self._logger(f"Warning: Skipping favorite post entry due to missing data: {post_entry}")
 
-            unique_creators = {}
-            for post_data in all_fetched_posts_temp:
-                creator_key = (post_data['service'], post_data['creator_id'])
-                if creator_key not in unique_creators:
-                    unique_creators[creator_key] = None
-
-            creator_name_cache_local = {}
-            if unique_creators:
-                self.status_update.emit(f"Found {len(all_fetched_posts_temp)} posts. Fetching {len(unique_creators)} unique creator names...")
-                self.progress_bar_update.emit(0, len(unique_creators)) # Set max for creator name fetching
-
-                fetched_names_count = 0
-                total_unique_creators = len(unique_creators)
-                for (service, creator_id_val) in unique_creators.keys():
-                    if self.cancellation_event.is_set():
-                        self.finished.emit([], "Fetching cancelled.")
-                        return
-                    
-                    creator_api_url = f"https://{self.parent_get_domain_func(service)}/api/v1/{service}/user/{creator_id_val}?o=0"
-                    try:
-                        creator_response = requests.get(creator_api_url, headers=headers, cookies=cookies_dict, timeout=10)
-                        creator_response.raise_for_status()
-                        creator_info_list = creator_response.json()
-                        if isinstance(creator_info_list, list) and creator_info_list:
-                            creator_name_from_api = creator_info_list[0].get("user_name")
-                            creator_name = html.unescape(creator_name_from_api.strip()) if creator_name_from_api else creator_id_val
-                            creator_name_cache_local[(service, creator_id_val)] = creator_name
-                            fetched_names_count += 1
-                            self.status_update.emit(f"Fetched {fetched_names_count}/{total_unique_creators} creator names...")
-                            self.progress_bar_update.emit(fetched_names_count, total_unique_creators)
-                        else:
-                            self._logger(f"Warning: Could not get name for {service}/{creator_id_val}. API response not a list or empty.")
-                            creator_name_cache_local[(service, creator_id_val)] = creator_id_val
-                        time.sleep(0.1) # Be polite
-                    except requests.exceptions.RequestException as e_creator:
-                        self._logger(f"Error fetching name for {service}/{creator_id_val}: {e_creator}")
-                        creator_name_cache_local[(service, creator_id_val)] = creator_id_val # Fallback
-                    except Exception as e_gen_creator:
-                        self._logger(f"Unexpected error fetching name for {service}/{creator_id_val}: {e_gen_creator}")
-                        creator_name_cache_local[(service, creator_id_val)] = creator_id_val # Fallback
-
-            for post_data in all_fetched_posts_temp:
-                post_data['creator_name'] = creator_name_cache_local.get(
-                    (post_data['service'], post_data['creator_id']), post_data['creator_id']
-                )
-
-            all_fetched_posts_temp.sort(key=lambda x: x.get('added_date', ''), reverse=True)
+            # Creator name fetching logic removed.
+            # Sort by service, then creator_id, then date for consistent grouping
+            all_fetched_posts_temp.sort(key=lambda x: (x.get('service','').lower(), x.get('creator_id','').lower(), x.get('added_date', '')), reverse=False)
             self.finished.emit(all_fetched_posts_temp, None)
 
         except requests.exceptions.RequestException as e:
@@ -627,25 +609,27 @@ class PostListItemWidget(QWidget):
         self.layout.addWidget(self.info_label, 1) 
 
         self._setup_display_text()
-
     def _setup_display_text(self):
-        creator_display = self.post_data.get('creator_name', self.post_data.get('creator_id', 'N/A'))
-        post_title_text = self.post_data.get('title', 'Untitled Post')
+        suffix_plain = self.post_data.get('suffix_for_display', "") # Changed from prefix_for_display
+        title_plain = self.post_data.get('title', 'Untitled Post')
         
-        known_char_name = self.parent_dialog._find_known_character_in_title(post_title_text)
-        known_line_text = f"Known - {known_char_name}" if known_char_name else "Known - "
-        
-        service_val = self.post_data.get('service', 'N/A').capitalize()
-        added_date_str = self.post_data.get('added_date', 'N/A')
-        added_date_formatted = added_date_str.split('T')[0] if added_date_str and 'T' in added_date_str else added_date_str
-        details_line_text = f"{service_val} - Added: {added_date_formatted}"
+        # Escape them for HTML display
+        escaped_suffix = html.escape(suffix_plain) # Changed from escaped_prefix
+        escaped_title = html.escape(title_plain)
 
-        line1_html = f"<b>{html.escape(creator_display)} - {html.escape(post_title_text)}</b>"
-        line2_html = html.escape(known_line_text)
-        line3_html = html.escape(details_line_text)
-        
-        display_html = f"{line1_html}<br>{line2_html}<br>{line3_html}"
-        self.info_label.setText(display_html)
+        # Styles
+        p_style_paragraph = "font-size:10.5pt; margin:0; padding:0;" # Base paragraph style (size, margins)
+        title_span_style = "font-weight:bold; color:#E0E0E0;"       # Style for the title part (bold, bright white)
+        suffix_span_style = "color:#999999; font-weight:normal; font-size:9.5pt;" # Style for the suffix (dimmer gray, normal weight, slightly smaller)
+
+        if escaped_suffix:
+            # Title part is bold and bright, suffix part is normal weight and dimmer
+            display_html_content = f"<p style='{p_style_paragraph}'><span style='{title_span_style}'>{escaped_title}</span><span style='{suffix_span_style}'>{escaped_suffix}</span></p>"
+        else:
+            # Only title part
+            display_html_content = f"<p style='{p_style_paragraph}'><span style='{title_span_style}'>{escaped_title}</span></p>"
+
+        self.info_label.setText(display_html_content)
 
     def isChecked(self): return self.checkbox.isChecked()
     def setCheckState(self, state): self.checkbox.setCheckState(state)
@@ -660,11 +644,12 @@ class FavoritePostsDialog(QDialog):
         self.all_fetched_posts = []
         self.selected_posts_data = []
         self.known_names_list_ref = known_names_list_ref # Store reference to global KNOWN_NAMES
+        self.displayable_grouped_posts = {} # For storing posts grouped by artist
         self.fetcher_thread = None # For the worker thread
         
-        self.setWindowTitle("Favorite Posts")
-        self.setModal(True)
-        self.setMinimumSize(600, 600) # Slightly wider for post titles
+        self.setWindowTitle("Favorite Posts") # type: ignore
+        self.setModal(True) # type: ignore
+        self.setMinimumSize(600, 600) # Reduced minimum height
         if hasattr(self.parent_app, 'get_dark_theme'):
             self.setStyleSheet(self.parent_app.get_dark_theme())
 
@@ -695,6 +680,7 @@ class FavoritePostsDialog(QDialog):
                 padding-top: 4px;
                 padding-bottom: 4px;
             }""")
+        self.post_list_widget.setAlternatingRowColors(True)
         main_layout.addWidget(self.post_list_widget)
 
         combined_buttons_layout = QHBoxLayout()
@@ -731,11 +717,10 @@ class FavoritePostsDialog(QDialog):
         self.fetcher_thread = FavoritePostsFetcherThread(
             self.cookies_config, 
             self.parent_app.log_signal.emit, # Pass parent's logger
-            self._get_domain_for_service # Pass method reference
-        )
-        self.fetcher_thread.progress_bar_update.connect(self._set_progress_bar_value)
+        ) # Removed _get_domain_for_service
         self.fetcher_thread.status_update.connect(self.status_label.setText)
         self.fetcher_thread.finished.connect(self._on_fetch_completed)
+        self.fetcher_thread.progress_bar_update.connect(self._set_progress_bar_value) # Connect the missing signal
         self.progress_bar.setVisible(True)
         self.fetcher_thread.start()
 
@@ -757,94 +742,142 @@ class FavoritePostsDialog(QDialog):
 
         self.progress_bar.setVisible(False)
         self.all_fetched_posts = fetched_posts_list
-        self._populate_post_list_widget()
+        self._populate_post_list_widget() # This will now group and display
         self.status_label.setText(f"{len(self.all_fetched_posts)} favorite post(s) found.")
         self.download_button.setEnabled(len(self.all_fetched_posts) > 0)
-
+        
         if self.fetcher_thread:
             self.fetcher_thread.quit()
             self.fetcher_thread.wait()
             self.fetcher_thread = None
 
-
-    def _get_domain_for_service(self, service_name):
-        # Basic heuristic, might need refinement if more domains are supported
-        if service_name and "coomer" in service_name.lower(): # e.g. if service is 'coomer_onlyfans'
-            return "coomer.su" # Or coomer.party
-        return "kemono.su" # Default
-
-    def _find_known_character_in_title(self, post_title):
-        if not post_title or not self.known_names_list_ref:
+    def _find_best_known_name_match_in_title(self, title_raw):
+        if not title_raw or not self.known_names_list_ref:
             return None
-        
-        # Sort by length of primary name to prioritize more specific matches.
-        sorted_known_names = sorted(self.known_names_list_ref, key=lambda x: len(x.get("name", "")), reverse=True)
 
-        for known_entry in sorted_known_names:
-            aliases_to_check = known_entry.get("aliases", [])
-            if not aliases_to_check and known_entry.get("name"):
-                aliases_to_check = [known_entry.get("name")]
+        title_lower = title_raw.lower()
+        best_match_known_name_primary = None
+        longest_match_len = 0
 
-            for alias in aliases_to_check:
-                if not alias:
+        for known_entry in self.known_names_list_ref:
+            aliases_to_check = set()
+            # Add all explicit aliases from the known entry
+            for alias_val in known_entry.get("aliases", []):
+                aliases_to_check.add(alias_val)
+            # For non-group entries, the primary name is also a key alias
+            if not known_entry.get("is_group", False):
+                aliases_to_check.add(known_entry["name"])
+
+            # Sort this entry's aliases by length (longest first)
+            # to prioritize more specific aliases within the same known_entry
+            sorted_aliases_for_entry = sorted(list(aliases_to_check), key=len, reverse=True)
+
+            for alias in sorted_aliases_for_entry:
+                alias_lower = alias.lower()
+                if not alias_lower:
                     continue
-                pattern = r"(?i)\b" + re.escape(alias) + r"\b"
-                if re.search(pattern, post_title):
-                    return known_entry.get("name") 
-        return None
+                
+                # Check for whole word match using regex
+                if re.search(r'\b' + re.escape(alias_lower) + r'\b', title_lower):
+                    if len(alias_lower) > longest_match_len:
+                        longest_match_len = len(alias_lower)
+                        best_match_known_name_primary = known_entry["name"] # Store the primary name
+                    # Since aliases for this entry are sorted by length, first match is the best for this entry
+                    break # Move to the next known_entry
+        return best_match_known_name_primary
 
     def _populate_post_list_widget(self, posts_to_display=None):
         self.post_list_widget.clear()
-        source_list = posts_to_display if posts_to_display is not None else self.all_fetched_posts
-        for post_data in source_list:
-            creator_display = post_data.get('creator_name', post_data.get('creator_id', 'N/A')) # Use creator_name
-            post_title_text = post_data.get('title', 'Untitled Post')
-            # The HTML generation is now inside PostListItemWidget
+        
+        source_list_for_grouping = posts_to_display if posts_to_display is not None else self.all_fetched_posts
 
-            list_item = QListWidgetItem(self.post_list_widget) # Parent it to the list widget
-            custom_widget = PostListItemWidget(post_data, self) # Pass self (FavoritePostsDialog)
-            
-            list_item.setSizeHint(custom_widget.sizeHint()) # Set size hint for the QListWidgetItem
-            list_item.setData(Qt.UserRole, post_data)
-            self.post_list_widget.addItem(list_item)
-            self.post_list_widget.setItemWidget(list_item, custom_widget) # Set the custom widget
+        # Group posts by (service, creator_id)
+        grouped_posts = {}
+        for post in source_list_for_grouping:
+            service = post.get('service', 'unknown_service')
+            creator_id = post.get('creator_id', 'unknown_id')
+            group_key = (service, creator_id) # Use tuple as key
+            if group_key not in grouped_posts:
+                grouped_posts[group_key] = []
+            grouped_posts[group_key].append(post)
+        
+        sorted_group_keys = sorted(grouped_posts.keys(), key=lambda x: (x[0].lower(), x[1].lower()))
+        
+        self.displayable_grouped_posts = {
+            key: sorted(grouped_posts[key], key=lambda p: p.get('added_date', ''), reverse=True)
+            for key in sorted_group_keys
+        }
+        for service, creator_id_val in sorted_group_keys:
+            artist_name = f"{service.capitalize()} / {creator_id_val}" # Display service and ID
+            # Add artist header item
+            artist_header_item = QListWidgetItem(f"🎨 {artist_name}")
+            artist_header_item.setFlags(Qt.NoItemFlags) # Not selectable, not checkable
+            font = artist_header_item.font()
+            font.setBold(True)
+            font.setPointSize(font.pointSize() + 1) # Make it a bit larger
+            artist_header_item.setFont(font)
+            artist_header_item.setForeground(Qt.cyan) # Style for header
+            self.post_list_widget.addItem(artist_header_item)
+
+            # Add post items for this artist
+            for post_data in self.displayable_grouped_posts[(service, creator_id_val)]:
+                post_title_raw = post_data.get('title', 'Untitled Post')
+                
+                # Find if a known name is in the title and prepare prefix
+                found_known_name_primary = self._find_best_known_name_match_in_title(post_title_raw)
+                
+                plain_text_title_for_list_item = post_title_raw
+                if found_known_name_primary:
+                    suffix_text = f" [Known - {found_known_name_primary}]" # Changed to suffix format
+                    post_data['suffix_for_display'] = suffix_text # Store as suffix_for_display
+                    plain_text_title_for_list_item = post_title_raw + suffix_text # Append suffix
+                else:
+                    post_data.pop('suffix_for_display', None) # Ensure suffix key is removed if no match
+                
+                list_item = QListWidgetItem(self.post_list_widget) # Parent it
+                list_item.setText(plain_text_title_for_list_item) # Use plain text (possibly prefixed)
+                list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+                list_item.setCheckState(Qt.Unchecked)
+                list_item.setData(Qt.UserRole, post_data) # Store full data for this post
+                self.post_list_widget.addItem(list_item)
 
     def _filter_post_list_display(self):
         search_text = self.search_input.text().lower().strip()
         if not search_text:
-            self._populate_post_list_widget()
+            self._populate_post_list_widget(self.all_fetched_posts) # Repopulate with all, which will group
             return
         
-        filtered_posts = [
-            post for post in self.all_fetched_posts
-            if search_text in post['title'].lower() or \
-               search_text in post.get('creator_name', post.get('creator_id', '')).lower() or \
-               search_text in post['service'].lower()
-        ]
-        self._populate_post_list_widget(filtered_posts)
+        filtered_posts_to_group = []
+        for post in self.all_fetched_posts:
+            # Check if search text matches post title, creator name, creator ID, or service
+            matches_post_title = search_text in post.get('title', '').lower()
+            matches_creator_name = False # Creator name is no longer fetched
+            matches_creator_id = search_text in post.get('creator_id', '').lower()
+            matches_service = search_text in post['service'].lower()
+            
+            if matches_post_title or matches_creator_name or matches_creator_id or matches_service:
+                filtered_posts_to_group.append(post)
+        
+        self._populate_post_list_widget(filtered_posts_to_group) # Repopulate with filtered, which will group
 
     def _select_all_items(self):
         for i in range(self.post_list_widget.count()):
             item = self.post_list_widget.item(i)
-            widget = self.post_list_widget.itemWidget(item)
-            if widget and hasattr(widget, 'setCheckState'):
-                widget.setCheckState(Qt.Checked)
+            if item and item.flags() & Qt.ItemIsUserCheckable: # Only check actual post items
+                item.setCheckState(Qt.Checked)
 
     def _deselect_all_items(self):
         for i in range(self.post_list_widget.count()):
             item = self.post_list_widget.item(i)
-            widget = self.post_list_widget.itemWidget(item)
-            if widget and hasattr(widget, 'setCheckState'):
-                widget.setCheckState(Qt.Unchecked)
+            if item and item.flags() & Qt.ItemIsUserCheckable: # Only uncheck actual post items
+                item.setCheckState(Qt.Unchecked)
 
     def _accept_selection_action(self):
         self.selected_posts_data = []
         for i in range(self.post_list_widget.count()):
             item = self.post_list_widget.item(i)
-            widget = self.post_list_widget.itemWidget(item) # Get the custom widget
-            if widget and hasattr(widget, 'isChecked') and widget.isChecked():
-                # Retrieve post_data from the custom widget or the item's UserRole
-                post_data_for_download = widget.get_post_data() if hasattr(widget, 'get_post_data') else item.data(Qt.UserRole)
+            if item and item.checkState() == Qt.Checked:
+                post_data_for_download = item.data(Qt.UserRole)
                 self.selected_posts_data.append(post_data_for_download)
         
         if not self.selected_posts_data:
@@ -854,6 +887,7 @@ class FavoritePostsDialog(QDialog):
 
     def get_selected_posts(self):
         return self.selected_posts_data
+
 
 class HelpGuideDialog(QDialog):
     """A multi-page dialog for displaying the feature guide."""
@@ -1543,7 +1577,19 @@ class DownloaderApp(QWidget):
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
         self.log_signal.emit("ℹ️ 'Skip Current File' button has been removed.")
         if hasattr(self, 'character_input'):
-            self.character_input.setToolTip("Names, comma-separated. Group aliases: (alias1, alias2, alias3) becomes folder name 'alias1 alias2 alias3' (after cleaning).\nAll names in the group are used as aliases for matching.\nE.g., yor, (Boa, Hancock, Snake Princess)")
+            self.character_input.setToolTip("Enter character names (comma-separated). Supports advanced grouping and affects folder naming "
+    "if 'Separate Folders' is enabled.\n\n"
+    "Examples:\n"
+    "- Nami → Matches 'Nami', creates folder 'Nami'.\n"
+    "- (Ulti, Vivi) → Matches either, folder 'Ulti Vivi', adds both to Known.txt separately.\n"
+    "- (Boa, Hancock)~ → Matches either, folder 'Boa Hancock', adds as one group in Known.txt.\n\n"
+    "Names are treated as aliases for matching.\n\n"
+    "Filter Modes (button cycles):\n"
+    "- Files: Filters by filename.\n"
+    "- Title: Filters by post title.\n"
+    "- Both: Title first, then filename.\n"
+    "- Comments (Beta): Filename first, then post comments."
+            )
         self.log_signal.emit(f"ℹ️ Manga filename style loaded: '{self.manga_filename_style}'")
         self.log_signal.emit(f"ℹ️ Skip words scope loaded: '{self.skip_words_scope}'")
         self.log_signal.emit(f"ℹ️ Character filter scope set to default: '{self.char_filter_scope}'")
@@ -1949,9 +1995,18 @@ class DownloaderApp(QWidget):
         self.character_input = QLineEdit()
         self.character_input.setPlaceholderText("e.g., Tifa, Aerith, (Cloud, Zack)")
         self.character_input.setToolTip(
-            self._get_tooltip_for_character_input()
+            "Enter character names, comma-separated (e.g., Tifa, Aerith).\n"
+            "Group aliases for a combined folder name: (alias1, alias2, alias3) becomes folder 'alias1 alias2 alias3'.\n"
+            "All names in the group are used as aliases for matching content.\n\n"
+            "The 'Filter: [Type]' button next to this input cycles how this filter applies:\n"
+            "- Filter: Files: Checks individual filenames. Only matching files are downloaded.\n"
+            "- Filter: Title: Checks post titles. All files from a matching post are downloaded.\n"
+            "- Filter: Both: Checks post title first. If no match, then checks filenames.\n"
+            "- Filter: Comments (Beta): Checks filenames first. If no match, then checks post comments.\n\n"
+            "This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled."
         )
         char_input_and_button_layout.addWidget(self.character_input, 3)
+
 
         self.char_filter_scope_toggle_button = QPushButton()
         self._update_char_filter_scope_button_text()
@@ -1998,13 +2053,17 @@ class DownloaderApp(QWidget):
         skip_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
         skip_input_and_button_layout.setSpacing(10)
         self.skip_words_input = QLineEdit()
+        # Updated tooltip for skip_words_input
         self.skip_words_input.setToolTip(
-            "Enter words, comma-separated, to skip downloading certain files or posts.\n"
-            "The 'Scope' button determines if this applies to file names, post titles, or both.\n"
-            "Example: WIP, sketch, preview, text post"
+            "Enter words, comma-separated, to skip downloading certain content (e.g., WIP, sketch, preview).\n\n"
+            "The 'Scope: [Type]' button next to this input cycles how this filter applies:\n"
+            "- Scope: Files: Skips individual files if their names contain any of these words.\n"
+            "- Scope: Posts: Skips entire posts if their titles contain any of these words.\n"
+            "- Scope: Both: Applies both (post title first, then individual files if post title is okay)."
         )
         self.skip_words_input.setPlaceholderText("e.g., WM, WIP, sketch, preview")
         skip_input_and_button_layout.addWidget(self.skip_words_input, 1)
+
         self.skip_scope_toggle_button = QPushButton()
         self._update_skip_scope_button_text()
         self.skip_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
