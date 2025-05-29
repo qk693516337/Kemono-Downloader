@@ -1630,7 +1630,6 @@ class DownloaderApp(QWidget):
         self.log_view_stack = None
         self.current_log_view = 'progress'
 
-        self.language_settings_button = None
         self.link_search_input = None
         self.link_search_button = None
         self.export_links_button = None
@@ -1764,10 +1763,6 @@ class DownloaderApp(QWidget):
         if hasattr(self, 'favorite_mode_posts_button'): # New connection
             self.favorite_mode_posts_button.clicked.connect(self._show_favorite_posts_dialog)
         if hasattr(self, 'favorite_scope_toggle_button'):
-            self.favorite_scope_toggle_button.clicked.connect(self._cycle_favorite_scope) # Keep this connection
-
-        if hasattr(self, 'language_settings_button') and self.language_settings_button:
-            self.language_settings_button.clicked.connect(self._open_language_settings_dialog)
             self.favorite_scope_toggle_button.clicked.connect(self._cycle_favorite_scope)
 
     def _on_character_input_changed_live(self, text):
@@ -2426,16 +2421,10 @@ class DownloaderApp(QWidget):
         self.known_names_help_button.setToolTip("Open the application feature guide.")
         self.known_names_help_button.clicked.connect(self._show_feature_guide)
 
-        self.language_settings_button = QPushButton("⚙️")
-        self.language_settings_button.setFixedWidth(35) # Keep fixed width
-        self.language_settings_button.setToolTip("Open application settings.") # Update tooltip
-        # self.language_settings_button.clicked.connect(self._open_language_settings_dialog) # Connection moved to _connect_signals
-
 
         char_manage_layout.addWidget(self.add_to_filter_button, 0)
         char_manage_layout.addWidget(self.delete_char_button, 0)
         char_manage_layout.addWidget(self.known_names_help_button, 0)
-        char_manage_layout.addWidget(self.language_settings_button, 0)
         left_layout.addLayout(char_manage_layout)
         left_layout.addStretch(0)
 
@@ -5769,11 +5758,6 @@ class DownloaderApp(QWidget):
             self.log_signal.emit(f"⚠️ Failed to initiate download for '{item_display_name}'. Skipping this item in queue.")
             # Simulate a "cancelled" finish for this item to process the next or end the queue.
             self.download_finished(total_downloaded=0, total_skipped=1, cancelled_by_user=True, kept_original_names_list=[])
-
-    def _open_language_settings_dialog(self):
-        self.log_signal.emit("⚙️ Language settings button clicked (dialog not yet implemented).")
-        QMessageBox.information(self, "Language Settings", "Language settings dialog will be implemented here.")
-
 
 if __name__ == '__main__':
     import traceback
