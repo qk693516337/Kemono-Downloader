@@ -153,10 +153,13 @@ def clean_filename(name):
     return final_name if final_name else "untitled_file"
 def strip_html_tags(html_text):
     if not html_text: return ""
-    text = html.unescape(html_text)
-    clean_pattern = re.compile('<.*?>')
-    cleaned_text = re.sub(clean_pattern, '', text)
-    return cleaned_text.strip()
+    text = html.unescape(str(html_text)) # Ensure input is a string
+    # Replace HTML tags with a single space
+    text_after_tag_removal = re.sub(r'<[^>]+>', ' ', text)
+    # Replace multiple whitespace characters (including newlines, tabs, etc. that are now spaces)
+    # with a single space. Also, strip leading/trailing whitespace from the final result.
+    cleaned_text = re.sub(r'\s+', ' ', text_after_tag_removal).strip()
+    return cleaned_text
 def extract_folder_name_from_title(title, unwanted_keywords):
     if not title: return 'Uncategorized'
     title_lower = title.lower()
@@ -558,7 +561,7 @@ def get_link_platform(url):
 class PostProcessorSignals(QObject):
     progress_signal = pyqtSignal(str)
     file_download_status_signal = pyqtSignal(bool)
-    external_link_signal = pyqtSignal(str, str, str, str)
+    external_link_signal = pyqtSignal(str, str, str, str, str) # Added decryption_key (str)
     file_progress_signal = pyqtSignal(str, object)
     missed_character_post_signal = pyqtSignal(str, str) # New: post_title, reason
 class PostProcessorWorker:
@@ -1211,6 +1214,8 @@ class PostProcessorWorker:
         if (self.show_external_links or self.extract_links_only) and post_content_html: # type: ignore
             if self._check_pause(f"External link extraction for post {post_id}"): return 0, num_potential_files_in_post, [], []
             try:
+                # Regex for typical Mega decryption keys (43 or 22 chars, alphanumeric + hyphen/underscore)
+                mega_key_pattern = re.compile(r'\b([a-zA-Z0-9_-]{43}|[a-zA-Z0-9_-]{22})\b')
                 unique_links_data = {} 
                 for match in link_pattern.finditer(post_content_html):
                     link_url = match.group(1).strip()
@@ -1226,10 +1231,29 @@ class PostProcessorWorker:
                 links_emitted_count = 0
                 scraped_platforms = {'kemono', 'coomer', 'patreon'} 
                 for link_url, link_text in unique_links_data.items():
-                     platform = get_link_platform(link_url)
-                     if platform not in scraped_platforms: 
-                         self._emit_signal('external_link', post_title, link_text, link_url, platform)
-                         links_emitted_count +=1
+                    platform = get_link_platform(link_url)
+                    decryption_key_found = ""
+                    if platform == 'mega':
+                        # 1. Check if key is in the URL fragment
+                        parsed_mega_url = urlparse(link_url)
+                        if parsed_mega_url.fragment:
+                            potential_key_from_fragment = parsed_mega_url.fragment.split('!')[-1] # Handle cases like #!key or #key
+                            if mega_key_pattern.fullmatch(potential_key_from_fragment):
+                                decryption_key_found = potential_key_from_fragment
+
+                        # 2. If not in fragment, search in link text
+                        if not decryption_key_found and link_text:
+                            key_match_in_text = mega_key_pattern.search(link_text)
+                            if key_match_in_text:
+                                decryption_key_found = key_match_in_text.group(1)
+                        # 3. If still not found, search the whole post content (if extracting links only, as it's more critical)
+                        if not decryption_key_found and self.extract_links_only and post_content_html:
+                            key_match_in_content = mega_key_pattern.search(strip_html_tags(post_content_html)) # Search cleaned content
+                            if key_match_in_content:
+                                decryption_key_found = key_match_in_content.group(1)
+                    if platform not in scraped_platforms:
+                        self._emit_signal('external_link', post_title, link_text, link_url, platform, decryption_key_found or "")
+                        links_emitted_count +=1
                 if links_emitted_count > 0: self.logger(f"   🔗 Found {links_emitted_count} potential external link(s) in post content.")
             except Exception as e: self.logger(f"⚠️ Error parsing post content for links: {e}\n{traceback.format_exc(limit=2)}")
         if self.extract_links_only: 
@@ -1479,8 +1503,8 @@ class DownloadThread(QThread):
     progress_signal = pyqtSignal(str) # Already QObject, no need to change
     add_character_prompt_signal = pyqtSignal(str)
     file_download_status_signal = pyqtSignal(bool)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    external_link_signal = pyqtSignal(str, str, str, str)
+    finished_signal = pyqtSignal(int, int, bool, list) # total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list
+    external_link_signal = pyqtSignal(str, str, str, str, str) # post_title, link_text, link_url, platform, decryption_key
     file_progress_signal = pyqtSignal(str, object)
     retryable_file_failed_signal = pyqtSignal(list) # New: list of retry_details dicts
     missed_character_post_signal = pyqtSignal(str, str) # New: post_title, reason

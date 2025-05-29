@@ -71,7 +71,7 @@ except ImportError as e:
     class _MockPostProcessorSignals(QObject):
         progress_signal = pyqtSignal(str)
         file_download_status_signal = pyqtSignal(bool)
-        external_link_signal = pyqtSignal(str, str, str, str)
+        external_link_signal = pyqtSignal(str, str, str, str, str) # Added decryption_key
         file_progress_signal = pyqtSignal(str, object)
         missed_character_post_signal = pyqtSignal(str, str)
         def __init__(self, parent=None):
@@ -231,6 +231,86 @@ class ConfirmAddAllDialog(QDialog):
         if isinstance(self.user_choice, list) and not self.user_choice:
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
+
+class CookieHelpDialog(QDialog):
+    """A dialog to explain how to get a cookies.txt file."""
+    # Define constants for user choices
+    CHOICE_PROCEED_WITHOUT_COOKIES = 1
+    CHOICE_CANCEL_DOWNLOAD = 2
+    CHOICE_OK_INFO_ONLY = 3
+
+    def __init__(self, parent=None, offer_download_without_option=False):
+        super().__init__(parent)
+        self.setWindowTitle("Cookie File Instructions")
+        self.setModal(True)
+        self.offer_download_without_option = offer_download_without_option
+        self.user_choice = None # Will be set by button actions
+
+        # Main layout
+        main_layout = QVBoxLayout(self)
+
+        instruction_text = """
+        <p>To use cookies, you typically need a <b>cookies.txt</b> file from your browser.</p>
+        <p><b>How to get cookies.txt:</b></p>
+        <ol>
+            <li>Install the 'Get cookies.txt LOCALLY' extension for your Chrome-based browser:
+                <br><a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" style="color: #87CEEB;">Get cookies.txt LOCALLY on Chrome Web Store</a>
+            </li>
+            <li>Go to the website (e.g., kemono.su or coomer.su) and log in if necessary.</li>
+            <li>Click the extension's icon in your browser toolbar.</li>
+            <li>Click an 'Export' button (e.g., "Export As", "Export cookies.txt" - the exact wording might vary depending on the extension version).</li>
+            <li>Save the downloaded <code>cookies.txt</code> file to your computer.</li>
+            <li>In this application:
+                <ul>
+                    <li>Ensure the 'Use Cookie' checkbox is checked.</li>
+                    <li>Click the 'Browse...' button next to the cookie text field.</li>
+                    <li>Select the <code>cookies.txt</code> file you just saved.</li>
+                </ul>
+            </li>
+        </ol>
+        <p>Alternatively, some extensions might allow you to copy the cookie string directly. If so, you can paste it into the text field instead of browsing for a file.</p>
+        """
+        info_label = QLabel(instruction_text)
+        info_label.setTextFormat(Qt.RichText)
+        info_label.setOpenExternalLinks(True)
+        info_label.setWordWrap(True)
+        main_layout.addWidget(info_label)
+
+        # Button layout
+        button_layout = QHBoxLayout()
+        if self.offer_download_without_option:
+            button_layout.addStretch(1) # Push both buttons to the right
+
+            self.download_without_button = QPushButton("Download without Cookies")
+            self.download_without_button.clicked.connect(self._proceed_without_cookies)
+            button_layout.addWidget(self.download_without_button)
+
+            self.cancel_button = QPushButton("Cancel Download")
+            self.cancel_button.clicked.connect(self._cancel_download)
+            button_layout.addWidget(self.cancel_button)
+        else:
+            button_layout.addStretch(1) # Push OK to the right
+            self.ok_button = QPushButton("OK")
+            self.ok_button.clicked.connect(self._ok_info_only)
+            button_layout.addWidget(self.ok_button)
+
+        main_layout.addLayout(button_layout)
+
+        if parent and hasattr(parent, 'get_dark_theme'):
+            self.setStyleSheet(parent.get_dark_theme())
+        self.setMinimumWidth(500)
+
+    def _proceed_without_cookies(self):
+        self.user_choice = self.CHOICE_PROCEED_WITHOUT_COOKIES
+        self.accept() # or self.done(QDialog.Accepted)
+
+    def _cancel_download(self):
+        self.user_choice = self.CHOICE_CANCEL_DOWNLOAD
+        self.reject() # or self.done(QDialog.Rejected)
+
+    def _ok_info_only(self):
+        self.user_choice = self.CHOICE_OK_INFO_ONLY
+        self.accept() # or self.done(QDialog.Accepted)
 
 class KnownNamesFilterDialog(QDialog):
     """A dialog to select names from Known.txt to add to the filter input."""
@@ -414,15 +494,16 @@ class FavoriteArtistsDialog(QDialog):
             self.cookies_config['app_base_dir'],
             self._logger
         )
-
         if self.cookies_config['use_cookie'] and not cookies_dict:
             self.status_label.setText("Error: Cookies enabled but could not be loaded. Cannot fetch favorites.")
             self._show_content_elements(False)
-            self._logger("Error: Cookies enabled but could not be loaded.")
-            QMessageBox.warning(self, "Cookie Error", "Cookies are enabled, but no valid cookies could be loaded. Please check your cookie settings or file.")
+            self._logger("Error: Cookies enabled but could not be loaded. Showing help dialog.")
+            
+            cookie_help_dialog = CookieHelpDialog(self)
+            cookie_help_dialog.exec_()
+            
             self.download_button.setEnabled(False)
             return
-
         try:
             headers = {'User-Agent': 'Mozilla/5.0'}
             response = requests.get(fav_url, headers=headers, cookies=cookies_dict, timeout=20)
@@ -549,7 +630,7 @@ class FavoritePostsFetcherThread(QThread):
         )
 
         if self.cookies_config['use_cookie'] and not cookies_dict:
-            self.finished.emit([], "Error: Cookies enabled but could not be loaded.")
+            self.finished.emit([], "COOKIES_REQUIRED_BUT_NOT_FOUND")
             return
 
         try:
@@ -734,12 +815,18 @@ class FavoritePostsDialog(QDialog):
 
     def _on_fetch_completed(self, fetched_posts_list, error_msg):
         if error_msg:
-            self.status_label.setText(error_msg)
-            self._logger(error_msg) # Log to main app log
-            QMessageBox.critical(self, "Fetch Error", error_msg)
-            # Keep download button disabled or handle as appropriate
+            if error_msg == "COOKIES_REQUIRED_BUT_NOT_FOUND":
+                self.status_label.setText("Error: Cookies are required for favorite posts but could not be loaded.")
+                self._logger("Error: Cookies required for favorite posts but not found. Showing help dialog.")
+                cookie_help_dialog = CookieHelpDialog(self)
+                cookie_help_dialog.exec_()
+                self.download_button.setEnabled(False) # Ensure it's disabled
+            else:
+                self.status_label.setText(error_msg)
+                self._logger(error_msg) # Log to main app log
+                QMessageBox.critical(self, "Fetch Error", error_msg)
+                self.download_button.setEnabled(False)
             return
-
         self.progress_bar.setVisible(False)
         self.all_fetched_posts = fetched_posts_list
         self._populate_post_list_widget() # This will now group and display
@@ -1459,8 +1546,8 @@ class DownloaderApp(QWidget):
     log_signal = pyqtSignal(str)
     add_character_prompt_signal = pyqtSignal(str)
     overall_progress_signal = pyqtSignal(int, int)
-    finished_signal = pyqtSignal(int, int, bool, list)
-    external_link_signal = pyqtSignal(str, str, str, str)
+    finished_signal = pyqtSignal(int, int, bool, list) # total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list
+    external_link_signal = pyqtSignal(str, str, str, str, str) # post_title, link_text, link_url, platform, decryption_key
     file_progress_signal = pyqtSignal(str, object)
 
 
@@ -2648,8 +2735,8 @@ class DownloaderApp(QWidget):
         multi_thread_active = fetcher_active or pool_has_active_tasks
         return single_thread_active or multi_thread_active
 
-    def handle_external_link_signal(self, post_title, link_text, link_url, platform):
-        link_data = (post_title, link_text, link_url, platform)
+    def handle_external_link_signal(self, post_title, link_text, link_url, platform, decryption_key):
+        link_data = (post_title, link_text, link_url, platform, decryption_key)
         self.external_link_queue.append(link_data)
         if self.radio_only_links and self.radio_only_links.isChecked():
             self.extracted_links_cache.append(link_data)
@@ -2682,13 +2769,16 @@ class DownloaderApp(QWidget):
 
 
     def _display_and_schedule_next(self, link_data):
-        post_title, link_text, link_url, platform = link_data
+        post_title, link_text, link_url, platform, decryption_key = link_data
         is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
 
         max_link_text_len = 35
         display_text = link_text[:max_link_text_len].strip() + "..." if len(link_text) > max_link_text_len else link_text
         formatted_link_info = f"{display_text} - {link_url} - {platform}"
         separator = "-" * 45
+
+        if decryption_key:
+            formatted_link_info += f" (Decryption Key: {decryption_key})"
 
         if is_only_links_mode:
             if post_title != self._current_link_post_title:
@@ -2916,13 +3006,15 @@ class DownloaderApp(QWidget):
         current_title_for_display = None
         separator = "-" * 45
 
-        for post_title, link_text, link_url, platform in self.extracted_links_cache:
+        for post_title, link_text, link_url, platform, decryption_key in self.extracted_links_cache:
             matches_search = (
                 not search_term or
                 search_term in link_text.lower() or
                 search_term in link_url.lower() or
-                search_term in platform.lower()
+                search_term in platform.lower() or
+                (decryption_key and search_term in decryption_key.lower())
             )
+
             if matches_search:
                 if post_title != current_title_for_display:
                     self.main_log_output.insertHtml("<br>" + separator + "<br>")
@@ -2933,6 +3025,8 @@ class DownloaderApp(QWidget):
                 max_link_text_len = 35
                 display_text = link_text[:max_link_text_len].strip() + "..." if len(link_text) > max_link_text_len else link_text
                 formatted_link_info = f"{display_text} - {link_url} - {platform}"
+                if decryption_key:
+                    formatted_link_info += f" (Decryption Key: {decryption_key})"
                 self.main_log_output.append(formatted_link_info)
 
         if self.main_log_output.toPlainText().strip():
@@ -2956,13 +3050,16 @@ class DownloaderApp(QWidget):
                 with open(filepath, 'w', encoding='utf-8') as f:
                     current_title_for_export = None
                     separator = "-" * 60 + "\n"
-                    for post_title, link_text, link_url, platform in self.extracted_links_cache:
+                    for post_title, link_text, link_url, platform, decryption_key in self.extracted_links_cache:
                         if post_title != current_title_for_export:
                             if current_title_for_export is not None:
                                 f.write("\n" + separator + "\n")
                             f.write(f"Post Title: {post_title}\n\n")
                             current_title_for_export = post_title
-                        f.write(f"  {link_text} - {link_url} - {platform}\n")
+                        line_to_write = f"  {link_text} - {link_url} - {platform}"
+                        if decryption_key:
+                            line_to_write += f" (Decryption Key: {decryption_key})"
+                        f.write(line_to_write + "\n")
                 self.log_signal.emit(f"✅ Links successfully exported to: {filepath}")
                 QMessageBox.information(self, "Export Successful", f"Links exported to:\n{filepath}")
             except Exception as e:
@@ -3665,7 +3762,35 @@ class DownloaderApp(QWidget):
         use_cookie_from_checkbox = self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False
         app_base_dir_for_cookies = os.path.dirname(self.config_file) # Directory of Known.txt
         cookie_text_from_input = self.cookie_text_input.text().strip() if hasattr(self, 'cookie_text_input') and use_cookie_from_checkbox else ""
+        
+        use_cookie_for_this_run = use_cookie_from_checkbox # Initialize with checkbox state
         selected_cookie_file_path_for_backend = self.selected_cookie_filepath if use_cookie_from_checkbox and self.selected_cookie_filepath else None
+
+        if use_cookie_from_checkbox and not direct_api_url: # Don't show for individual items in favorite queue if they fail this check
+            # Perform an early check for cookies if 'Use Cookie' is checked for the main UI interaction
+            # The actual cookies for download/API calls will be prepared by the backend.
+            # This is for proactive UI feedback.
+            temp_cookies_for_check = prepare_cookies_for_request(
+                use_cookie_for_this_run, # Use the potentially modified flag
+                cookie_text_from_input,
+                selected_cookie_file_path_for_backend,
+                app_base_dir_for_cookies,
+                lambda msg: self.log_signal.emit(f"[UI Cookie Check] {msg}")
+            )
+            if temp_cookies_for_check is None:
+                cookie_dialog = CookieHelpDialog(self, offer_download_without_option=True)
+                dialog_exec_result = cookie_dialog.exec_()
+
+                if cookie_dialog.user_choice == CookieHelpDialog.CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result == QDialog.Accepted:
+                    self.log_signal.emit("ℹ️ User chose to download without cookies for this session.")
+                    use_cookie_for_this_run = False # Override for this run
+                elif cookie_dialog.user_choice == CookieHelpDialog.CHOICE_CANCEL_DOWNLOAD or dialog_exec_result == QDialog.Rejected:
+                    self.log_signal.emit("❌ Download cancelled by user at cookie prompt.")
+                    return False
+                else: # Any other case, including closing the dialog via 'X' button
+                    self.log_signal.emit("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
+                    return False
+
         current_skip_words_scope = self.get_skip_words_scope()
         manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
         
@@ -4072,7 +4197,7 @@ class DownloaderApp(QWidget):
             'selected_cookie_file': selected_cookie_file_path_for_backend, # Pass selected cookie file
             'manga_global_file_counter_ref': manga_global_file_counter_ref_for_thread, # Pass new counter            
             'app_base_dir': app_base_dir_for_cookies, # Pass app base dir
-            'use_cookie': use_cookie_from_checkbox, # Pass cookie setting
+            'use_cookie': use_cookie_for_this_run, # Pass the potentially modified cookie setting
         }
 
         args_template['override_output_dir'] = override_output_dir # Pass override dir in template
@@ -5514,7 +5639,12 @@ class DownloaderApp(QWidget):
             if selected_artists:
                 if len(selected_artists) > 1:
                     display_names = ", ".join([artist['name'] for artist in selected_artists])
-                    self.link_input.setText(display_names)
+                    # For multiple artists, we don't set the link_input as it's confusing.
+                    # The queue will handle individual URLs.
+                    # self.link_input.setText(display_names) # Avoid setting this
+                    if self.link_input: # Clear it if it was showing a single URL before
+                        self.link_input.clear()
+                        self.link_input.setPlaceholderText(f"{len(selected_artists)} favorite artists selected for download queue.")
                     self.log_signal.emit(f"ℹ️ Multiple favorite artists selected. Displaying names: {display_names}")
                 elif len(selected_artists) == 1:
                     self.link_input.setText(selected_artists[0]['url']) # Show the single URL
@@ -5544,6 +5674,20 @@ class DownloaderApp(QWidget):
             'app_base_dir': self.app_base_dir
         }
         global KNOWN_NAMES # Ensure we have access to the global
+
+        # Perform cookie check before showing the FavoritePostsDialog if cookies are enabled
+        if cookies_config['use_cookie']:
+            temp_cookies_for_check = prepare_cookies_for_request(
+                cookies_config['use_cookie'],
+                cookies_config['cookie_text'],
+                cookies_config['selected_cookie_file'],
+                cookies_config['app_base_dir'],
+                lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}")
+            )
+            if temp_cookies_for_check is None:
+                cookie_help_dialog = CookieHelpDialog(self)
+                cookie_help_dialog.exec_()
+                return # Don't proceed to show FavoritePostsDialog if cookies are needed but not found
 
         dialog = FavoritePostsDialog(self, cookies_config, KNOWN_NAMES) # Pass KNOWN_NAMES
         if dialog.exec_() == QDialog.Accepted:
