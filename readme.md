@@ -17,12 +17,12 @@
     <td align="center">
       <img src="Read/Read2.png" alt="Settings Tab" width="400"/>
       <br>
-      <strong>Manga/comic mode </strong>
+      <strong>Single Post</strong>
     </td>
     <td align="center">
       <img src="Read/Read3.png" alt="Settings Tab" width="400"/>
       <br>
-      <strong>Singl Post</strong>
+      <strong>Manga/Comic Mode</strong>
     </td>
     <td align="center">
     </td>
