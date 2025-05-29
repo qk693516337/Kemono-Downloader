@@ -1,9 +1,33 @@
 <h1 align="center">Kemono Downloader v4.2.0</h1>
 
-<div align="center">
-  <img src="https://github.com/Yuvi9587/Kemono-Downloader/blob/main/Read.png" alt="Kemono Downloader"/>
-</div>
-
+<table align="center">
+  <tr>
+    <td align="center">
+      <img src="Read/Read.png" alt="Post Downloader Tab" width="400"/>
+      <br>
+      <strong>Default</strong>
+    </td>
+    <td align="center">
+      <img src="Read/Read1.png" alt="Creator Downloader Tab" width="400"/>
+      <br>
+      <strong>Favorite mode</strong>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="Read/Read2.png" alt="Settings Tab" width="400"/>
+      <br>
+      <strong>Manga/comic mode </strong>
+    </td>
+    <td align="center">
+      <img src="Read/Read3.png" alt="Settings Tab" width="400"/>
+      <br>
+      <strong>Singl Post</strong>
+    </td>
+    <td align="center">
+    </td>
+  </tr>
+</table>
 ---
 
 A powerful, feature-rich GUI application for downloading content from **[Kemono.su](https://kemono.su)** and **[Coomer.party](https://coomer.party)**.  
