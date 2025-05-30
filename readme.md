@@ -30,412 +30,226 @@
 </table>
 ---
 
-A powerful, feature-rich GUI application for downloading content from **[Kemono.su](https://kemono.su)** and **[Coomer.party](https://coomer.party)**.  
-Built with **PyQt5**, this tool is ideal for users who want deep filtering, customizable folder structures, efficient downloads, and intelligent automation — all within a modern, user-friendly graphical interface.
+A powerful, feature-rich GUI application for downloading content from **[Kemono.su](https://kemono.su)** (and its mirrors like kemono.party) and **[Coomer.party](https://coomer.party)** (and its mirrors like coomer.su).
+Built with PyQt5, this tool is designed for users who want deep filtering capabilities, customizable folder structures, efficient downloads, and intelligent automation, all within a modern and user-friendly graphical interface.
+
+*This v5.0.0 release marks a significant feature milestone. Future updates are expected to be less frequent, focusing on maintenance and minor refinements.*
 
 ---
 
-## 🚀 What's New in v4.2.0? - Favorite Mode & UI Enhancements!
+## What's New in v5.0.0?
 
-Version 4.2.0 introduces the highly anticipated **Favorite Mode**, allowing you to directly download content from artists you've favorited on Kemono.su. This update also includes several UI tweaks for a smoother experience.
+Version 5.0.0 is a major update, introducing comprehensive new features and refining existing ones for a more powerful and streamlined experience:
 
-### ⭐ Favorite Mode: Download Your Kemono Favorites
+### ⭐ Favorite Mode (Artists & Posts)
+-   **Direct Downloads from Your Kemono.su Favorites:**
+    -   Enable via the "**⭐ Favorite Mode**" checkbox.
+    -   The UI adapts: URL input is replaced, and action buttons change to "**🖼️ Favorite Artists**" and "**📄 Favorite Posts**".
+    -   "**🍪 Use Cookie**" is automatically enabled and required.
+-   **Favorite Artists Dialog:** Fetches and lists your favorited artists. Select one or more to queue for download.
+-   **Favorite Posts Dialog:** Fetches and lists your favorited posts, grouped by artist. Includes search, selection, and known name highlighting in post titles.
+-   **Flexible Download Scopes for Favorites:**
+    -   `Scope: Selected Location`: Downloads all selected favorites into the main "Download Location".
+    -   `Scope: Artist Folders`: Creates a subfolder for each artist within the main "Download Location".
+-   Standard filters (character, skip words, file type) apply to content downloaded via Favorite Mode.
 
--   **Easy Access to Your Favorites:** A new "**⭐ Favorite Mode**" checkbox (located next to the "🔗 Only Links" radio button) activates this feature.
--   **Dedicated Workflow:**
-    -   When enabled, the standard URL input is replaced with a message indicating Favorite Mode is active.
-    -   The main action buttons change to "**🖼️ Favorite Artists**" and "**📄 Favorite Posts**" (Note: "Favorite Posts" functionality is planned for a future release).
-    -   The "**🍪 Use Cookie**" option is automatically enabled and locked, as cookies are essential for fetching your favorites from Kemono.su.
--   **🖼️ Favorite Artists Dialog:**
-    -   Clicking the "**🖼️ Favorite Artists**" button opens a new dialog.
-    -   This dialog fetches and displays a list of all artists you have favorited on Kemono.su.
-    -   You can search, select one or multiple artists, and then initiate downloads for their content.
--   **🎯 Flexible Download Scopes:** A new toggle button, "**Scope: [Selected Location/Artist Folders]**", appears in Favorite Mode, allowing you to choose how the selected artists' content is organized:
-    -   **`Scope: Selected Location` (Default):** All content from the selected favorite artists will be downloaded into the main "Download Location" you've set in the UI. Filters (character, skip words, file type) will apply globally to all downloaded content.
-    -   **`Scope: Artist Folders`:** For each selected favorite artist, a new subfolder (named after the artist, e.g., "ArtistName") will be automatically created inside your main "Download Location". All content for that specific artist will be downloaded into their dedicated subfolder. Filters will apply *within* each artist's folder.
--   **Filters Still Apply:** Your existing "Filter by Character(s)", "Skip with Words", and "Filter Files" settings will be applied to the content downloaded from your selected favorite artists, respecting the chosen download scope.
+### 🎨 Creator Selection Popup
+-   Click the "**🎨**" button next to the URL input to open the "Creator Selection" dialog.
+-   Loads creators from your `creators.json` file (expected in the app's directory).
+-   Search, select multiple creators, and their names are added to the URL input, comma-separated.
+-   Choose download scope (`Characters` or `Creators`) for items added via this popup, influencing folder structure.
 
-### ⚙️ UI Defaults & Filter Cycling Order
+### 🎯 Advanced Character Filtering & `Known.txt` Integration
+-   **Enhanced Filter Syntax:**
+    -   `Nami`: Simple character filter.
+    -   `(Vivi, Ulti, Uta)`: Groups distinct characters into a shared folder for the session (e.g., "Vivi Ulti Uta"). Adds "Vivi", "Ulti", "Uta" as *separate* entries to `Known.txt` if new.
+    -   `(Boa, Hancock)~`: Defines "Boa" and "Hancock" as aliases for the *same character/entity*. Creates a shared folder (e.g., "Boa Hancock"). Adds "Boa Hancock" as a *single group entry* to `Known.txt` if new, with "Boa" and "Hancock" as its aliases.
+-   **"Add to Filter" Button (⤵️):** Opens a dialog to select names from your `Known.txt` (with search) and add them to the "Filter by Character(s)" field. Grouped names from `Known.txt` are added with the `~` syntax.
+-   **New Name Confirmation:** When new, unrecognized names/groups are used in the filter, a dialog prompts to add them to `Known.txt` with appropriate formatting.
 
--   **Persistent Filter Defaults:**
-    -   The "Skip with Words" filter now always defaults to scoping by "**Posts**" on application startup.
-    -   The "Filter by Character(s)" filter now always defaults to scoping by "**Title**" on application startup.
-    -   *Note: Any changes made to these two scope settings during a session will not be saved, ensuring they revert to these defaults on the next launch.*
--   **Updated Filter Cycling Order:**
-    -   **Filter by Character(s) Scope:** Cycles as `Title` -> `Files` -> `Both` -> `Comments (Beta)` -> `Title`.
-    -   **Skip with Words Scope:** Cycles as `Posts` -> `Files` -> `Both` -> `Posts`.
+### 📖 Manga/Comic Mode Enhancements
+-   **"Title+G.Num" Filename Style:** (Post Title + Global Numbering) All files across posts get the post title prefix + a global sequential number (e.g., `Chapter 1_001.jpg`, `Chapter 2_003.jpg`).
+-   **Optional Filename Prefix:** For "Original File" and "Date Based" manga styles, an input field appears to add a custom prefix to filenames.
 
----
+### 🖼️ Enhanced Image & Content Handling
+-   **"Scan Content for Images":** A checkbox to scan post HTML for `<img>` tags and direct image links, resolving relative paths. Crucial for images embedded in descriptions but not in API attachments.
+    -   When "Download Thumbnails Only" is active, "Scan Content for Images" is auto-enabled, and *only* content-scanned images are downloaded.
+-   **"🎧 Only Audio" Filter Mode:** Dedicated mode to download only common audio formats (MP3, WAV, FLAC, etc.).
+-   **"📦 Only Archives" Filter Mode:** Exclusively downloads `.zip` and `.rar` files.
 
-## 📜 Previous Update: What's New in v4.1.1? - Enhanced Image Discovery & Audio Filtering
-Version 4.1.1 brings significant enhancements, including smarter image capture from post content and a dedicated filter mode for audio files.
-
-###  "Scan Content for Images" Feature
-
-- **Enhanced Image Discovery:** A new checkbox, "**Scan Content for Images**," has been added to the UI (grouped with "Download Thumbnails Only" and "Compress Large Images").
-- **How it Works:**
-    - When enabled, the downloader meticulously scans the HTML content of each post's description or body.
-    - It searches for images in two main ways:
-        - **Directly linked absolute URLs** (e.g., `https://externalsite.com/image.png`) that end with a common image extension (jpg, png, gif, etc.).
-        - **Images embedded using HTML `<img>` tags.** The downloader extracts the `src` attribute from these tags and can resolve various path types:
-            - Absolute URLs (e.g., `http://...` or `https://...`)
-            - Protocol-relative URLs (e.g., `//cdn.example.com/image.jpg`)
-            - Root-relative paths (e.g., `/data/user_content/image.gif`), which are resolved against the site's base URL (like `https://kemono.su/data/user_content/image.gif`).
-    - This is particularly useful for capturing images that are part of the post's narrative but not formally listed in the API's file or attachment sections.
-- **Default State:** This option is **unchecked by default**.
-- **Key Interaction with "Download Thumbnails Only":** This new feature works closely with the existing "Download Thumbnails Only" option:
-    - If you enable "Download Thumbnails Only":
-        - The "Scan Content for Images" checkbox will **automatically become checked and disabled** (locked).
-        - The downloader then **exclusively downloads images discovered through the content scan**. Any API-listed thumbnails are bypassed, giving priority to images embedded directly in the post.
-    - If you disable "Download Thumbnails Only":
-        - The "Scan Content for Images" checkbox will become **enabled again and revert to being unchecked**. You can then manually enable it if you wish to scan content without being in thumbnail-only mode.
-
-This feature ensures a more comprehensive download experience, especially for posts where images are integrated directly into the text.
-
-### New "🎧 Only Audio" Filter Mode
-
-Alongside image discovery, v4.1.1 also introduces/enhances a dedicated filter mode for audio enthusiasts:
-
--   **Focused Audio Downloads:** The "🎧 Only Audio" option in the "Filter Files" radio button group allows you to download exclusively common audio file types. This includes formats like MP3, WAV, FLAC, M4A, OGG, and more.
--   **Streamlined UI:** When "🎧 Only Audio" mode is active:
-    -   Irrelevant UI options such as the "Skip Scope" button (for word-based post/file skipping) and the "Multi-part Download" toggle are hidden to simplify the interface.
-    -   The "Show External Links in Log" checkbox is automatically disabled, as link extraction is not the focus of this mode.
--   **Archive Handling:** Unlike the "📦 Only Archives" mode (which disables archive skipping), the "Skip .zip" and "Skip .rar" checkboxes remain enabled and configurable when "🎧 Only Audio" is selected. This gives you the flexibility to also exclude any archives encountered while in audio-only mode if desired.
--   **Purpose:** This mode is perfect for users who primarily want to collect audio tracks, podcasts, or sound effects from posts without downloading other media types.
-
+### ⚙️ UI & Workflow Improvements
+-   **Cookie Management:**
+    -   Directly paste cookie strings.
+    -   Browse and load `cookies.txt` files.
+    -   Automatic fallback to `cookies.txt` in the app directory.
+-   **Multi-part Download Toggle:** Button in the log area to easily switch multi-segment downloads ON/OFF for large files.
+-   **Log View Toggle (👁️ / 🙈):** Switch between the detailed "Progress Log" and the "Missed Character Log" (which now shows intelligently extracted key terms from skipped titles).
+-   **Retry Failed Downloads:** Prompts at the end of a session to retry files that failed with recoverable errors (e.g., IncompleteRead).
+-   **Persistent UI Defaults:** Key filter scopes ("Skip with Words" -> Posts, "Filter by Character(s)" -> Title) now reset to defaults on launch for consistency.
+-   **Refined Onboarding Tour & Help Guide:** Updated guides accessible via the "❓" button.
 
 ---
 
-## 📜 Previous Update: What's New in v4.0.1? - Cookie Management & Advanced Known.txt
+## Core Features
 
-Version 4.0.1 focuses on enhancing access to content and providing even smarter organization:
-
-###  Cookie Management
-
-- **Access Content:** Seamlessly download from Kemono/Coomer as if you were logged in by using your browser's cookies.
-- **Flexible Input:**
-  - Directly paste your cookie string (e.g., `name1=value1; name2=value2`).
-  - Browse and load cookies from a `cookies.txt` file (Netscape format).
-  - Automatic fallback to a `cookies.txt` file in the application directory if "Use Cookie" is enabled and no other source is specified.
-- **Easy Activation:** A simple "Use Cookie" checkbox in the UI controls this feature.
-- *Important Note: Cookie settings (text, file path, and enabled state) are configured per session and are not saved when the application is closed. You will need to re-apply them on each launch if needed.*
-
----
-
-###  Advanced `Known.txt` and Character Filtering
-
-The `Known.txt` system has been revamped for improved performance and stability. The previous method of handling known names could become resource-intensive with large lists, potentially leading to application slowdowns or crashes. This new, streamlined system offers more direct control and robust organization.
-The `Known.txt` file and the "Filter by Character(s)" input field work together to provide powerful and flexible content organization. The `Known.txt` file itself has a straightforward syntax, while the UI input allows for more complex session-specific grouping and alias definitions that can then be added to `Known.txt`.
-
-**1. `Known.txt` File Syntax (Located in App Directory):**
-
-`Known.txt` stores your persistent list of characters, series, or keywords for folder organization. Each line is an entry:
-
-- **Simple Entries:**
-  - A line like `My Awesome Series` or `Nami`.
-  - **Behavior:** Content matching this term will be saved into a folder named "My Awesome Series" or "Nami" respectively (if "Separate Folders" is enabled).
-
-**2. "Filter by Character(s)" UI Input Field:**
-
-This field allows for dynamic filtering for the current download session and provides options for how new entries are added to `Known.txt`.
-
-- **Standard Names:**
-  - Input: `Nami, Robin`
-  - Session Behavior: Filters for "Nami" OR "Robin". If "Separate Folders" is on, creates folders "Nami" and "Robin".
-  - `Known.txt` Addition: If "Nami" is new and selected for addition in the confirmation dialog, it's added as `Nami` on a new line in `Known.txt`.
-
-- **Grouped Aliases for a Single Character (using `(...)~` syntax):**
-  - Input: `(Boa, Hancock)~`
-  - Meaning: "Boa" and "Hancock" are different names/aliases for the *same character*. The names are listed within parentheses separated by commas (e.g., `name1, alias1, alias2`), and the entire group is followed by a `~` symbol. This is useful when a creator uses different names for the same character.
-  - Session Behavior: Filters for "Boa" OR "Hancock". If "Separate Folders" is on, creates a single folder named "Boa Hancock".
-  - `Known.txt` Addition: If this group is new and selected for addition, it's added to `Known.txt` as a grouped alias entry, typically `(Boa Hancock)`. The first name in the `Known.txt` entry (e.g., "Boa Hancock") becomes the primary folder name.
-
-- **Combined Folder for Distinct Characters (using `(...)` syntax):**
-  - Input: `(Vivi, Uta)`
-  - Meaning: "Vivi" and "Uta" are *distinct characters*, but for this download session, their content should be grouped into a single folder. The names are listed within parentheses separated by commas. This is useful for grouping art of less frequent characters without creating many small individual folders.
-  - Session Behavior: Filters for "Vivi" OR "Uta". If "Separate Folders" is on, creates a single folder named "Vivi Uta".
-  - `Known.txt` Addition: If this "combined group" is new and selected for addition, "Vivi" and "Uta" are added to `Known.txt` as *separate, individual simple entries* on new lines:
-    ```
-    Vivi
-    Uta
-    ```
-    The combined folder "Vivi Uta" is a session-only convenience; `Known.txt` stores them as distinct entities for future individual use.
-
-**3. Interaction with `Known.txt`:**
-
-- **Adding New Names from Filters:** When you use the "Filter by Character(s)" input, if any names or groups are new (not already in `Known.txt`), a dialog will appear after you start the download. This dialog allows you to select which of these new names/groups should be added to `Known.txt`, formatted according to the rules described above.
-- **Intelligent Fallback:** If "Separate Folders by Name/Title" is active, and content doesn't match the "Filter by Character(s)" UI input, the downloader consults your `Known.txt` file for folder naming.
-- **Direct Management:** You can add simple entries directly to `Known.txt` using the list and "Add" button in the UI's `Known.txt` management section. For creating or modifying complex grouped alias entries directly in the file, or for bulk edits, click the "Open Known.txt" button. The application reloads `Known.txt` on startup or before a download process begins.
-- **Using Known Names to Populate Filters (via "Add to Filter" Button):**
-  - Next to the "Add" button in the `Known.txt` management section, a "⤵️ Add to Filter" button provides a quick way to use your existing known names.
-  - Clicking this opens a popup window displaying all entries from your `Known.txt` file, each with a checkbox.
-  - The popup includes:
-    - A search bar to quickly filter the list of names.
-    - "Select All" and "Deselect All" buttons for convenience.
-  - After selecting the desired names, click "Add Selected".
-  - The chosen names will be inserted into the "Filter by Character(s)" input field.
-  - **Important Formatting:** If a selected entry from `Known.txt` is a group (e.g., originally `(Boa Hancock)` in `Known.txt`, which implies aliases "Boa" and "Hancock"), it will be added to the filter field as `(Boa, Hancock)~`. Simple names are added as-is.
-
-
----
-##  What's in v3.5.0? (Previous Update)
-This version brought significant enhancements to manga/comic downloading, filtering capabilities, and user experience:
-
-###  Enhanced Manga/Comic Mode
-
-- **Optional Filename Prefix:**
-  - When using the "Date Based" or "Original File Name" manga styles, an optional prefix can be specified in the UI.
-  - This prefix will be prepended to each filename generated by these styles.
-  - **Example (Date Based):** If prefix is `MySeries_`, files become `MySeries_001.jpg`, `MySeries_002.png`, etc.
-  - **Example (Original File Name):** If prefix is `Comic_Vol1_`, an original file `page_01.jpg` becomes `Comic_Vol1_page_01.jpg`.
-  - This input field appears automatically when either of these two manga naming styles is selected.
-
-- **New "Date Based" Filename Style:**
-
-  - Perfect for truly sequential content! Files are named numerically (e.g., `001.jpg`, `002.jpg`, `003.ext`...) across an *entire creator's feed*, strictly following post publication order.
-
-  - **Smart Numbering:** Automatically resumes from the highest existing number found in the series folder (and subfolders, if "Subfolder per Post" is enabled).
-
-  - **Guaranteed Order:** Disables multi-threading for post processing to ensure sequential accuracy.
-
-  - Works alongside the existing "Post Title" and "Original File Name" styles.
-- **New "Title+G.Num (Post Title + Global Numbering)" Filename Style:**
-  - Ideal for series where you want each file to be prefixed by its post title but still maintain a global sequential number across all posts from a single download session.
-  - **Naming Convention:** Files are named using the cleaned post title as a prefix, followed by an underscore and a globally incrementing number (e.g., `Post Title_001.ext`, `Post Title_002.ext`).
-  - **Example:**
-    - Post "Chapter 1: The Adventure Begins" (contains 2 files: `imageA.jpg`, `imageB.png`) -> `Chapter 1 The Adventure Begins_001.jpg`, `Chapter 1 The Adventure Begins_002.png`
-    - Next Post "Chapter 2: New Friends" (contains 1 file: `cover.jpg`) -> `Chapter 2 New Friends_003.jpg`
-  - **Sequential Integrity:** Multithreading for post processing is automatically disabled when this style is selected to ensure the global numbering is strictly sequential.
-
----
-
-###  "Remove Words from Filename" Feature
-
-- Specify comma-separated words or phrases (case-insensitive) that will be automatically removed from filenames.
-
-- Example: `patreon, [HD], _final` transforms `AwesomeArt_patreon` `Hinata_Hd` into `AwesomeArt.jpg` `Hinata.jpg`.
-
----
-
-###  New "Only Archives" File Filter Mode
-
-- Exclusively downloads `.zip` and `.rar` files.
-
-- Automatically disables conflicting options like "Skip .zip/.rar" and external link logging.
-
----
-
-###  Improved Character Filter Scope - "Comments (Beta)"
-
-- **File-First Check:** Prioritizes matching filenames before checking post comments for character names.
-
-- **Comment Fallback:** Only checks comments if no filename match is found, reducing unnecessary API calls.
-
----
-
-###  Refined "Missed Character Log"
-
-- Displays a capitalized, alphabetized list of key terms from skipped post titles.
-
-- Makes it easier to spot patterns or characters that might be unintentionally excluded.
-
----
-
-###  Enhanced Multi-part Download Progress
-
-- Granular visibility into active chunk downloads and combined speed for large files.
-
----
-
-###  Updated Onboarding Tour
-
-- Improved guide for new users, covering v4.0.0 features and existing core functions.
-
----
-
-###  Robust Configuration Path
-
-- Settings and `Known.txt` are now stored in the same folder as app.
-
----
-
-##  Core Features
-
----
+This section details the primary functionalities of the Kemono Downloader.
 
 ### User Interface & Workflow
 
-- **Clean PyQt5 GUI** — Simple, modern, and dark-themed.
+-   **Main Inputs:**
+    -   **🔗 Kemono Creator/Post URL:** Paste the full URL of a Kemono/Coomer creator's page or a specific post.
+        -   *Example (Creator):* `https://kemono.su/patreon/user/12345`
+        -   *Example (Post):* `https://kemono.su/patreon/user/12345/post/98765`
+    -   **🎨 Creator Selection Button:** (Next to URL input) Opens a dialog to select creators from `creators.json` to populate the URL field.
+    -   **Page Range (Start to End):** For creator URLs, specify a range of pages to fetch. Disabled for single posts or Manga Mode.
+    -   **📁 Download Location:** Browse to select the main folder for all downloads. Required unless in "🔗 Only Links" mode.
+-   **Action Buttons:**
+    -   **⬇️ Start Download / 🔗 Extract Links:** Initiates the primary operation based on current settings.
+    -   **⏸️ Pause / ▶️ Resume Download:** Temporarily halt and continue the process. Some UI settings can be changed while paused.
+    -   **❌ Cancel & Reset UI:** Stops the current operation and performs a "soft" UI reset (preserves URL and Directory inputs).
+    -   **🔄 Reset:** (In log area) Clears all inputs, logs, and resets settings to default when idle.
 
-- **Persistent Settings** — Saves preferences between sessions.
+### Filtering & Content Selection
 
-- **Download Modes:**
-  - Single Post URL
-  - Entire Creator Feed
-  - **Favorite Mode:**
-    - Download directly from your Kemono.su favorited artists.
-    - Choose to download to a central location or into individual artist-named subfolders.
+-   **🎯 Filter by Character(s):**
+    -   Enter character names, comma-separated.
+    -   **Syntax Examples:**
+        -   `Tifa, Aerith`: Matches posts/files with "Tifa" OR "Aerith". If "Separate Folders" is on, creates folders "Tifa" and "Aerith". Adds "Tifa", "Aerith" to `Known.txt` separately if new.
+        -   `(Vivi, Ulti, Uta)`: Matches "Vivi" OR "Ulti" OR "Uta". Session folder: "Vivi Ulti Uta". Adds "Vivi", "Ulti", "Uta" to `Known.txt` as separate entries if new.
+        -   `(Boa, Hancock)~`: Matches "Boa" OR "Hancock". Session folder: "Boa Hancock". Adds "Boa Hancock" as a single group entry to `Known.txt` if new (aliases: Boa, Hancock).
+    -   **Filter: [Type] Button (Scope):** Cycles how this filter applies:
+        -   `Filter: Files`: Checks individual filenames. Only matching files from a post are downloaded.
+        -   `Filter: Title`: Checks post titles. All files from a matching post are downloaded.
+        -   `Filter: Both`: Checks post title first. If no match, then checks filenames.
+        -   `Filter: Comments (Beta)`: Checks filenames first. If no file match, then checks post comments. (Uses more API requests).
+-   **🚫 Skip with Words:**
+    -   Enter words (comma-separated) to skip content (e.g., `WIP, sketch`).
+    -   **Scope: [Type] Button:** Cycles how skipping applies:
+        -   `Scope: Files`: Skips individual files by name.
+        -   `Scope: Posts`: Skips entire posts by title.
+        -   `Scope: Both`: Post title first, then filenames.
+-   **✂️ Remove Words from name:**
+    -   Enter words (comma-separated) to remove from downloaded filenames (e.g., `patreon, [HD]`).
+-   **Filter Files (Radio Buttons):**
+    -   `All`: All file types.
+    -   `Images/GIFs`: Common image formats.
+    -   `Videos`: Common video formats.
+    -   `📦 Only Archives`: Exclusively `.zip` and `.rar` files. Disables archive skipping and external link log.
+    -   `🎧 Only Audio`: Common audio formats (MP3, WAV, FLAC, etc.).
+    -   `🔗 Only Links`: Extracts and displays external links from post descriptions. Disables download options.
+-   **Skip .zip / Skip .rar Checkboxes:** Avoid downloading these archive types (disabled if "📦 Only Archives" is active).
 
-- **Flexible Options:**
-  - Specify Page Range (disabled in Manga Mode)
-  - Custom Folder Name for single posts
+### Download Customization
+
+-   **Download Thumbnails Only:** Downloads small API preview images.
+    -   If "Scan Content for Images" is also active, *only* images found by content scan are downloaded (API thumbnails ignored).
+-   **Scan Content for Images:** Scans post HTML for `<img>` tags and direct image links, resolving relative paths.
+-   **Compress to WebP:** If Pillow is installed, converts images > 1.5MB to WebP if significantly smaller.
+-   **🗄️ Custom Folder Name (Single Post Only):**
+    -   Visible if downloading a single post URL AND "Separate Folders by Name/Title" is enabled.
+    -   Set a custom folder name for that specific post's downloads.
+
+### 📖 Manga/Comic Mode (Creator Feeds Only)
+
+-   **Chronological Processing:** Downloads posts from oldest to newest.
+-   **Page Range Disabled:** All posts are fetched for sorting.
+-   **Filename Style Toggle Button (in log area):**
+    -   `Name: Post Title (Default)`: First file named after post title; subsequent files in the same post keep original names.
+    -   `Name: Original File`: All files attempt to keep original names. Optional prefix input appears.
+    -   `Name: Title+G.Num`: All files across posts get post title prefix + global sequential number (e.g., `Chapter 1_001.jpg`). Disables post-level multithreading.
+    -   `Name: Date Based`: Files named sequentially (e.g., `001.jpg`) by post date. Optional prefix input appears. Disables post-level multithreading.
+
+### Folder Organization
+
+-   **Separate Folders by Name/Title:** Creates subfolders based on "Filter by Character(s)" or post titles. Uses `Known.txt` as a fallback.
+-   **Subfolder per Post:** If "Separate Folders" is on, creates an additional subfolder for each post.
+-   **`Known.txt` Management (Bottom Left UI):**
+    -   **List:** Displays primary names from `Known.txt`.
+    -   **Add New:** Input field to add new names/groups.
+        -   Simple: `My Series`
+        -   Group (Separate Known.txt): `(Vivi, Ulti, Uta)`
+        -   Group (Single Known.txt with `~`): `(Character A, Char A)~`
+    -   **➕ Add Button:** Adds the name/group to `Known.txt`.
+    -   **⤵️ Add to Filter Button:** Opens a dialog to select names from `Known.txt` to add to the "Filter by Character(s)" field.
+    -   **🗑️ Delete Selected Button:** Removes selected names from `Known.txt`.
+    -   **Open Known.txt Button:** Opens `Known.txt` in your default text editor for advanced editing.
+    -   **❓ Button:** Opens this feature guide.
+
+### Advanced & Performance
+
+-   **🍪 Cookie Management:**
+    -   **Use Cookie Checkbox:** Enables cookie usage.
+    -   **Text Field:** Paste cookie string (e.g., `name1=value1; name2=value2`).
+    -   **Browse... Button:** Select a `cookies.txt` file (Netscape format).
+    -   *Behavior:* Text field takes precedence. If "Use Cookie" is checked and both are empty, tries to load `cookies.txt` from the app directory.
+-   **Use Multithreading Checkbox & Threads Input:**
+    -   *Creator Feeds:* Number of posts to process simultaneously.
+    -   *Single Post URLs:* Number of files to download concurrently.
+-   **Multi-part Download Toggle Button (in log area):**
+    -   `Multi-part: ON`: Enables multi-segment downloads for large files. Can speed up large file downloads but may increase UI choppiness or log spam with many small files.
+    -   `Multi-part: OFF (Default)`: Files downloaded in a single stream.
+    -   Disabled if "🔗 Only Links" or "📦 Only Archives" mode is active.
+
+### Logging & Monitoring
+
+-   **📜 Progress Log / Extracted Links Log:** Main text area for detailed messages or extracted links.
+-   **👁️ / 🙈 Log View Toggle Button:** Switches main log between:
+    -   `👁️ Progress Log`: All download activity, errors, summaries.
+    -   `🙈 Missed Character Log`: Key terms from post titles/content skipped due to character filters.
+-   **Show External Links in Log Checkbox & Panel:** If checked, a secondary log panel displays external links from post descriptions (disabled in "Only Links" / "Only Archives" modes).
+-   **Export Links Button:** (In "Only Links" mode) Saves extracted links to a `.txt` file.
+-   **Progress Labels:** Display overall post progress and individual file download status/speed.
+
+### ⭐ Favorite Mode (Downloading from Your Kemono.su Favorites)
+
+-   **Enable:** Check the "**⭐ Favorite Mode**" checkbox (next to "🔗 Only Links").
+-   **UI Changes:**
+    -   URL input is replaced with a "Favorite Mode active" message.
+    -   Action buttons change to "**🖼️ Favorite Artists**" and "**📄 Favorite Posts**".
+    -   "**🍪 Use Cookie**" is auto-enabled and locked (required for favorites).
+-   **🖼️ Favorite Artists Dialog:**
+    -   Fetches and lists artists you've favorited on Kemono.su.
+    -   Includes search, select all/deselect all, and a "Download Selected" button.
+    -   Selected artists are added to a download queue.
+-   **📄 Favorite Posts Dialog:**
+    -   Fetches and lists posts you've favorited, grouped by artist and sorted by date.
+    -   Includes search (title, creator, ID, service), select all/deselect all.
+    -   Highlights known names from your `Known.txt` in post titles for easier identification.
+    -   Selected posts are added to a download queue.
+-   **Favorite Download Scope Button:** (Next to "Favorite Posts" button)
+    -   `Scope: Selected Location`: All selected favorites download into the main "Download Location". Filters apply globally.
+    -   `Scope: Artist Folders`: A subfolder (named after the artist) is created in the main "Download Location" for each artist. Content goes into their specific subfolder. Filters apply within each artist's folder.
+-   **Filters:** Standard "Filter by Character(s)", "Skip with Words", and "Filter Files" options apply to content downloaded from favorites.
 
 ---
 
-###  Smart Filtering
+## Key Files
 
-- **Character Name Filtering:**
-  - Use `Tifa, Aerith` or group `(Boa, Hancock)` → folder `Boa Hancock`
-  - Flexible input for current session and for adding to `Known.txt`.
-  - Examples:
-    - `Nami` (simple character)
-    - `(Boa Hancock)~` (aliases for one character, session folder "Boa Hancock", adds `(Boa Hancock)` to `Known.txt`)
-    - `(Vivi, Uta)` (distinct characters, session folder "Vivi Uta", adds `Vivi` and `Uta` separately to `Known.txt`)
-  - A "⤵️ Add to Filter" button (near the `Known.txt` management UI) allows you to quickly populate this field by selecting from your existing `Known.txt` entries via a popup with search and checkbox selection.
-  - See "Advanced `Known.txt` and Character Filtering" for full details.
-  - **Filter Scopes:**
-    - `Files`
-    - `Title`
-    - `Both (Title then Files)`
-    - `Comments (Beta - Files first)`
-
-- **Skip with Words:**
-  - Exclude with `WIP, sketch, preview`
-
-  - **Skip Scopes:**
-    - `Files`
-    - `Posts`
-    - `Both (Posts then Files)`
-
-- **File Type Filters:**
-  - `All`, `Images/GIFs`, `Videos`, `📦 Only Archives`, `🔗 Only Links`
-
-- **Filename Cleanup:**
-  - Remove illegal and unwanted characters or phrases
-
----
-
-### Manga/Comic Mode (Creator Feeds Only)
-
-- **Chronological Processing** — Oldest posts first
-
-- **Filename Style Options:**
-  - `Name: Post Title (Default)`
-  - `Name: Original File`
-  - `Name: Date Based (New)`
-  - `Name: Title+G.Num (Post Title + Global Numbering)`
-
-- **Best With:** Character filters set to manga/series title
-
----
-
-### Folder Structure & Naming
-
-- **Subfolders:**
-  - Auto-created based on character name, post title, or `Known.txt`
-
-  - "Subfolder per Post" option for further nesting
-
-- **Smart Naming:** Cleans invalid characters and structures logically
-
----
-
-### Thumbnail & Compression Tools
-- **Download Thumbnails Only:**
-  - Downloads small preview images from the API instead of full-sized files (if available).
-  - **Interaction with "Scan Content for Images" (New in v4.1.1):** When "Download Thumbnails Only" is active, "Scan Content for Images" is auto-enabled, and only images found by the content scan are downloaded. See "What's New in v4.1.1" for details.
-- **Scan Content for Images (New in v4.1.1):**
-  - A UI option to scan the HTML content of posts for embedded image URLs (from `<img>` tags or direct links).
-  - Resolves relative paths and helps capture images not listed in the API's formal attachments.
-  - See the "What's New in v4.1.1?" section for a comprehensive explanation.
-- **Compress to WebP** (via Pillow)
-  - Converts large images to smaller WebP versions
-
-
----
-
-###  Performance Features
-
-- **Multithreading:**
-  - For both post processing and file downloading
-
-- **Multi-part Downloads:**
-  - Toggleable in GUI
-  - Splits large files into chunks
-  - Granular chunk-level progress display
-
----
-
-### Logging & Progress
-
-- **Real-time Logs:** Activity, errors, skipped posts
-
-- **Missed Character Log:** Shows skipped keywords in easy-to-read list
-
-- **External Links Log:** Shows links (unless disabled in some modes)
-
-- **Export Links:** Save `.txt` of links (Only Links mode)
-
----
-
-### Configuration & Settings
-
-- **`Known.txt` for Smart Folder Naming:** (Located in the application's directory)
-  - User-editable file for preferred names, series titles, or keywords.
-  - Used as an intelligent fallback for folder creation when "Separate Folders by Name/Title" is enabled.
-  - Supports simple entries (e.g., `My Series`) and grouped entries for aliases (e.g., `(Folder Name, alias1, alias2)`).
-- **Application Settings:** UI preferences and some operational settings are saved by the application (e.g., manga filename style, multi-part download preference). Some settings, like cookie details or specific filter scopes, are session-based.
-- **Editable Within GUI:** Many settings and the `Known.txt` list (for simple entries) can be managed directly through the application interface.
+-   **`Known.txt`:** (Located in the application's directory)
+    -   Stores your list of known shows, characters, or series titles for automatic folder organization.
+    -   **Format:** Each line is an entry.
+        -   Simple: `My Awesome Series`
+        -   Grouped (single `Known.txt` entry, shared folder): `(Boa, Hancock)` - creates folder "Boa Hancock", aliases "Boa", "Hancock".
+    -   Used as a fallback for folder naming if "Separate Folders" is on and no active filter matches.
+-   **`creators.json`:** (Expected in the application's directory)
+    -   Used by the "🎨 Creator Selection Popup".
+    -   A JSON file containing a list of creator objects. Expected structure: `[ [ {creator1_data}, {creator2_data}, ... ] ]` or a flat list `[ {creator1_data}, ... ]`.
+    -   Each creator object should ideally have `name`, `service`, `id`, and optionally `favorited` (integer count for sorting in popup).
+    -   *Example entry in the inner list:* `{"id": "12345", "name": "ArtistName", "service": "patreon", "favorited": 10}`
+-   **`cookies.txt` (Optional):**
+    -   If "Use Cookie" is enabled and no direct string/file is provided, the app looks for this in its directory.
+    -   Must be in Netscape cookie file format.
+-   **Application Settings:** UI preferences (like manga style, multipart preference) are saved by Qt's `QSettings` (location varies by OS). Cookie details and some filter scopes are session-based.
 
 ---
 
 ## Installation
 
----
-
 ### Requirements
-
-- Python 3.6 or higher  
-- pip
-
----
+-   Python 3.6 or higher
+-   pip (Python package installer)
 
 ### Install Dependencies
-
+Open your terminal or command prompt and run:
 ```bash
 pip install PyQt5 requests Pillow
-
-```
-
-***
-
-## ** Build a Standalone Executable (Optional)**
-
-1. Install PyInstaller:
-```bash
-pip install pyinstaller
-```
-
-2. Run:
-```bash
-pyinstaller --name "Kemono Downloader" --onefile --windowed --icon="Kemono.ico" main.py
-```
-
-3. Output will be in the `dist/` folder.
-
-***
-
-## **Key Files**
-- **`Known.txt`:** (Located in the application's directory) Stores character names, series titles, or keywords for organizing downloaded content into specific folders.
-  
-  - Supports simple entries (e.g., `My Series`) and grouped entries for aliases (e.g., `(Folder Name, alias1, alias2)` where "Folder Name" is the name of the created folder, and all terms are used for matching).
-
-- **Application Settings:** The application uses `QSettings` to store UI preferences and some operational settings. The actual storage location and format (e.g., .ini file, registry entry) depend on your operating system.
-- **`cookies.txt` (Optional):** If using the "Use Cookie" feature without specifying a direct string or file, the app looks for `cookies.txt` in its directory. Must be Netscape format.
-
-***
-
-## ** Feedback & Support**
-
-Issues? Suggestions?  
-Open an issue on the [GitHub repository](https://github.com/Yuvi9587/kemono-downloader) or join our community.

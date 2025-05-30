@@ -233,6 +233,216 @@ class ConfirmAddAllDialog(QDialog):
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
 
+class EmptyPopupDialog(QDialog):
+    """A simple empty popup dialog."""
+    SCOPE_CHARACTERS = "Characters"
+    INITIAL_LOAD_LIMIT = 200 # Max creators to show initially
+    SCOPE_CREATORS = "Creators"
+
+    def __init__(self, app_base_dir, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Creator Selection")
+        self.setMinimumSize(400, 300) # Made the popup a bit bigger
+        self.current_scope_mode = self.SCOPE_CHARACTERS # Initialize current mode, default to Characters
+        self.app_base_dir = app_base_dir
+        self.all_creators_data = [] # To store loaded creator objects
+        self.selected_creators_for_queue = [] # To store selected creator dicts
+        self.globally_selected_creators = {} # Key: (service, id), Value: creator_data
+
+        layout = QVBoxLayout(self)
+
+        # Search bar
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search creators...")
+        self.search_input.textChanged.connect(self._filter_list)
+        layout.addWidget(self.search_input)
+
+        # List widget for dummy items
+        self.list_widget = QListWidget()
+        self.list_widget.itemChanged.connect(self._handle_item_check_changed) # Connect signal for check state changes
+        self._load_creators_from_json() # This will load data and call _filter_list for initial population
+        layout.addWidget(self.list_widget)
+
+        # Buttons at the bottom
+        button_layout = QHBoxLayout()
+        self.add_selected_button = QPushButton("Add Selected")
+        self.add_selected_button.setToolTip(
+            "Add Selected Creators to URL Input\n\n"
+            "Adds the names of all checked creators to the main URL input field,\n"
+            "comma-separated, and closes this dialog."
+        )
+        self.add_selected_button.clicked.connect(self._handle_add_selected)
+        button_layout.addWidget(self.add_selected_button)
+
+        self.scope_button = QPushButton(f"Scope: {self.current_scope_mode}") # Initial text based on mode
+        self.scope_button.setToolTip(
+            f"Current Download Scope: {self.current_scope_mode}\n\n"
+            f"Click to toggle between '{self.SCOPE_CHARACTERS}' and '{self.SCOPE_CREATORS}' scopes.\n"
+            f"This setting (when implemented for downloads from this popup) will determine the folder structure."
+        )
+        self.scope_button.clicked.connect(self._toggle_scope_mode)
+        button_layout.addWidget(self.scope_button)
+        layout.addLayout(button_layout)
+
+        # Optional: Apply dark theme if parent has it
+        if parent and hasattr(parent, 'get_dark_theme'):
+            self.setStyleSheet(parent.get_dark_theme())
+
+    def _load_creators_from_json(self):
+        """Loads creators from creators.json and populates the list widget."""
+        creators_file_path = os.path.join(self.app_base_dir, "creators.json")
+        self.list_widget.clear() # Clear previous content (like error messages)
+
+        if not os.path.exists(creators_file_path):
+            self.list_widget.addItem("Error: creators.json not found.")
+            self.all_creators_data = [] # Ensure it's empty
+            return
+
+        try:
+            with open(creators_file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # creators.json has a structure like [ [ {creator1}, {creator2} ] ]
+                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                    self.all_creators_data = data[0]
+                elif isinstance(data, list) and all(isinstance(item, dict) for item in data): # Handle flat list too
+                    self.all_creators_data = data
+                else:
+                    self.list_widget.addItem("Error: Invalid format in creators.json.")
+                    self.all_creators_data = []
+                    return
+
+            # Sort creators by 'favorited' count in descending order
+            # Use .get('favorited', 0) to handle missing keys gracefully, treating them as 0
+            self.all_creators_data.sort(key=lambda c: c.get('favorited', 0), reverse=True)
+            # self.list_widget.clear() # Moved to the top of the method
+
+        except json.JSONDecodeError:
+            self.list_widget.addItem("Error: Could not parse creators.json.")
+            self.all_creators_data = []
+        except Exception as e:
+            self.list_widget.addItem(f"Error loading creators: {e}")
+            self.all_creators_data = []
+        
+        self._filter_list() # This will populate the list initially or based on search
+
+    def _populate_list_widget(self, creators_to_display):
+        """Clears and populates the list widget with the given creator data."""
+        self.list_widget.blockSignals(True) # Block itemChanged signal during population
+        self.list_widget.clear()
+        if not creators_to_display and self.search_input.text().strip():
+
+            # Optionally, add a "No results found" item if search is active and no results
+            # self.list_widget.addItem("No creators match your search.")
+            pass # Or just show an empty list
+        elif not creators_to_display:
+            # This case is for when creators.json is empty or initial load results in no items.
+            # Error messages are handled by _load_creators_from_json.
+            pass
+
+        for creator in creators_to_display:
+            display_text = f"{creator.get('name', 'Unknown Name')} ({creator.get('service', 'N/A').capitalize()})"
+            item = QListWidgetItem(display_text)
+            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+            item.setData(Qt.UserRole, creator) # Store the whole creator dict
+
+            # Preserve check state based on globally_selected_creators
+            service = creator.get('service')
+            creator_id = creator.get('id')
+            if service is not None and creator_id is not None:
+                unique_key = (str(service), str(creator_id))
+                if unique_key in self.globally_selected_creators:
+                    item.setCheckState(Qt.Checked)
+                else:
+                    item.setCheckState(Qt.Unchecked)
+            else:
+                item.setCheckState(Qt.Unchecked) # Fallback for items without proper key
+            self.list_widget.addItem(item)
+        self.list_widget.blockSignals(False) # Unblock itemChanged signal
+
+    def _filter_list(self):
+        """Filters the list widget based on the search input."""
+        search_text = self.search_input.text().lower().strip()
+
+        if not search_text:
+            # Display initial limited list (top N from sorted all_creators_data)
+            creators_to_show = self.all_creators_data[:self.INITIAL_LOAD_LIMIT]
+            self._populate_list_widget(creators_to_show)
+        else:
+            # Search the full list (self.all_creators_data)
+            filtered_creators = []
+            for creator_data in self.all_creators_data: # Iterate through the full list
+                name_match = search_text in creator_data.get('name', '').lower()
+                service_match = search_text in creator_data.get('service', '').lower()
+                if name_match or service_match:
+                    filtered_creators.append(creator_data)
+            self._populate_list_widget(filtered_creators)
+
+    def _toggle_scope_mode(self):
+        """Toggles the scope mode and updates the button text."""
+        if self.current_scope_mode == self.SCOPE_CHARACTERS:
+            self.current_scope_mode = self.SCOPE_CREATORS
+        else:
+            self.current_scope_mode = self.SCOPE_CHARACTERS
+        self.scope_button.setText(f"Scope: {self.current_scope_mode}")
+        self.scope_button.setToolTip(
+            f"Current Download Scope: {self.current_scope_mode}\n\n"
+            f"Click to toggle between '{self.SCOPE_CHARACTERS}' and '{self.SCOPE_CREATORS}' scopes.\n"
+            f"'{self.SCOPE_CHARACTERS}': (Planned) Downloads into character-named folders directly in the main Download Location (artists mixed).\n"
+            f"'{self.SCOPE_CREATORS}': (Planned) Downloads into artist-named subfolders within the main Download Location, then character folders inside those.")
+        # You can add logic here to react to the mode change if needed in the future
+
+    def _get_domain_for_service(self, service_name):
+        """Determines the base domain for a given service."""
+        service_lower = service_name.lower()
+        # Common Coomer services
+        if service_lower in ['onlyfans', 'fansly']:
+            return "coomer.su" # Or coomer.party, adjust if needed
+        # Default to Kemono for others
+        return "kemono.su"
+
+    def _handle_add_selected(self):
+        """Gathers globally selected creators and processes them."""
+        selected_display_names = []
+        self.selected_creators_for_queue.clear() # Clear before populating
+
+        # Iterate over the globally stored selected creators
+        for creator_data in self.globally_selected_creators.values():
+            creator_name = creator_data.get('name')
+            self.selected_creators_for_queue.append(creator_data) # Store the full creator object
+            if creator_name:
+                selected_display_names.append(creator_name)
+
+        if selected_display_names:
+            main_app_window = self.parent() # QDialog's parent is the DownloaderApp instance
+            if hasattr(main_app_window, 'link_input'):
+                # Sort display names alphabetically for consistent UI
+                main_app_window.link_input.setText(", ".join(sorted(selected_display_names)))
+            self.accept() # Close the dialog
+        else:
+            QMessageBox.information(self, "No Selection", "No creators selected to add.")
+
+    def _handle_item_check_changed(self, item):
+        """Updates the globally_selected_creators dict when an item's check state changes."""
+        creator_data = item.data(Qt.UserRole)
+        if not isinstance(creator_data, dict):
+            return
+
+        service = creator_data.get('service')
+        creator_id = creator_data.get('id')
+
+        if service is None or creator_id is None:
+            # This should ideally not happen for valid creator entries
+            print(f"Warning: Creator data in list item missing service or id: {creator_data.get('name')}")
+            return
+
+        unique_key = (str(service), str(creator_id)) # Use a tuple of strings for consistent key
+
+        if item.checkState() == Qt.Checked:
+            self.globally_selected_creators[unique_key] = creator_data
+        else:
+            if unique_key in self.globally_selected_creators:
+                del self.globally_selected_creators[unique_key]
+
 class CookieHelpDialog(QDialog):
     """A dialog to explain how to get a cookies.txt file."""
     # Define constants for user choices
@@ -1278,11 +1488,12 @@ class TourDialog(QDialog):
         main_layout.setSpacing(0)
 
         self.stacked_widget = QStackedWidget()
-        main_layout.addWidget(self.stacked_widget, 1)
+        main_layout.addWidget(self.stacked_widget, 1) # type: ignore
         step1_content = (
             "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie management."
             "<ul>"
             "<li>My goal is to help you easily download content from <b>Kemono</b> and <b>Coomer</b>.</li><br>"
+            "<li><b>🎨 Creator Selection Button:</b> Next to the URL input, click the palette icon to open a dialog. Browse and select creators from your <code>creators.json</code> file to quickly add their names to the URL input.</li><br>"
             "<li><b>Important Tip: App '(Not Responding)'?</b><br>"
             "  After clicking 'Start Download', especially for large creator feeds or with many threads, the application might temporarily show as '(Not Responding)'. Your operating system (Windows, macOS, Linux) might even suggest you 'End Process' or 'Force Quit'.<br>"
             "  <b>Please be patient!</b> The app is often still working hard in the background. Before force-closing, try checking your chosen 'Download Location' in your file explorer. If you see new folders being created or files appearing, it means the download is progressing correctly. Give it some time to become responsive again.</li><br>"
@@ -1625,8 +1836,14 @@ class DownloaderApp(QWidget):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # PyInstaller one-file bundle: _MEIPASS is the temp dir for bundled files.
+            # Data files added with --add-data "source:." are here.
+            self.app_base_dir = sys._MEIPASS
+        elif getattr(sys, 'frozen', False):
+            # PyInstaller one-dir bundle: executable's dir is the bundle root.
             self.app_base_dir = os.path.dirname(sys.executable)
         else:
+            # Running as a script from source
             self.app_base_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_file = os.path.join(self.app_base_dir, "Known.txt")
 
@@ -1642,6 +1859,7 @@ class DownloaderApp(QWidget):
         self.is_processing_favorites_queue = False         
         self.download_counter = 0
         self.favorite_download_queue = deque()
+        self.last_link_input_text_for_queue_sync = "" # For syncing queue with link_input
         self.is_fetcher_thread_running = False
         self.is_processing_favorites_queue = False
         self.skip_counter = 0         
@@ -1725,7 +1943,7 @@ class DownloaderApp(QWidget):
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
-        self.setWindowTitle("Kemono Downloader v4.2.0")
+        self.setWindowTitle("Kemono Downloader v5.0.0")
         self.setStyleSheet(self.get_dark_theme())
 
         self.init_ui()
@@ -1774,6 +1992,8 @@ class DownloaderApp(QWidget):
             self.character_input.textChanged.connect(self._on_character_input_changed_live)
         if hasattr(self, 'use_cookie_checkbox'): 
             self.use_cookie_checkbox.toggled.connect(self._update_cookie_input_visibility)
+        if hasattr(self, 'link_input'): # Connect the new sync method
+            self.link_input.textChanged.connect(self._sync_queue_with_link_input)
         if hasattr(self, 'cookie_browse_button'):
             self.cookie_browse_button.clicked.connect(self._browse_cookie_file)
         if hasattr(self, 'cookie_text_input'):
@@ -2069,6 +2289,15 @@ class DownloaderApp(QWidget):
         self.link_input.textChanged.connect(self.update_custom_folder_visibility)
         url_input_layout.addWidget(self.link_input, 1)
 
+        # Add the new empty popup button
+        self.empty_popup_button = QPushButton("🎨") # Changed text to emoji
+        self.empty_popup_button.setToolTip(
+            "Open Creator Selection\n\n"
+            "Browse and select creators from your 'creators.json' file.\n"
+            "Selected creator names will be added to the URL input field."
+        )
+        self.empty_popup_button.clicked.connect(self._show_empty_popup)
+        url_input_layout.addWidget(self.empty_popup_button)
 
         self.page_range_label = QLabel("Page Range:")
         self.page_range_label.setStyleSheet("font-weight: bold; padding-left: 10px;")
@@ -2640,6 +2869,36 @@ class DownloaderApp(QWidget):
         if hasattr(self, 'favorite_mode_checkbox'): # Ensure checkbox exists
             self._handle_favorite_mode_toggle(self.favorite_mode_checkbox.isChecked()) # Initial UI state for favorite mode
         self._update_favorite_scope_button_text() # Set initial text for fav scope button
+        if hasattr(self, 'link_input'): # Initialize last_link_input_text_for_queue_sync
+            self.last_link_input_text_for_queue_sync = self.link_input.text()
+
+    def _sync_queue_with_link_input(self, current_text):
+        """
+        Synchronizes the favorite_download_queue with the link_input text.
+        Removes creators from the queue if their names are removed from the input field.
+        Only affects items added via 'creator_popup_selection'.
+        """
+        if not self.favorite_download_queue: # No queue to sync
+            self.last_link_input_text_for_queue_sync = current_text
+            return
+
+        current_names_in_input = {name.strip().lower() for name in current_text.split(',') if name.strip()}
+        
+        queue_copy = list(self.favorite_download_queue) # Iterate over a copy for safe removal
+        removed_count = 0
+
+        for item in queue_copy:
+            if item.get('type') == 'creator_popup_selection':
+                item_name_lower = item.get('name', '').lower()
+                if item_name_lower and item_name_lower not in current_names_in_input:
+                    try:
+                        self.favorite_download_queue.remove(item)
+                        self.log_signal.emit(f"ℹ️ Creator '{item.get('name')}' removed from download queue due to removal from URL input.")
+                        removed_count += 1
+                    except ValueError: # Should not happen if logic is correct
+                        self.log_signal.emit(f"⚠️ Tried to remove '{item.get('name')}' from queue, but it was not found (sync).")
+        
+        self.last_link_input_text_for_queue_sync = current_text
         
     def _browse_cookie_file(self):
         """Opens a file dialog to select a cookie file."""
@@ -2712,10 +2971,45 @@ class DownloaderApp(QWidget):
         """
 
     def browse_directory(self):
-        current_dir = self.dir_input.text() if os.path.isdir(self.dir_input.text()) else ""
-        folder = QFileDialog.getExistingDirectory(self, "Select Download Folder", current_dir)
-        if folder:
-            self.dir_input.setText(folder)
+        # Determine a safe starting path
+        initial_dir_text = self.dir_input.text()
+        start_path = ""
+        if initial_dir_text and os.path.isdir(initial_dir_text):
+            start_path = initial_dir_text
+        else:
+            # Fallback to standard locations if input is invalid or empty
+            home_location = QStandardPaths.writableLocation(QStandardPaths.HomeLocation)
+            documents_location = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
+            if home_location and os.path.isdir(home_location):
+                start_path = home_location
+            elif documents_location and os.path.isdir(documents_location):
+                start_path = documents_location
+            # If all else fails, start_path remains "", letting Qt decide.
+
+        self.log_signal.emit(f"ℹ️ Opening folder dialog. Suggested start path: '{start_path}'")
+
+        try:
+            # Use Qt's non-native dialog to potentially avoid OS-level hangs/warnings
+            # The options are combined directly here.
+            folder = QFileDialog.getExistingDirectory(
+                self,
+                "Select Download Folder",
+                start_path,
+                options=QFileDialog.DontUseNativeDialog | QFileDialog.ShowDirsOnly
+            )
+
+            if folder:  # folder is a string path, or empty if cancelled
+                self.dir_input.setText(folder)
+                self.log_signal.emit(f"ℹ️ Folder selected: {folder}")
+            else:
+                self.log_signal.emit(f"ℹ️ Folder selection cancelled by user.")
+        except RuntimeError as e:
+            # This can sometimes happen if Qt has issues with the windowing system or graphics
+            self.log_signal.emit(f"❌ RuntimeError opening folder dialog: {e}. This might indicate a deeper Qt or system issue.")
+            QMessageBox.critical(self, "Dialog Error", f"A runtime error occurred while trying to open the folder dialog: {e}")
+        except Exception as e:
+            self.log_signal.emit(f"❌ Unexpected error opening folder dialog: {e}\n{traceback.format_exc(limit=3)}")
+            QMessageBox.critical(self, "Dialog Error", f"An unexpected error occurred with the folder selection dialog: {e}")
 
     def handle_main_log(self, message):
         is_html_message = message.startswith(HTML_PREFIX)
@@ -3760,6 +4054,26 @@ class DownloaderApp(QWidget):
             QMessageBox.warning(self, "Busy", "A download is already running.")
             return False # Indicate failure to start
         
+        # Check if this "Start Download" is for processing a queue from the creator popup
+        if not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
+            is_from_creator_popup = False
+            if self.favorite_download_queue: # Ensure queue is not empty before peeking
+                first_item_in_queue = self.favorite_download_queue[0] # Peek at the first item
+                if first_item_in_queue.get('type') == 'creator_popup_selection':
+                    is_from_creator_popup = True
+            
+            if is_from_creator_popup:
+                # The queue was populated by the creator popup.
+                # The link_input field contains display names and should be ignored for URL parsing.
+                # Start processing the queue directly.
+                self.log_signal.emit(f"ℹ️ Detected {len(self.favorite_download_queue)} creators queued from popup. Starting processing...")
+                self._process_next_favorite_download() # This will set is_processing_favorites_queue
+                return True # Indicate that the process has started
+            # If not from creator_popup, let the normal flow handle it.
+            # This allows other uses of favorite_download_queue (e.g., from Favorite Artists/Posts dialogs)
+            # to proceed if they call start_download differently or if link_input is meant to be a URL.
+
+
         if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url:
             QMessageBox.information(self, "Favorite Mode Active",
                                     "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
@@ -4791,6 +5105,8 @@ class DownloaderApp(QWidget):
         self.favorite_download_queue.clear()
         self.is_processing_favorites_queue = False
         
+        if hasattr(self, 'link_input'): # Update for queue sync
+            self.last_link_input_text_for_queue_sync = self.link_input.text()
         self.filter_character_list(self.character_search_input.text())
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION # Reset scope
         self._update_favorite_scope_button_text()
@@ -4837,6 +5153,8 @@ class DownloaderApp(QWidget):
         self.is_processing_favorites_queue = False
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION # Reset scope
         self._update_favorite_scope_button_text()
+        if hasattr(self, 'link_input'): # Update for queue sync
+            self.last_link_input_text_for_queue_sync = self.link_input.text()
 
     def download_finished(self, total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list=None):
         if kept_original_names_list is None:
@@ -5226,6 +5544,25 @@ class DownloaderApp(QWidget):
                 <ul>
                     <li>Click <b>'Browse...'</b> to choose a main folder on your computer where all downloaded files will be saved.</li>
                     <li>This field is required unless you are using <b>'🔗 Only Links'</b> mode.</li>
+                </ul>
+            </li>
+            <li><b>🎨 Creator Selection Button (Next to URL Input):</b>
+                <ul>
+                    <li>Click the palette icon (🎨) to open the 'Creator Selection' dialog.</li>
+                    <li>This dialog loads creators from your <code>creators.json</code> file (which should be in the application's directory).</li>
+                    <li><b>Inside the Dialog:</b>
+                        <ul>
+                            <li><b>Search Bar:</b> Type to filter the list of creators by name or service.</li>
+                            <li><b>Creator List:</b> Displays creators from your <code>creators.json</code>. Creators you have 'favorited' (in the JSON data) appear at the top.</li>
+                            <li><b>Checkboxes:</b> Select one or more creators by checking the box next to their name.</li>
+                            <li><b>'Scope' Button (e.g., 'Scope: Characters'):</b> This button toggles the download organization when initiating downloads from this popup:
+                                <ul><li><i>Scope: Characters:</i> Downloads will be organized into character-named folders directly within your main 'Download Location'. Art from different creators for the same character will be grouped together.</li>
+                                    <li><i>Scope: Creators:</i> Downloads will first create a folder named after the creator within your main 'Download Location'. Character-named subfolders will then be created inside each creator's folder.</li></ul>
+                            </li>
+                            <li><b>'Add Selected' Button:</b> Clicking this will take the names of all checked creators and add them to the main '🔗 Kemono Creator/Post URL' input field, separated by commas. The dialog will then close.</li>
+                        </ul>
+                    </li>
+                    <li>This feature provides a quick way to populate the URL field for multiple creators without manually typing or pasting each URL.</li>
                 </ul>
             </li>
         </ul></body></html>"""
@@ -5691,6 +6028,43 @@ class DownloaderApp(QWidget):
         self._update_favorite_scope_button_text()
         self.log_signal.emit(f"ℹ️ Favorite download scope changed to: '{self.favorite_download_scope}'")
 
+    def _show_empty_popup(self):
+        """Creates and shows the empty popup dialog."""
+        dialog = EmptyPopupDialog(self.app_base_dir, self)
+        if dialog.exec_() == QDialog.Accepted: # "Add Selected" was clicked in the dialog
+            # The dialog's _handle_add_selected method has already set the link_input text.
+            # Now, we populate the internal download queue if creators were selected.
+            if hasattr(dialog, 'selected_creators_for_queue') and dialog.selected_creators_for_queue:
+                self.favorite_download_queue.clear() # Clear any previous queue items
+
+                for creator_data in dialog.selected_creators_for_queue:
+                    service = creator_data.get('service')
+                    creator_id = creator_data.get('id')
+                    creator_name = creator_data.get('name', 'Unknown Creator')
+                    
+                    # Reconstruct URL for the queue item
+                    # (Alternatively, creator_data could store the full URL directly)
+                    domain = dialog._get_domain_for_service(service) 
+                    
+                    if service and creator_id:
+                        url = f"https://{domain}/{service}/user/{creator_id}"
+                        queue_item = {
+                            'url': url,
+                            'name': creator_name, # For logging/display
+                            'name_for_folder': creator_name, # For 'Artist Folders' scope
+                            'type': 'creator_popup_selection', # Distinguish from other favorite types
+                            'scope_from_popup': dialog.current_scope_mode # Store the selected scope
+                        }
+                        self.favorite_download_queue.append(queue_item)
+                
+                if self.favorite_download_queue:
+                    self.log_signal.emit(f"ℹ️ {len(self.favorite_download_queue)} creators added to download queue from popup. Click 'Start Download' to process.")
+                    if hasattr(self, 'link_input'): # Update last_link_input for sync after queue is rebuilt
+                        self.last_link_input_text_for_queue_sync = self.link_input.text()
+
+                # If the queue is empty here, it means "Add Selected" was clicked with no items checked in the dialog.
+                # The link_input would have been cleared or set to empty by the dialog's logic.
+
     def _show_favorite_artists_dialog(self):
         if self._is_download_active() or self.is_processing_favorites_queue:
             QMessageBox.warning(self, "Busy", "Another download operation is already in progress.")
@@ -5797,7 +6171,11 @@ class DownloaderApp(QWidget):
         if not self.favorite_download_queue:
             if self.is_processing_favorites_queue: # If we were in the middle of processing favorites
                 self.is_processing_favorites_queue = False
-                self.log_signal.emit("✅ All favorite items from queue have been processed.")
+                item_type_log = "item" # Default
+                # Check if current_processing_favorite_item_info was set (i.e., at least one item was processed)
+                if hasattr(self, 'current_processing_favorite_item_info') and self.current_processing_favorite_item_info:
+                    item_type_log = self.current_processing_favorite_item_info.get('type', 'item')
+                self.log_signal.emit(f"✅ All {item_type_log} downloads from favorite queue have been processed.")
                 self.set_ui_enabled(True) # Re-enable UI fully
             return
 
@@ -5810,10 +6188,16 @@ class DownloaderApp(QWidget):
         item_display_name = self.current_processing_favorite_item_info.get('name', 'Unknown Item') # This is artist name or post title
 
         self.log_signal.emit(f"▶️ Processing next favorite from queue: '{item_display_name}' ({next_url})")
-
+        
         override_dir = None
-        if self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS and self.dir_input.text().strip(): # Ensure main dir is set
-            main_download_dir = self.dir_input.text().strip()
+        # Determine scope: from popup if available, otherwise from main app's favorite scope setting
+        item_scope = self.current_processing_favorite_item_info.get('scope_from_popup')
+        if item_scope is None: # Not from creator popup, use the main favorite scope
+            item_scope = self.favorite_download_scope
+
+        main_download_dir = self.dir_input.text().strip()
+        if item_scope == EmptyPopupDialog.SCOPE_CREATORS or \
+           (item_scope == FAVORITE_SCOPE_ARTIST_FOLDERS and main_download_dir):
             folder_name_key = self.current_processing_favorite_item_info.get('name_for_folder', 'Unknown_Folder')
             item_specific_folder_name = clean_folder_name(folder_name_key) # artist_name or creator_id
             override_dir = os.path.join(main_download_dir, item_specific_folder_name)
@@ -5827,6 +6211,7 @@ class DownloaderApp(QWidget):
             # to ensure the queue continues or terminates correctly.
             self.log_signal.emit(f"⚠️ Failed to initiate download for '{item_display_name}'. Skipping this item in queue.")
             # Simulate a "cancelled" finish for this item to process the next or end the queue.
+            # This will call _process_next_favorite_download again if queue is not empty via download_finished.
             self.download_finished(total_downloaded=0, total_skipped=1, cancelled_by_user=True, kept_original_names_list=[])
 
 if __name__ == '__main__':
