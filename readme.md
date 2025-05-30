@@ -251,5 +251,56 @@ This section details the primary functionalities of the Kemono Downloader.
 
 ### Install Dependencies
 Open your terminal or command prompt and run:
+
 ```bash
 pip install PyQt5 requests Pillow
+---
+   
+```bash
+python main.py
+---
+
+
+### 2. Optional Setup
+
+-   Place your `cookies.txt` in the root directory (if using cookies).
+-   Prepare your `Known.txt` and `creators.json` in the same directory for advanced filtering and selection features.
+
+---
+
+## Tips & Best Practices
+
+-   For best results, use **Favorite Mode** if you're a logged-in user with bookmarked artists/posts.
+-   Use **Filter by Character(s)** and keep your `Known.txt` updated to reduce clutter and organize downloads.
+-   Use the **multi-part toggle** for large video/audio files but disable it when downloading large batches of small images to reduce overhead.
+-   Adjust **thread count** based on your internet speed and CPU; too many threads can result in API throttling.
+
+---
+
+## Troubleshooting
+
+-   **Downloads not starting?**
+    -   Ensure the download location is set.
+    -   Check your filters aren't too strict.
+    -   If in Favorite Mode, make sure cookie is set and valid.
+
+-   **Missing characters/folders?**
+    -   Review the Missed Character Log.
+    -   Use the "Scan Content for Images" option if image links are embedded in descriptions.
+
+-   **App crashes or logs errors?**
+    -   Check the console/log area for stack traces.
+    -   Run from terminal to capture more error output.
+    -   Ensure `Known.txt` and `creators.json` are valid.
+
+---
+
+## Contribution
+
+Feel free to fork this repo and submit pull requests for bug fixes, new features, or UI improvements!
+
+---
+
+## License
+
+This project is released under the MIT License.
