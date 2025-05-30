@@ -13,7 +13,7 @@ import html
 import subprocess
 import random
 from collections import deque
-
+import unicodedata # Add this import
 from concurrent.futures import ThreadPoolExecutor, CancelledError, Future
 
 from PyQt5.QtGui import (
@@ -361,18 +361,47 @@ class EmptyPopupDialog(QDialog):
 
     def _filter_list(self):
         """Filters the list widget based on the search input."""
-        search_text = self.search_input.text().lower().strip()
+        raw_search_input = self.search_input.text()
+        
+        # For the initial "empty search" check, use a simple lowercased and stripped version
+        check_search_text_for_empty = raw_search_input.lower().strip() # Used only to check if search is empty
 
-        if not search_text:
+        if not check_search_text_for_empty:
             # Display initial limited list (top N from sorted all_creators_data)
             creators_to_show = self.all_creators_data[:self.INITIAL_LOAD_LIMIT]
             self._populate_list_widget(creators_to_show)
         else:
-            # Search the full list (self.all_creators_data)
+            # Active search: Prepare normalized search terms
+            
+            # For case-insensitive search: NFKC normalize, then casefold, then strip.
+            norm_search_casefolded = unicodedata.normalize('NFKC', raw_search_input).casefold().strip()
+            
+            # For original case sensitive search: NFKC normalize, then strip.
+            norm_search_original = unicodedata.normalize('NFKC', raw_search_input).strip()
+
             filtered_creators = []
-            for creator_data in self.all_creators_data: # Iterate through the full list
-                name_match = search_text in creator_data.get('name', '').lower()
-                service_match = search_text in creator_data.get('service', '').lower()
+            for creator_data in self.all_creators_data:
+                creator_name_raw = creator_data.get('name', '')
+                creator_service_raw = creator_data.get('service', '')
+
+                # Normalize creator name from data
+                norm_creator_name_from_data = unicodedata.normalize('NFKC', creator_name_raw)
+                
+                # For case-insensitive match: casefold the normalized creator name
+                norm_creator_name_casefolded = norm_creator_name_from_data.casefold()
+
+                # 1. Case-insensitive match
+                name_match_insensitive = norm_search_casefolded in norm_creator_name_casefolded
+                
+                # 2. Original case match (search term must be non-empty after normalization and stripping)
+                name_match_original_case = norm_search_original and norm_search_original in norm_creator_name_from_data
+
+                name_match = name_match_insensitive or name_match_original_case
+
+                # Match against service (normalize service name and use casefolded search term)
+                norm_service_casefolded = unicodedata.normalize('NFKC', creator_service_raw).casefold()
+                service_match = norm_search_casefolded in norm_service_casefolded
+                
                 if name_match or service_match:
                     filtered_creators.append(creator_data)
             self._populate_list_widget(filtered_creators)
