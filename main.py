@@ -4,6 +4,7 @@ import time
 import requests
 import re
 import threading
+import json # Added for loading creators.txt
 import queue
 import hashlib
 import http.client
@@ -725,6 +726,7 @@ class FavoritePostsDialog(QDialog):
         self.all_fetched_posts = []
         self.selected_posts_data = []
         self.known_names_list_ref = known_names_list_ref # Store reference to global KNOWN_NAMES
+        self.creator_name_cache = {} # To store (service, id) -> name
         self.displayable_grouped_posts = {} # For storing posts grouped by artist
         self.fetcher_thread = None # For the worker thread
         
@@ -735,6 +737,7 @@ class FavoritePostsDialog(QDialog):
             self.setStyleSheet(self.parent_app.get_dark_theme())
 
         self._init_ui()
+        self._load_creator_names_from_file() # Load creator names
         self._start_fetching_favorite_posts() # Changed to start thread
 
     def _init_ui(self):
@@ -750,7 +753,7 @@ class FavoritePostsDialog(QDialog):
         main_layout.addWidget(self.progress_bar)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search posts (title, creator ID, service)...")
+        self.search_input.setPlaceholderText("Search posts (title, creator name, ID, service)...")
         self.search_input.textChanged.connect(self._filter_post_list_display)
         main_layout.addWidget(self.search_input)
 
@@ -791,6 +794,43 @@ class FavoritePostsDialog(QDialog):
         else:
             print(f"[FavPostsDialog] {message}")
 
+    def _load_creator_names_from_file(self):
+        """Loads creator id-name-service mappings from creators.txt."""
+        # Changed to load creators.json
+        self._logger(f"Attempting to load creators.json. App base dir: {self.parent_app.app_base_dir}")
+        creators_file_path = os.path.join(self.parent_app.app_base_dir, "creators.json") 
+        self._logger(f"Full path to creators.json: {creators_file_path}")
+
+        if not os.path.exists(creators_file_path):
+            self._logger(f"Warning: 'creators.json' not found at {creators_file_path}. Creator names will not be displayed.")
+            return
+
+        try:
+            with open(creators_file_path, 'r', encoding='utf-8') as f:
+                loaded_data = json.load(f) # Load the entire JSON structure
+                
+                # Assuming the structure is [ [ {creator1}, {creator2}, ... ] ]
+                # And we are interested in the inner list.
+                if isinstance(loaded_data, list) and len(loaded_data) > 0 and isinstance(loaded_data[0], list):
+                    creators_list = loaded_data[0]
+                elif isinstance(loaded_data, list) and all(isinstance(item, dict) for item in loaded_data):
+                    # This handles the case where creators.json is a flat list [ {creator1}, ... ]
+                    creators_list = loaded_data
+                else:
+                    self._logger(f"Warning: 'creators.json' has an unexpected format. Expected a list of lists or a flat list of creator objects.")
+                    return
+
+                for creator_data in creators_list:
+                    creator_id = creator_data.get("id")
+                    name = creator_data.get("name")
+                    service = creator_data.get("service")
+                    if creator_id and name and service:
+                        # Ensure IDs are strings for consistent lookup
+                        self.creator_name_cache[(service.lower(), str(creator_id))] = name
+            self._logger(f"Successfully loaded {len(self.creator_name_cache)} creator names from 'creators.json'.")
+        except Exception as e:
+            self._logger(f"Error loading 'creators.json': {e}")
+
     def _start_fetching_favorite_posts(self):
         self.download_button.setEnabled(False) # Disable download button during fetch
         self.status_label.setText("Initializing favorite posts fetch...")
@@ -827,16 +867,41 @@ class FavoritePostsDialog(QDialog):
                 QMessageBox.critical(self, "Fetch Error", error_msg)
                 self.download_button.setEnabled(False)
             return
+
         self.progress_bar.setVisible(False)
+
+        if not self.creator_name_cache:
+            self._logger("Warning: Creator name cache is empty. Names will not be resolved.")
+        else:
+            self._logger(f"Creator name cache has {len(self.creator_name_cache)} entries.")
+            sample_keys = list(self.creator_name_cache.keys())[:3]
+            if sample_keys:
+                self._logger(f"Sample keys from creator_name_cache: {sample_keys}")
+
+        processed_one_missing_log = False # Flag to log only one missing key example per fetch
+
+        # Add creator name to each post
+        for post_entry in fetched_posts_list:
+            service_from_post = post_entry.get('service', '')
+            creator_id_from_post = post_entry.get('creator_id', '')
+
+            lookup_key_service = service_from_post.lower()
+            lookup_key_id = str(creator_id_from_post)
+            lookup_key_tuple = (lookup_key_service, lookup_key_id)
+            
+            resolved_name = self.creator_name_cache.get(lookup_key_tuple)
+            
+            if resolved_name:
+                post_entry['creator_name_resolved'] = resolved_name
+            else:
+                post_entry['creator_name_resolved'] = str(creator_id_from_post) # Fallback to ID
+                if not processed_one_missing_log and self.creator_name_cache: # Log only if cache is not empty
+                    self._logger(f"Debug: Name not found for key {lookup_key_tuple}. Using ID '{creator_id_from_post}'.")
+                    processed_one_missing_log = True
+
         self.all_fetched_posts = fetched_posts_list
         self._populate_post_list_widget() # This will now group and display
         self.status_label.setText(f"{len(self.all_fetched_posts)} favorite post(s) found.")
-        self.download_button.setEnabled(len(self.all_fetched_posts) > 0)
-        
-        if self.fetcher_thread:
-            self.fetcher_thread.quit()
-            self.fetcher_thread.wait()
-            self.fetcher_thread = None
 
     def _find_best_known_name_match_in_title(self, title_raw):
         if not title_raw or not self.known_names_list_ref:
@@ -895,9 +960,14 @@ class FavoritePostsDialog(QDialog):
             for key in sorted_group_keys
         }
         for service, creator_id_val in sorted_group_keys:
-            artist_name = f"{service.capitalize()} / {creator_id_val}" # Display service and ID
+            # Resolve creator name for header
+            creator_name_display = self.creator_name_cache.get(
+                (service.lower(), str(creator_id_val)), # Ensure service is lower and id is str for lookup
+                str(creator_id_val) # Fallback to creator_id_val if not found
+            )
+            artist_header_display_text = f"{creator_name_display} ({service.capitalize()} / {creator_id_val})"
             # Add artist header item
-            artist_header_item = QListWidgetItem(f"🎨 {artist_name}")
+            artist_header_item = QListWidgetItem(f"🎨 {artist_header_display_text}")
             artist_header_item.setFlags(Qt.NoItemFlags) # Not selectable, not checkable
             font = artist_header_item.font()
             font.setBold(True)
@@ -938,11 +1008,11 @@ class FavoritePostsDialog(QDialog):
         for post in self.all_fetched_posts:
             # Check if search text matches post title, creator name, creator ID, or service
             matches_post_title = search_text in post.get('title', '').lower()
-            matches_creator_name = False # Creator name is no longer fetched
+            matches_creator_name = search_text in post.get('creator_name_resolved', '').lower() # Search resolved name
             matches_creator_id = search_text in post.get('creator_id', '').lower()
             matches_service = search_text in post['service'].lower()
             
-            if matches_post_title or matches_creator_name or matches_creator_id or matches_service:
+            if matches_post_title or matches_creator_name or matches_creator_id or matches_service: # Added matches_creator_name
                 filtered_posts_to_group.append(post)
         
         self._populate_post_list_widget(filtered_posts_to_group) # Repopulate with filtered, which will group
