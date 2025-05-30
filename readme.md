@@ -254,11 +254,11 @@ Open your terminal or command prompt and run:
 
 ```bash
 pip install PyQt5 requests Pillow
----
-   
+```
+
 ```bash
 python main.py
----
+```
 
 
 ### 2. Optional Setup
