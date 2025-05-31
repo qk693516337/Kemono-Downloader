@@ -233,6 +233,27 @@ class ConfirmAddAllDialog(QDialog):
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
 
+class FutureSettingsDialog(QDialog):
+    """A simple dialog as a placeholder for future settings."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Settings (Future Placeholder)")
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+
+        label = QLabel("This is a placeholder for future application settings.")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+
+        ok_button = QPushButton("OK")
+        ok_button.clicked.connect(self.accept)
+        layout.addWidget(ok_button, 0, Qt.AlignRight)
+
+        self.setMinimumSize(350, 150)
+        if parent and hasattr(parent, 'get_dark_theme'):
+            self.setStyleSheet(parent.get_dark_theme())
+
 class EmptyPopupDialog(QDialog):
     """A simple empty popup dialog."""
     SCOPE_CHARACTERS = "Characters"
@@ -910,7 +931,7 @@ class FavoritePostsFetcherThread(QThread):
 
             # Creator name fetching logic removed.
             # Sort by service, then creator_id, then date for consistent grouping
-            all_fetched_posts_temp.sort(key=lambda x: (x.get('service','').lower(), x.get('creator_id','').lower(), x.get('added_date', '')), reverse=False)
+            all_fetched_posts_temp.sort(key=lambda x: (x.get('service','').lower(), x.get('creator_id','').lower(), (x.get('added_date') or '')), reverse=False)
             self.finished.emit(all_fetched_posts_temp, None)
 
         except requests.exceptions.RequestException as e:
@@ -1112,7 +1133,8 @@ class FavoritePostsDialog(QDialog):
                 self.status_label.setText(error_msg)
                 self._logger(error_msg) # Log to main app log
                 QMessageBox.critical(self, "Fetch Error", error_msg)
-                self.download_button.setEnabled(False)
+            self.download_button.setEnabled(False) # Ensure it's disabled on any error
+            self.progress_bar.setVisible(False) # Hide progress bar on error
             return
 
         self.progress_bar.setVisible(False)
@@ -1147,8 +1169,22 @@ class FavoritePostsDialog(QDialog):
                     processed_one_missing_log = True
 
         self.all_fetched_posts = fetched_posts_list
-        self._populate_post_list_widget() # This will now group and display
-        self.status_label.setText(f"{len(self.all_fetched_posts)} favorite post(s) found.")
+
+        if not self.all_fetched_posts: # If list is empty after fetch (e.g., user has no favorites)
+            self.status_label.setText("No favorite posts found.")
+            self.download_button.setEnabled(False)
+            return
+
+        try:
+            self._populate_post_list_widget() # This will now group and display
+            self.status_label.setText(f"{len(self.all_fetched_posts)} favorite post(s) found.")
+            self.download_button.setEnabled(True) # Enable button if posts are successfully fetched and populated
+        except Exception as e:
+            self.status_label.setText(f"Error displaying posts: {e}")
+            self._logger(f"Error during _populate_post_list_widget: {e}\n{traceback.format_exc(limit=3)}")
+            QMessageBox.critical(self, "UI Error", f"Could not display favorite posts: {e}")
+            self.download_button.setEnabled(False) # Disable button on population error
+
 
     def _find_best_known_name_match_in_title(self, title_raw):
         if not title_raw or not self.known_names_list_ref:
@@ -1203,8 +1239,8 @@ class FavoritePostsDialog(QDialog):
         sorted_group_keys = sorted(grouped_posts.keys(), key=lambda x: (x[0].lower(), x[1].lower()))
         
         self.displayable_grouped_posts = {
-            key: sorted(grouped_posts[key], key=lambda p: p.get('added_date', ''), reverse=True)
-            for key in sorted_group_keys
+            key: sorted(grouped_posts[key], key=lambda p: (p.get('added_date') or ''), reverse=True)
+            for key in sorted_group_keys # type: ignore
         }
         for service, creator_id_val in sorted_group_keys:
             # Resolve creator name for header
@@ -1454,7 +1490,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
-    TOUR_SHOWN_KEY = "neverShowTourAgainV2" # Changed V5 to V6 to re-trigger the tour
+    TOUR_SHOWN_KEY = "neverShowTourAgainV11" # Changed V5 to V6 to re-trigger the tour
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2752,13 +2788,21 @@ class DownloaderApp(QWidget):
 
         self.known_names_help_button = QPushButton("?")
         self.known_names_help_button.setFixedWidth(35)
+        self.known_names_help_button.setStyleSheet("padding: 8px 6px;") # Adjusted padding
         self.known_names_help_button.setToolTip("Open the application feature guide.")
         self.known_names_help_button.clicked.connect(self._show_feature_guide)
+
+        self.future_settings_button = QPushButton("⚙️") # Settings gear icon
+        self.future_settings_button.setFixedWidth(35) # Same width as help button
+        self.future_settings_button.setStyleSheet("padding: 8px 6px;") # Adjusted padding
+        self.future_settings_button.setToolTip("Open placeholder for future settings.")
+        self.future_settings_button.clicked.connect(self._show_future_settings_dialog)
 
 
         char_manage_layout.addWidget(self.add_to_filter_button, 0)
         char_manage_layout.addWidget(self.delete_char_button, 0)
         char_manage_layout.addWidget(self.known_names_help_button, 0)
+        char_manage_layout.addWidget(self.future_settings_button, 0) # Add the new settings button
         left_layout.addLayout(char_manage_layout)
         left_layout.addStretch(0)
 
@@ -2906,6 +2950,11 @@ class DownloaderApp(QWidget):
         self._update_favorite_scope_button_text() # Set initial text for fav scope button
         if hasattr(self, 'link_input'): # Initialize last_link_input_text_for_queue_sync
             self.last_link_input_text_for_queue_sync = self.link_input.text()
+
+    def _show_future_settings_dialog(self):
+        """Shows the placeholder dialog for future settings."""
+        dialog = FutureSettingsDialog(self)
+        dialog.exec_()
 
     def _sync_queue_with_link_input(self, current_text):
         """
@@ -5473,6 +5522,7 @@ class DownloaderApp(QWidget):
         self.favorite_download_queue.clear()
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION # Reset scope
         self._update_favorite_scope_button_text()        
+        self.retryable_failed_files_info.clear() # Clear any pending retries
         self.is_processing_favorites_queue = False
 
         if count > 0: self.log_signal.emit(f"    Cleared {count} downloaded filename(s) from session memory.")
