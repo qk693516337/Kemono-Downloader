@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v4.2.0</h1>
+<h1 align="center">Kemono Downloader v5.0.0</h1>
 
 <table align="center">
   <tr>
