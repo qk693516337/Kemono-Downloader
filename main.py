@@ -126,6 +126,7 @@ ALLOW_MULTIPART_DOWNLOAD_KEY = "allowMultipartDownloadV1"
 USE_COOKIE_KEY = "useCookieV1"
 COOKIE_TEXT_KEY = "cookieTextV1"
 CHAR_FILTER_SCOPE_KEY = "charFilterScopeV1"
+THEME_KEY = "currentThemeV2" # Changed key for theme
 SCAN_CONTENT_IMAGES_KEY = "scanContentForImagesV1"
 
 CONFIRM_ADD_ALL_ACCEPTED = 1
@@ -235,24 +236,53 @@ class ConfirmAddAllDialog(QDialog):
 
 class FutureSettingsDialog(QDialog):
     """A simple dialog as a placeholder for future settings."""
-    def __init__(self, parent=None):
+    def __init__(self, parent_app_ref, parent=None): # parent_app_ref is DownloaderApp
         super().__init__(parent)
-        self.setWindowTitle("Settings (Future Placeholder)")
+        self.parent_app = parent_app_ref # Store the reference to DownloaderApp
+        self.setWindowTitle("Settings")
         self.setModal(True)
 
         layout = QVBoxLayout(self)
 
-        label = QLabel("This is a placeholder for future application settings.")
+        label = QLabel("Application Settings:")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
+        # Theme toggle button
+        self.theme_toggle_button = QPushButton()
+        self._update_theme_toggle_button_text() # Set initial text
+        self.theme_toggle_button.clicked.connect(self._toggle_theme)
+        layout.addWidget(self.theme_toggle_button)
+
+        layout.addStretch(1) # Add some space
 
         ok_button = QPushButton("OK")
         ok_button.clicked.connect(self.accept)
         layout.addWidget(ok_button, 0, Qt.AlignRight)
 
         self.setMinimumSize(350, 150)
-        if parent and hasattr(parent, 'get_dark_theme'):
-            self.setStyleSheet(parent.get_dark_theme())
+        self._apply_dialog_theme()
+
+    def _update_theme_toggle_button_text(self):
+        if self.parent_app.current_theme == "dark":
+            self.theme_toggle_button.setText("Switch to Light Mode")
+            self.theme_toggle_button.setToolTip("Change the application appearance to light.")
+        else:
+            self.theme_toggle_button.setText("Switch to Dark Mode")
+            self.theme_toggle_button.setToolTip("Change the application appearance to dark.")
+
+    def _toggle_theme(self):
+        if self.parent_app.current_theme == "dark":
+            self.parent_app.apply_theme("light")
+        else:
+            self.parent_app.apply_theme("dark")
+        self._update_theme_toggle_button_text()
+        self._apply_dialog_theme()
+
+    def _apply_dialog_theme(self):
+        if self.parent_app.current_theme == "dark":
+            self.setStyleSheet(self.parent_app.get_dark_theme())
+        else:
+            self.setStyleSheet("") # Revert to default for light
 
 class EmptyPopupDialog(QDialog):
     """A simple empty popup dialog."""
@@ -1068,9 +1098,19 @@ class FavoritePostsDialog(QDialog):
 
     def _load_creator_names_from_file(self):
         """Loads creator id-name-service mappings from creators.txt."""
-        # Changed to load creators.json
-        self._logger(f"Attempting to load creators.json. App base dir: {self.parent_app.app_base_dir}")
-        creators_file_path = os.path.join(self.parent_app.app_base_dir, "creators.json") 
+        self._logger("Attempting to load creators.json for Favorite Posts Dialog.")
+
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as a PyInstaller bundle, creators.json is bundled
+            base_path_for_creators = sys._MEIPASS
+            self._logger(f"  Running bundled. Using _MEIPASS: {base_path_for_creators}")
+        else:
+            # Running as a script, or _MEIPASS not available.
+            # self.parent_app.app_base_dir is correctly set by DownloaderApp.
+            base_path_for_creators = self.parent_app.app_base_dir
+            self._logger(f"  Not bundled or _MEIPASS unavailable. Using app_base_dir: {base_path_for_creators}")
+
+        creators_file_path = os.path.join(base_path_for_creators, "creators.json")
         self._logger(f"Full path to creators.json: {creators_file_path}")
 
         if not os.path.exists(creators_file_path):
@@ -1140,13 +1180,14 @@ class FavoritePostsDialog(QDialog):
 
         self.progress_bar.setVisible(False)
 
-        if not self.creator_name_cache:
-            self._logger("Warning: Creator name cache is empty. Names will not be resolved.")
-        else:
-            self._logger(f"Creator name cache has {len(self.creator_name_cache)} entries.")
+        if not self.creator_name_cache: # Check if cache is empty
+            self._logger("Warning: Creator name cache is empty. Names will not be resolved from creators.json. Displaying IDs instead.")
+        else: # Cache has entries
+            self._logger(f"Creator name cache has {len(self.creator_name_cache)} entries. Attempting to resolve names...")
             sample_keys = list(self.creator_name_cache.keys())[:3]
             if sample_keys:
                 self._logger(f"Sample keys from creator_name_cache: {sample_keys}")
+
 
         processed_one_missing_log = False # Flag to log only one missing key example per fetch
 
@@ -1491,7 +1532,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
-    TOUR_SHOWN_KEY = "neverShowTourAgainV11" # Changed V5 to V6 to re-trigger the tour
+    TOUR_SHOWN_KEY = "neverShowTourAgainV14" 
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -2008,6 +2049,7 @@ class DownloaderApp(QWidget):
         self.char_filter_scope = CHAR_SCOPE_TITLE
         # --- END MODIFICATION ---
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
+        self.current_theme = self.settings.value(THEME_KEY, "dark", type=str) # Load theme, default to dark        
         self.allow_multipart_download_setting = False 
         self.use_cookie_setting = False
         self.scan_content_images_setting = self.settings.value(SCAN_CONTENT_IMAGES_KEY, False, type=bool)         
@@ -2016,11 +2058,9 @@ class DownloaderApp(QWidget):
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
         self.setWindowTitle("Kemono Downloader v5.0.0")
-        self.setStyleSheet(self.get_dark_theme())
 
         self.init_ui()
-        self._connect_signals()
-
+        self._connect_signals() 
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
         self.log_signal.emit("ℹ️ 'Skip Current File' button has been removed.")
         if hasattr(self, 'character_input'):
@@ -2044,6 +2084,23 @@ class DownloaderApp(QWidget):
         self.log_signal.emit(f"ℹ️ Cookie text defaults to: Empty on launch")
         self.log_signal.emit(f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
         self.log_signal.emit(f"ℹ️ Scan post content for images defaults to: {'Enabled' if self.scan_content_images_setting else 'Disabled'}")
+
+    def apply_theme(self, theme_name, initial_load=False):
+        self.current_theme = theme_name
+        if not initial_load: # Don't save during initial load if it's already the default or loaded value
+            self.settings.setValue(THEME_KEY, theme_name)
+            self.settings.sync()
+
+        if theme_name == "dark":
+            self.setStyleSheet(self.get_dark_theme())
+            if not initial_load:
+                self.log_signal.emit("🎨 Switched to Dark Mode.")
+        else: # light mode
+            self.setStyleSheet("") # Clear stylesheet for default light theme
+            if not initial_load:
+                self.log_signal.emit("🎨 Switched to Light Mode.")
+        # Force style update on children if necessary (usually not needed with setStyleSheet on top level)
+        self.update()
 
     def _get_tooltip_for_character_input(self):
         return (
@@ -2296,6 +2353,7 @@ class DownloaderApp(QWidget):
         self.settings.setValue(COOKIE_TEXT_KEY, self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "")
         self.settings.setValue(SCAN_CONTENT_IMAGES_KEY, self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False)         
         self.settings.setValue(USE_COOKIE_KEY, self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False)
+        self.settings.setValue(THEME_KEY, self.current_theme) # Save current theme        
         self.settings.sync()
 
         should_exit = True
@@ -2348,7 +2406,7 @@ class DownloaderApp(QWidget):
         right_layout = QVBoxLayout(right_panel_widget)
         left_layout.setContentsMargins(10, 10, 10, 10)
         right_layout.setContentsMargins(10, 10, 10, 10)
-
+        self.apply_theme(self.current_theme, initial_load=True) # Apply theme early in UI setup
 
         self.url_input_widget = QWidget()
         url_input_layout = QHBoxLayout(self.url_input_widget)
@@ -2732,14 +2790,14 @@ class DownloaderApp(QWidget):
         self.pause_btn = QPushButton("⏸️ Pause Download")
         self.pause_btn.setToolTip("Click to pause the ongoing download process.")
         self.pause_btn.setEnabled(False)
-        self.pause_btn.setStyleSheet("padding: 4px 12px;") # Add padding style
+        self.pause_btn.setStyleSheet("padding: 4px 12px;") 
         self.pause_btn.clicked.connect(self._handle_pause_resume_action)
         
         self.cancel_btn = QPushButton("❌ Cancel & Reset UI")
 
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.setToolTip("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
-        self.cancel_btn.setStyleSheet("padding: 4px 12px;") # Add padding style
+        self.cancel_btn.setStyleSheet("padding: 4px 12px;") 
         self.cancel_btn.clicked.connect(self.cancel_download_button_action)
         btn_layout.addWidget(self.download_btn)
         btn_layout.addWidget(self.pause_btn)
@@ -2883,26 +2941,19 @@ class DownloaderApp(QWidget):
         self.main_log_output = QTextEdit()
         self.main_log_output.setToolTip("Displays progress messages, errors, and summaries. In 'Only Links' mode, shows extracted links.")
         self.main_log_output.setReadOnly(True)
-        self.main_log_output.setLineWrapMode(QTextEdit.NoWrap)
-        self.main_log_output.setStyleSheet("""
-            QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
-                          color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }""")
+        self.main_log_output.setLineWrapMode(QTextEdit.NoWrap) # Font and colors will be handled by theme
         self.log_view_stack.addWidget(self.main_log_output) # Add progress log to stack
 
         self.missed_character_log_output = QTextEdit() # Create missed character log
         self.missed_character_log_output.setToolTip("Displays information about posts/files skipped due to character filters.")
         self.missed_character_log_output.setReadOnly(True)
         self.missed_character_log_output.setLineWrapMode(QTextEdit.NoWrap) # Or QTextEdit.WidgetWidth
-        self.missed_character_log_output.setStyleSheet(self.main_log_output.styleSheet()) # Use same style
         self.log_view_stack.addWidget(self.missed_character_log_output) # Add missed char log to stack
 
         self.external_log_output = QTextEdit()
         self.external_log_output.setToolTip("If 'Show External Links in Log' is checked, this panel displays external links found in post descriptions.")
         self.external_log_output.setReadOnly(True)
-        self.external_log_output.setLineWrapMode(QTextEdit.NoWrap)
-        self.external_log_output.setStyleSheet("""
-            QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
-                          color: #F0F0F0; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }""")
+        self.external_log_output.setLineWrapMode(QTextEdit.NoWrap) # Font and colors will be handled by theme
         self.external_log_output.hide()
 
         self.log_splitter.addWidget(self.log_view_stack) # Add stack to splitter (first widget)
@@ -2971,6 +3022,7 @@ class DownloaderApp(QWidget):
     def _show_future_settings_dialog(self):
         """Shows the placeholder dialog for future settings."""
         dialog = FutureSettingsDialog(self)
+        dialog = FutureSettingsDialog(self, self)         
         dialog.exec_()
 
     def _sync_queue_with_link_input(self, current_text):
@@ -3051,7 +3103,9 @@ class DownloaderApp(QWidget):
         return """
         QWidget { background-color: #2E2E2E; color: #E0E0E0; font-family: Segoe UI, Arial, sans-serif; font-size: 10pt; }
         QLineEdit, QListWidget { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px; color: #F0F0F0; border-radius: 4px; }
-        QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px; color: #F0F0F0; border-radius: 4px; }
+        QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
+                          color: #F0F0F0; border-radius: 4px; 
+                          font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }
         QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 6px 12px; border-radius: 4px; min-height: 22px; }
         QPushButton:hover { background-color: #656565; border: 1px solid #7A7A7A; }
         QPushButton:pressed { background-color: #4A4A4A; }
@@ -3302,9 +3356,8 @@ class DownloaderApp(QWidget):
             progress_text = f"DL '{filename[:20]}...': {dl_mb:.1f}/{total_mb:.1f} MB ({active_chunks_count} parts @ {speed_MBps:.2f} MB/s)"
             self.file_progress_label.setText(progress_text)
 
-        elif isinstance(progress_info, tuple) and len(progress_info) == 2:  # Single stream (downloaded_bytes, total_bytes)
-            downloaded_bytes, total_bytes = progress_info
-            if not filename and total_bytes == 0 and downloaded_bytes == 0: # Clear if no info
+        elif isinstance(progress_info, tuple) and len(progress_info) == 2: 
+            if not filename and total_bytes == 0 and downloaded_bytes == 0: 
                 self.file_progress_label.setText("")
                 return
 
@@ -5558,8 +5611,7 @@ class DownloaderApp(QWidget):
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
         self._update_skip_scope_button_text()
         
-        self.char_filter_scope = CHAR_SCOPE_TITLE # Default to Title on full reset
-        # self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope) # Already removed from saving
+        self.char_filter_scope = CHAR_SCOPE_TITLE 
         self._update_char_filter_scope_button_text() 
 
         self.settings.sync()
