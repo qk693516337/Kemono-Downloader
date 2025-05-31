@@ -290,11 +290,19 @@ class EmptyPopupDialog(QDialog):
 
     def _load_creators_from_json(self):
         """Loads creators from creators.json and populates the list widget."""
-        creators_file_path = os.path.join(self.app_base_dir, "creators.json")
         self.list_widget.clear() # Clear previous content (like error messages)
 
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            # Running as a PyInstaller bundle, creators.json is bundled
+            base_path_for_creators = sys._MEIPASS
+        else:
+            # Running as a script, creators.json is next to main.py
+            # self.app_base_dir is correctly set by DownloaderApp for this case
+            base_path_for_creators = self.app_base_dir
+        creators_file_path = os.path.join(base_path_for_creators, "creators.json")
+
         if not os.path.exists(creators_file_path):
-            self.list_widget.addItem("Error: creators.json not found.")
+            self.list_widget.addItem(f"Error: creators.json not found at {creators_file_path}")
             self.all_creators_data = [] # Ensure it's empty
             return
 
@@ -1446,7 +1454,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
-    TOUR_SHOWN_KEY = "neverShowTourAgainV4" # Changed V5 to V6 to re-trigger the tour
+    TOUR_SHOWN_KEY = "neverShowTourAgainV2" # Changed V5 to V6 to re-trigger the tour
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1864,15 +1872,13 @@ class DownloaderApp(QWidget):
     def __init__(self):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # PyInstaller one-file bundle: _MEIPASS is the temp dir for bundled files.
-            # Data files added with --add-data "source:." are here.
-            self.app_base_dir = sys._MEIPASS
-        elif getattr(sys, 'frozen', False):
-            # PyInstaller one-dir bundle: executable's dir is the bundle root.
+        if getattr(sys, 'frozen', False):
+            # If the application is run as a bundle (one-file or one-dir),
+            # sys.executable is the path to the executable.
+            # os.path.dirname(sys.executable) gives the directory where the .exe is.
             self.app_base_dir = os.path.dirname(sys.executable)
         else:
-            # Running as a script from source
+            # The application is run as a normal Python script.
             self.app_base_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_file = os.path.join(self.app_base_dir, "Known.txt")
 
@@ -6245,10 +6251,9 @@ class DownloaderApp(QWidget):
 
 if __name__ == '__main__':
     import traceback
-    import sys # Ensure sys is imported here if not already
-    import os  # Ensure os is imported here
-    import time # For timestamping errors
-
+    import sys
+    import os
+    import time
     def log_error_to_file(exc_info_tuple):
         log_file_path = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(__file__), "critical_error_log.txt")
         with open(log_file_path, "a", encoding="utf-8") as f:
