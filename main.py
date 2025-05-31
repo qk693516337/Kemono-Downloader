@@ -369,7 +369,11 @@ class EmptyPopupDialog(QDialog):
             pass
 
         for creator in creators_to_display:
-            display_text = f"{creator.get('name', 'Unknown Name')} ({creator.get('service', 'N/A').capitalize()})"
+            creator_name_raw = creator.get('name')
+            # Use "Unknown Creator" if name is None, empty, or only whitespace
+            display_creator_name = creator_name_raw.strip() if isinstance(creator_name_raw, str) and creator_name_raw.strip() else "Unknown Creator"
+            service_display_name = creator.get('service', 'N/A').capitalize()
+            display_text = f"{display_creator_name} ({service_display_name})"
             item = QListWidgetItem(display_text)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setData(Qt.UserRole, creator) # Store the whole creator dict
@@ -1076,13 +1080,10 @@ class FavoritePostsDialog(QDialog):
         try:
             with open(creators_file_path, 'r', encoding='utf-8') as f:
                 loaded_data = json.load(f) # Load the entire JSON structure
-                
-                # Assuming the structure is [ [ {creator1}, {creator2}, ... ] ]
-                # And we are interested in the inner list.
+
                 if isinstance(loaded_data, list) and len(loaded_data) > 0 and isinstance(loaded_data[0], list):
                     creators_list = loaded_data[0]
                 elif isinstance(loaded_data, list) and all(isinstance(item, dict) for item in loaded_data):
-                    # This handles the case where creators.json is a flat list [ {creator1}, ... ]
                     creators_list = loaded_data
                 else:
                     self._logger(f"Warning: 'creators.json' has an unexpected format. Expected a list of lists or a flat list of creator objects.")
@@ -2367,6 +2368,7 @@ class DownloaderApp(QWidget):
             "Browse and select creators from your 'creators.json' file.\n"
             "Selected creator names will be added to the URL input field."
         )
+        self.empty_popup_button.setStyleSheet("padding: 4px 6px;") # Standardized padding
         self.empty_popup_button.clicked.connect(self._show_empty_popup)
         url_input_layout.addWidget(self.empty_popup_button)
 
@@ -2404,14 +2406,17 @@ class DownloaderApp(QWidget):
         favorite_buttons_layout = QHBoxLayout(self.favorite_action_buttons_widget)
         favorite_buttons_layout.setContentsMargins(0,0,0,0)
         self.favorite_mode_artists_button = QPushButton("🖼️ Favorite Artists")
-        self.favorite_mode_artists_button.setToolTip("Browse and manage favorite artists (functionality TBD).")
+        self.favorite_mode_artists_button.setToolTip("Browse and download from your favorite artists on Kemono.su.")
+        self.favorite_mode_artists_button.setStyleSheet("padding: 4px 12px;") # Standardized padding
         self.favorite_mode_artists_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
         self.favorite_mode_posts_button = QPushButton("📄 Favorite Posts") # Ensure this button is created
-        self.favorite_mode_posts_button.setToolTip("Browse and manage favorite posts (functionality TBD).")
+        self.favorite_mode_posts_button.setToolTip("Browse and download your favorite posts from Kemono.su.")
+        self.favorite_mode_posts_button.setStyleSheet("padding: 4px 12px;") # Standardized padding
         self.favorite_mode_posts_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
         
         self.favorite_scope_toggle_button = QPushButton()
-        self.favorite_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
+        # self.favorite_scope_toggle_button.setStyleSheet("padding: 6px 10px;") # Old
+        self.favorite_scope_toggle_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.favorite_scope_toggle_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
                 
         favorite_buttons_layout.addWidget(self.favorite_mode_artists_button)
@@ -2424,6 +2429,7 @@ class DownloaderApp(QWidget):
         self.dir_input.setPlaceholderText("Select folder where downloads will be saved")
         self.dir_input.setToolTip("Enter or browse to the main folder where all downloaded content will be saved.\nThis is required unless 'Only Links' mode is selected.")
         self.dir_button = QPushButton("Browse...")
+        self.dir_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.dir_button.clicked.connect(self.browse_directory)
         self.dir_button.setToolTip("Click to open a dialog to select the main download folder.")
         dir_layout = QHBoxLayout()
@@ -2467,7 +2473,8 @@ class DownloaderApp(QWidget):
 
         self.char_filter_scope_toggle_button = QPushButton()
         self._update_char_filter_scope_button_text()
-        self.char_filter_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
+        # self.char_filter_scope_toggle_button.setStyleSheet("padding: 6px 10px;") # Old
+        self.char_filter_scope_toggle_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.char_filter_scope_toggle_button.setMinimumWidth(100)
         char_input_and_button_layout.addWidget(self.char_filter_scope_toggle_button, 1)
 
@@ -2523,7 +2530,8 @@ class DownloaderApp(QWidget):
 
         self.skip_scope_toggle_button = QPushButton()
         self._update_skip_scope_button_text()
-        self.skip_scope_toggle_button.setStyleSheet("padding: 6px 10px;")
+        # self.skip_scope_toggle_button.setStyleSheet("padding: 6px 10px;") # Old
+        self.skip_scope_toggle_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.skip_scope_toggle_button.setMinimumWidth(100)
         skip_input_and_button_layout.addWidget(self.skip_scope_toggle_button, 0)
         skip_words_vertical_layout.addLayout(skip_input_and_button_layout)
@@ -2718,18 +2726,20 @@ class DownloaderApp(QWidget):
         btn_layout.setSpacing(10)
         self.download_btn = QPushButton("⬇️ Start Download")
         self.download_btn.setToolTip("Click to start the download or link extraction process with the current settings.")
-        self.download_btn.setStyleSheet("padding: 8px 15px; font-weight: bold;")
+        self.download_btn.setStyleSheet("padding: 4px 12px; font-weight: bold;") # Reduced vertical padding
         self.download_btn.clicked.connect(self.start_download)
         
         self.pause_btn = QPushButton("⏸️ Pause Download")
         self.pause_btn.setToolTip("Click to pause the ongoing download process.")
         self.pause_btn.setEnabled(False)
+        self.pause_btn.setStyleSheet("padding: 4px 12px;") # Add padding style
         self.pause_btn.clicked.connect(self._handle_pause_resume_action)
         
         self.cancel_btn = QPushButton("❌ Cancel & Reset UI")
 
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.setToolTip("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
+        self.cancel_btn.setStyleSheet("padding: 4px 12px;") # Add padding style
         self.cancel_btn.clicked.connect(self.cancel_download_button_action)
         btn_layout.addWidget(self.download_btn)
         btn_layout.addWidget(self.pause_btn)
@@ -2771,14 +2781,20 @@ class DownloaderApp(QWidget):
         self.new_char_input = QLineEdit()
         self.new_char_input.setToolTip("Enter a new show, game, or character name to add to the list above.")
         self.new_char_input.setPlaceholderText("Add new show/character name")
+        self.new_char_input.setStyleSheet("padding: 3px 5px;") # Reduce vertical padding
+
         self.add_char_button = QPushButton("➕ Add")
         self.add_char_button.setToolTip("Add the name from the input field to the 'Known Shows/Characters' list.")
+        self.add_char_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         
         self.add_to_filter_button = QPushButton("⤵️ Add to Filter")
         self.add_to_filter_button.setToolTip("Select names from 'Known Shows/Characters' list to add to the 'Filter by Character(s)' field above.")
+        self.add_to_filter_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
 
         self.delete_char_button = QPushButton("🗑️ Delete Selected")
         self.delete_char_button.setToolTip("Delete the selected name(s) from the 'Known Shows/Characters' list.")         
+        self.delete_char_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
+
         self.add_char_button.clicked.connect(self._handle_ui_add_new_character)
         self.new_char_input.returnPressed.connect(self.add_char_button.click)
         self.delete_char_button.clicked.connect(self.delete_selected_character)
@@ -2788,23 +2804,24 @@ class DownloaderApp(QWidget):
 
         self.known_names_help_button = QPushButton("?")
         self.known_names_help_button.setFixedWidth(35)
-        self.known_names_help_button.setStyleSheet("padding: 8px 6px;") # Adjusted padding
+        self.known_names_help_button.setStyleSheet("padding: 4px 6px;") # Standardized padding
         self.known_names_help_button.setToolTip("Open the application feature guide.")
         self.known_names_help_button.clicked.connect(self._show_feature_guide)
 
         self.future_settings_button = QPushButton("⚙️") # Settings gear icon
-        self.future_settings_button.setFixedWidth(35) # Same width as help button
-        self.future_settings_button.setStyleSheet("padding: 8px 6px;") # Adjusted padding
+        self.future_settings_button.setFixedWidth(35)
+        self.future_settings_button.setStyleSheet("padding: 4px 6px;") # Standardized padding
         self.future_settings_button.setToolTip("Open placeholder for future settings.")
         self.future_settings_button.clicked.connect(self._show_future_settings_dialog)
 
-
-        char_manage_layout.addWidget(self.add_to_filter_button, 0)
-        char_manage_layout.addWidget(self.delete_char_button, 0)
-        char_manage_layout.addWidget(self.known_names_help_button, 0)
+        # Revert stretch factors to original values (likely 1 for these buttons to allow some stretch)
+        char_manage_layout.addWidget(self.add_to_filter_button, 1) 
+        char_manage_layout.addWidget(self.delete_char_button, 1) 
+        char_manage_layout.addWidget(self.known_names_help_button, 0) # Keep stretch 0 for fixed width
         char_manage_layout.addWidget(self.future_settings_button, 0) # Add the new settings button
+        # char_manage_layout.addStretch(1) # Remove the added stretch from previous change
         left_layout.addLayout(char_manage_layout)
-        left_layout.addStretch(0)
+        left_layout.addStretch(0) # Add back the stretch for the left_layout
 
         log_title_layout = QHBoxLayout()
         self.progress_log_label = QLabel("📜 Progress Log:")
@@ -2849,7 +2866,7 @@ class DownloaderApp(QWidget):
         self.log_verbosity_toggle_button = QPushButton(self.EYE_ICON) # Initial state: Progress Log visible
         self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
         self.log_verbosity_toggle_button.setFixedWidth(45) # Adjusted for emoji
-        self.log_verbosity_toggle_button.setStyleSheet("font-size: 11pt; padding: 2px 2px 3px 2px;")
+        self.log_verbosity_toggle_button.setStyleSheet("font-size: 11pt; padding: 4px 2px;") # Standardized vertical padding
         log_title_layout.addWidget(self.log_verbosity_toggle_button)
 
         self.reset_button = QPushButton("🔄 Reset")
