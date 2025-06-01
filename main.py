@@ -3357,7 +3357,9 @@ class DownloaderApp(QWidget):
             self.file_progress_label.setText(progress_text)
 
         elif isinstance(progress_info, tuple) and len(progress_info) == 2: 
-            if not filename and total_bytes == 0 and downloaded_bytes == 0: 
+            downloaded_bytes, total_bytes = progress_info # Unpack the tuple
+            
+            if not filename and total_bytes == 0 and downloaded_bytes == 0:
                 self.file_progress_label.setText("")
                 return
 
