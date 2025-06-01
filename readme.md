@@ -305,3 +305,6 @@ Feel free to fork this repo and submit pull requests for bug fixes, new features
 
 This project is released under the MIT License.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Yuvi9587/Kemono-Downloader&type=Date)](https://www.star-history.com/#Yuvi9587/Kemono-Downloader&Date)
