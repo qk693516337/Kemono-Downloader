@@ -304,3 +304,5 @@ Feel free to fork this repo and submit pull requests for bug fixes, new features
 ## License
 
 This project is released under the MIT License.
+
+<iframe style="width:100%;height:auto;min-width:600px;min-height:400px;" src="https://www.star-history.com/embed?secret=#Yuvi9587/Kemono-Downloader&Date" frameBorder="0"></iframe>
