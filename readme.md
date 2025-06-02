@@ -35,6 +35,11 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 
 *This v5.0.0 release marks a significant feature milestone. Future updates are expected to be less frequent, focusing on maintenance and minor refinements.*
 
+<p align="center">
+  <a href="features.md"><strong>📚 Full Feature List</strong></a> • 
+  <a href="LICENSE"><strong>📝 License</strong></a>
+</p>
+
 ---
 
 ## Feature Overview
