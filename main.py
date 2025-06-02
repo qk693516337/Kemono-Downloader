@@ -369,12 +369,18 @@ class EmptyPopupDialog(QDialog):
 
         layout = QVBoxLayout(self)
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Search creators...")
+        self.search_input.setPlaceholderText("Search by name, service, or paste creator URL...")
         self.search_input.textChanged.connect(self._filter_list)
         layout.addWidget(self.search_input)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0) # Indeterminate
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setVisible(False) # Initially hidden
+        layout.addWidget(self.progress_bar)
+
         self.list_widget = QListWidget()
         self.list_widget.itemChanged.connect(self._handle_item_check_changed) # Connect signal for check state changes
-        self._load_creators_from_json() # This will load data and call _filter_list for initial population
         layout.addWidget(self.list_widget)
         button_layout = QHBoxLayout()
         self.add_selected_button = QPushButton("Add Selected")
@@ -398,10 +404,22 @@ class EmptyPopupDialog(QDialog):
         if parent and hasattr(parent, 'get_dark_theme'):
             self.setStyleSheet(parent.get_dark_theme())
 
+        # Defer loading until after the dialog is shown and event loop is running
+        QTimer.singleShot(0, self._perform_initial_load)
+
+    def _perform_initial_load(self):
+        """Called by QTimer to load data after dialog is shown."""
+        self._load_creators_from_json()
+        # _load_creators_from_json calls _filter_list, which populates the list
+        # and handles progress bar visibility for the initial population.
+
     def _load_creators_from_json(self):
         """Loads creators from creators.json and populates the list widget."""
-        self.list_widget.clear() # Clear previous content (like error messages)
+        self.list_widget.clear()
 
+        self.progress_bar.setVisible(True)
+        QCoreApplication.processEvents() # Show progress bar immediately
+        if not self.isVisible(): return # Dialog might have been closed
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
             base_path_for_creators = sys._MEIPASS
         else:
@@ -411,88 +429,173 @@ class EmptyPopupDialog(QDialog):
         if not os.path.exists(creators_file_path):
             self.list_widget.addItem(f"Error: creators.json not found at {creators_file_path}")
             self.all_creators_data = [] # Ensure it's empty
+            self.progress_bar.setVisible(False) # Hide on error
+            QCoreApplication.processEvents()
             return
 
         try:
             with open(creators_file_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
-                    self.all_creators_data = data[0]
-                elif isinstance(data, list) and all(isinstance(item, dict) for item in data): # Handle flat list too
-                    self.all_creators_data = data
-                else:
-                    self.list_widget.addItem("Error: Invalid format in creators.json.")
-                    self.all_creators_data = []
-                    return
-            self.all_creators_data.sort(key=lambda c: c.get('favorited', 0), reverse=True)
+                data = json.load(f) # This can be slow for huge files
+            QCoreApplication.processEvents() # Process events after file load/parse
+            if not self.isVisible(): return
+
+            if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
+                self.all_creators_data = data[0]
+            elif isinstance(data, list) and all(isinstance(item, dict) for item in data): # Handle flat list too
+                self.all_creators_data = data
+            else:
+                self.list_widget.addItem("Error: Invalid format in creators.json.")
+                self.all_creators_data = []
+                self.progress_bar.setVisible(False); QCoreApplication.processEvents(); return
+
+            self.all_creators_data.sort(key=lambda c: c.get('favorited', 0), reverse=True) # This can be slow
+            QCoreApplication.processEvents() # Process events after sort
+            if not self.isVisible(): return
 
         except json.JSONDecodeError:
             self.list_widget.addItem("Error: Could not parse creators.json.")
             self.all_creators_data = []
+            self.progress_bar.setVisible(False); QCoreApplication.processEvents(); return
         except Exception as e:
             self.list_widget.addItem(f"Error loading creators: {e}")
             self.all_creators_data = []
+            self.progress_bar.setVisible(False); QCoreApplication.processEvents(); return
         
-        self._filter_list() # This will populate the list initially or based on search
+        # _filter_list will be called. If search is empty, it will hide the progress bar.
+        # If search is not empty, it will manage its own progress bar visibility.
+        self._filter_list()
 
     def _populate_list_widget(self, creators_to_display):
         """Clears and populates the list widget with the given creator data."""
         self.list_widget.blockSignals(True) # Block itemChanged signal during population
         self.list_widget.clear()
-        if not creators_to_display and self.search_input.text().strip():
-            pass # Or just show an empty list
-        elif not creators_to_display:
-            pass
 
-        for creator in creators_to_display:
-            creator_name_raw = creator.get('name')
-            display_creator_name = creator_name_raw.strip() if isinstance(creator_name_raw, str) and creator_name_raw.strip() else "Unknown Creator"
-            service_display_name = creator.get('service', 'N/A').capitalize()
-            display_text = f"{display_creator_name} ({service_display_name})"
-            item = QListWidgetItem(display_text)
-            item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-            item.setData(Qt.UserRole, creator) # Store the whole creator dict
-            service = creator.get('service')
-            creator_id = creator.get('id')
-            if service is not None and creator_id is not None:
-                unique_key = (str(service), str(creator_id))
-                if unique_key in self.globally_selected_creators:
-                    item.setCheckState(Qt.Checked)
+        if not creators_to_display: # Simplified check
+            self.list_widget.blockSignals(False) # Unblock signals
+            # self.list_widget.addItem("No results found for your search.") # Optional: message
+            # You could add a message here if desired, e.g.:
+            # if self.search_input.text().strip():
+            #     self.list_widget.addItem("No results found for your search.")
+            # else:
+            #     self.list_widget.addItem("No creators available to display.")
+            return
+
+        CHUNK_SIZE_POPULATE = 100 # Add items in chunks
+        for i in range(0, len(creators_to_display), CHUNK_SIZE_POPULATE):
+            if not self.isVisible(): # Check if dialog was closed during processing
+                self.list_widget.blockSignals(False)
+                return
+            
+            chunk = creators_to_display[i:i + CHUNK_SIZE_POPULATE]
+            for creator in chunk:
+                creator_name_raw = creator.get('name')
+                display_creator_name = creator_name_raw.strip() if isinstance(creator_name_raw, str) and creator_name_raw.strip() else "Unknown Creator"
+                service_display_name = creator.get('service', 'N/A').capitalize()
+                display_text = f"{display_creator_name} ({service_display_name})"
+                item = QListWidgetItem(display_text)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setData(Qt.UserRole, creator) # Store the whole creator dict
+                service = creator.get('service')
+                creator_id = creator.get('id')
+                if service is not None and creator_id is not None:
+                    unique_key = (str(service), str(creator_id))
+                    if unique_key in self.globally_selected_creators:
+                        item.setCheckState(Qt.Checked)
+                    else:
+                        item.setCheckState(Qt.Unchecked)
                 else:
-                    item.setCheckState(Qt.Unchecked)
-            else:
-                item.setCheckState(Qt.Unchecked) # Fallback for items without proper key
-            self.list_widget.addItem(item)
+                    item.setCheckState(Qt.Unchecked) # Fallback for items without proper key
+                self.list_widget.addItem(item)
+            
+            QCoreApplication.processEvents() # Process events after adding a chunk
+            
         self.list_widget.blockSignals(False) # Unblock itemChanged signal
 
     def _filter_list(self):
         """Filters the list widget based on the search input."""
         raw_search_input = self.search_input.text()
-        check_search_text_for_empty = raw_search_input.lower().strip() # Used only to check if search is empty
+        # Tooltip will be updated based on search type
+        # self.search_input.setToolTip("Search by name, service, or paste creator URL...") # General tooltip
+
+        check_search_text_for_empty = raw_search_input.lower().strip()
+
+        QCoreApplication.processEvents() # Allow immediate UI updates before potential heavy work
+        if not self.isVisible(): return # Dialog was closed
 
         if not check_search_text_for_empty:
+            self.progress_bar.setVisible(False) # Ensure it's hidden for fast path
             creators_to_show = self.all_creators_data[:self.INITIAL_LOAD_LIMIT]
             self._populate_list_widget(creators_to_show)
+            self.search_input.setToolTip("Search by name, service, or paste creator URL...")
+            QCoreApplication.processEvents() # Ensure UI updates after initial population
         else:
+            self.progress_bar.setVisible(True)
+            QCoreApplication.processEvents() # Show progress bar
+            if not self.isVisible(): return # Dialog was closed
+
             norm_search_casefolded = unicodedata.normalize('NFKC', raw_search_input).casefold().strip()
             norm_search_original = unicodedata.normalize('NFKC', raw_search_input).strip()
 
             filtered_creators = []
-            for creator_data in self.all_creators_data:
-                creator_name_raw = creator_data.get('name', '')
-                creator_service_raw = creator_data.get('service', '')
-                norm_creator_name_from_data = unicodedata.normalize('NFKC', creator_name_raw)
-                norm_creator_name_casefolded = norm_creator_name_from_data.casefold()
-                name_match_insensitive = norm_search_casefolded in norm_creator_name_casefolded
-                name_match_original_case = norm_search_original and norm_search_original in norm_creator_name_from_data
+            
+            # Attempt URL parsing
+            parsed_service_from_url, parsed_user_id_from_url, _ = extract_post_info(raw_search_input)
 
-                name_match = name_match_insensitive or name_match_original_case
-                norm_service_casefolded = unicodedata.normalize('NFKC', creator_service_raw).casefold()
-                service_match = norm_search_casefolded in norm_service_casefolded
+            if parsed_service_from_url and parsed_user_id_from_url:
+                # Input is a parsable Kemono/Coomer URL with service and user_id
+                self.search_input.setToolTip(f"Searching for URL: {raw_search_input[:50]}...")
+                for creator_data in self.all_creators_data:
+                    creator_service = creator_data.get('service', '').lower()
+                    # ID from data can be int (Kemono) or str (Coomer), so always cast to str for comparison
+                    creator_id_in_data = str(creator_data.get('id', '')).lower() 
+
+                    if creator_service == parsed_service_from_url.lower() and \
+                       creator_id_in_data == parsed_user_id_from_url.lower():
+                        filtered_creators.append(creator_data)
+                        # Since creator URLs are unique, we can break after finding the match
+                        break 
                 
-                if name_match or service_match:
-                    filtered_creators.append(creator_data)
+                if filtered_creators:
+                    self.search_input.setToolTip(f"Found creator by URL: {filtered_creators[0].get('name')}")
+                else:
+                    self.search_input.setToolTip(f"URL parsed, but no matching creator found in your creators.json.")
+            
+            else:
+                # Input is not a parsable Kemono/Coomer URL, or parsing failed to yield service/user_id.
+                # Proceed with text-based search on name and service.
+                self.search_input.setToolTip("Searching by name or service...")
+                norm_search_casefolded = unicodedata.normalize('NFKC', raw_search_input).casefold().strip()
+                # We don't need norm_search_original if we only match casefolded name/service
+                # norm_search_original = unicodedata.normalize('NFKC', raw_search_input).strip() 
+                
+                CHUNK_SIZE_FILTER = 500
+                for i in range(0, len(self.all_creators_data), CHUNK_SIZE_FILTER):
+                    if not self.isVisible(): break # Check visibility inside loop for long lists
+                    chunk = self.all_creators_data[i:i + CHUNK_SIZE_FILTER]
+                    for creator_data in chunk:
+                        creator_name_raw = creator_data.get('name', '')
+                        creator_service_raw = creator_data.get('service', '')
+                        
+                        # Normalize and casefold data from creators.json for matching
+                        norm_creator_name_casefolded = unicodedata.normalize('NFKC', creator_name_raw).casefold()
+                        norm_service_casefolded = unicodedata.normalize('NFKC', creator_service_raw).casefold()
+                        
+                        name_match = norm_search_casefolded in norm_creator_name_casefolded
+                        service_match = norm_search_casefolded in norm_service_casefolded
+                        
+                        if name_match or service_match:
+                            filtered_creators.append(creator_data)
+                    
+                    QCoreApplication.processEvents() # Keep UI responsive
+
             self._populate_list_widget(filtered_creators)
+            self.progress_bar.setVisible(False) # Hide after populating
+            # Final tooltip update after search, if not set by URL logic
+            if not (parsed_service_from_url and parsed_user_id_from_url):
+                 if filtered_creators:
+                     self.search_input.setToolTip(f"Found {len(filtered_creators)} match(es) for '{raw_search_input[:30]}...'")
+                 else:
+                     self.search_input.setToolTip(f"No matches found for '{raw_search_input[:30]}...'")
 
     def _toggle_scope_mode(self):
         """Toggles the scope mode and updates the button text."""
