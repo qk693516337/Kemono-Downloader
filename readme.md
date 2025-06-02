@@ -112,3 +112,5 @@ This project is released under the MIT License.
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=Yuvi9587/Kemono-Downloader&type=Date)](https://www.star-history.com/#Yuvi9587/Kemono-Downloader&Date)
+
+👉 See [features.md](features.md) for the full feature list.
