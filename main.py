@@ -234,6 +234,74 @@ class ConfirmAddAllDialog(QDialog):
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice
 
+class ErrorFilesDialog(QDialog):
+    """Dialog to display files that were skipped due to errors."""
+    retry_selected_signal = pyqtSignal(list) # Signal to emit selected files for retry
+    def __init__(self, error_files_info_list, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Files Skipped Due to Errors")
+        self.setModal(True)
+        self.error_files = error_files_info_list
+
+        main_layout = QVBoxLayout(self)
+
+        if not self.error_files:
+            info_label = QLabel("No files were recorded as skipped due to errors in the last session or after retries.")
+            main_layout.addWidget(info_label)
+        else:
+            info_label = QLabel(f"The following {len(self.error_files)} file(s) were skipped due to download errors:")
+            info_label.setWordWrap(True)
+            main_layout.addWidget(info_label)
+
+            self.files_list_widget = QListWidget()
+            self.files_list_widget.setSelectionMode(QAbstractItemView.NoSelection) # We use checkboxes
+            for error_info in self.error_files:
+                filename = error_info.get('forced_filename_override', error_info.get('file_info', {}).get('name', 'Unknown Filename'))
+                post_title = error_info.get('post_title', 'Unknown Post')
+                post_id = error_info.get('original_post_id_for_log', 'N/A')
+                item_text = f"File: {filename}\nFrom Post: '{post_title}' (ID: {post_id})"
+                list_item = QListWidgetItem(item_text)
+                list_item.setData(Qt.UserRole, error_info) # Store the original error_info
+                list_item.setFlags(list_item.flags() | Qt.ItemIsUserCheckable)
+                list_item.setCheckState(Qt.Unchecked)
+                self.files_list_widget.addItem(list_item)
+            main_layout.addWidget(self.files_list_widget)
+
+        buttons_layout = QHBoxLayout()
+        self.select_all_button = QPushButton("Select All")
+        self.select_all_button.clicked.connect(self._select_all_items)
+        buttons_layout.addWidget(self.select_all_button)
+
+        self.retry_button = QPushButton("Retry Selected")
+        self.retry_button.clicked.connect(self._handle_retry_selected)
+        buttons_layout.addWidget(self.retry_button)
+
+        buttons_layout.addStretch(1)
+        self.ok_button = QPushButton("OK")
+        self.ok_button.clicked.connect(self.accept)
+        buttons_layout.addWidget(self.ok_button)
+        main_layout.addLayout(buttons_layout)
+
+        self.select_all_button.setEnabled(bool(self.error_files))
+        self.retry_button.setEnabled(bool(self.error_files))
+
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(300)
+        if parent and hasattr(parent, 'get_dark_theme'):
+            self.setStyleSheet(parent.get_dark_theme())
+        self.ok_button.setDefault(True)
+
+    def _select_all_items(self):
+        for i in range(self.files_list_widget.count()):
+            self.files_list_widget.item(i).setCheckState(Qt.Checked)
+
+    def _handle_retry_selected(self):
+        selected_files_for_retry = [self.files_list_widget.item(i).data(Qt.UserRole) for i in range(self.files_list_widget.count()) if self.files_list_widget.item(i).checkState() == Qt.Checked]
+        if selected_files_for_retry:
+            self.retry_selected_signal.emit(selected_files_for_retry)
+            self.accept() # Close dialog after emitting signal
+        else:
+            QMessageBox.information(self, "No Selection", "Please select at least one file to retry.")
 class FutureSettingsDialog(QDialog):
     """A simple dialog as a placeholder for future settings."""
     def __init__(self, parent_app_ref, parent=None): # parent_app_ref is DownloaderApp
@@ -247,7 +315,6 @@ class FutureSettingsDialog(QDialog):
         label = QLabel("Application Settings:")
         label.setAlignment(Qt.AlignCenter)
         layout.addWidget(label)
-        # Theme toggle button
         self.theme_toggle_button = QPushButton()
         self._update_theme_toggle_button_text() # Set initial text
         self.theme_toggle_button.clicked.connect(self._toggle_theme)
@@ -301,20 +368,14 @@ class EmptyPopupDialog(QDialog):
         self.globally_selected_creators = {} # Key: (service, id), Value: creator_data
 
         layout = QVBoxLayout(self)
-
-        # Search bar
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Search creators...")
         self.search_input.textChanged.connect(self._filter_list)
         layout.addWidget(self.search_input)
-
-        # List widget for dummy items
         self.list_widget = QListWidget()
         self.list_widget.itemChanged.connect(self._handle_item_check_changed) # Connect signal for check state changes
         self._load_creators_from_json() # This will load data and call _filter_list for initial population
         layout.addWidget(self.list_widget)
-
-        # Buttons at the bottom
         button_layout = QHBoxLayout()
         self.add_selected_button = QPushButton("Add Selected")
         self.add_selected_button.setToolTip(
@@ -334,8 +395,6 @@ class EmptyPopupDialog(QDialog):
         self.scope_button.clicked.connect(self._toggle_scope_mode)
         button_layout.addWidget(self.scope_button)
         layout.addLayout(button_layout)
-
-        # Optional: Apply dark theme if parent has it
         if parent and hasattr(parent, 'get_dark_theme'):
             self.setStyleSheet(parent.get_dark_theme())
 
@@ -344,11 +403,8 @@ class EmptyPopupDialog(QDialog):
         self.list_widget.clear() # Clear previous content (like error messages)
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Running as a PyInstaller bundle, creators.json is bundled
             base_path_for_creators = sys._MEIPASS
         else:
-            # Running as a script, creators.json is next to main.py
-            # self.app_base_dir is correctly set by DownloaderApp for this case
             base_path_for_creators = self.app_base_dir
         creators_file_path = os.path.join(base_path_for_creators, "creators.json")
 
@@ -360,7 +416,6 @@ class EmptyPopupDialog(QDialog):
         try:
             with open(creators_file_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                # creators.json has a structure like [ [ {creator1}, {creator2} ] ]
                 if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
                     self.all_creators_data = data[0]
                 elif isinstance(data, list) and all(isinstance(item, dict) for item in data): # Handle flat list too
@@ -369,11 +424,7 @@ class EmptyPopupDialog(QDialog):
                     self.list_widget.addItem("Error: Invalid format in creators.json.")
                     self.all_creators_data = []
                     return
-
-            # Sort creators by 'favorited' count in descending order
-            # Use .get('favorited', 0) to handle missing keys gracefully, treating them as 0
             self.all_creators_data.sort(key=lambda c: c.get('favorited', 0), reverse=True)
-            # self.list_widget.clear() # Moved to the top of the method
 
         except json.JSONDecodeError:
             self.list_widget.addItem("Error: Could not parse creators.json.")
@@ -389,26 +440,18 @@ class EmptyPopupDialog(QDialog):
         self.list_widget.blockSignals(True) # Block itemChanged signal during population
         self.list_widget.clear()
         if not creators_to_display and self.search_input.text().strip():
-
-            # Optionally, add a "No results found" item if search is active and no results
-            # self.list_widget.addItem("No creators match your search.")
             pass # Or just show an empty list
         elif not creators_to_display:
-            # This case is for when creators.json is empty or initial load results in no items.
-            # Error messages are handled by _load_creators_from_json.
             pass
 
         for creator in creators_to_display:
             creator_name_raw = creator.get('name')
-            # Use "Unknown Creator" if name is None, empty, or only whitespace
             display_creator_name = creator_name_raw.strip() if isinstance(creator_name_raw, str) and creator_name_raw.strip() else "Unknown Creator"
             service_display_name = creator.get('service', 'N/A').capitalize()
             display_text = f"{display_creator_name} ({service_display_name})"
             item = QListWidgetItem(display_text)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setData(Qt.UserRole, creator) # Store the whole creator dict
-
-            # Preserve check state based on globally_selected_creators
             service = creator.get('service')
             creator_id = creator.get('id')
             if service is not None and creator_id is not None:
@@ -425,43 +468,25 @@ class EmptyPopupDialog(QDialog):
     def _filter_list(self):
         """Filters the list widget based on the search input."""
         raw_search_input = self.search_input.text()
-        
-        # For the initial "empty search" check, use a simple lowercased and stripped version
         check_search_text_for_empty = raw_search_input.lower().strip() # Used only to check if search is empty
 
         if not check_search_text_for_empty:
-            # Display initial limited list (top N from sorted all_creators_data)
             creators_to_show = self.all_creators_data[:self.INITIAL_LOAD_LIMIT]
             self._populate_list_widget(creators_to_show)
         else:
-            # Active search: Prepare normalized search terms
-            
-            # For case-insensitive search: NFKC normalize, then casefold, then strip.
             norm_search_casefolded = unicodedata.normalize('NFKC', raw_search_input).casefold().strip()
-            
-            # For original case sensitive search: NFKC normalize, then strip.
             norm_search_original = unicodedata.normalize('NFKC', raw_search_input).strip()
 
             filtered_creators = []
             for creator_data in self.all_creators_data:
                 creator_name_raw = creator_data.get('name', '')
                 creator_service_raw = creator_data.get('service', '')
-
-                # Normalize creator name from data
                 norm_creator_name_from_data = unicodedata.normalize('NFKC', creator_name_raw)
-                
-                # For case-insensitive match: casefold the normalized creator name
                 norm_creator_name_casefolded = norm_creator_name_from_data.casefold()
-
-                # 1. Case-insensitive match
                 name_match_insensitive = norm_search_casefolded in norm_creator_name_casefolded
-                
-                # 2. Original case match (search term must be non-empty after normalization and stripping)
                 name_match_original_case = norm_search_original and norm_search_original in norm_creator_name_from_data
 
                 name_match = name_match_insensitive or name_match_original_case
-
-                # Match against service (normalize service name and use casefolded search term)
                 norm_service_casefolded = unicodedata.normalize('NFKC', creator_service_raw).casefold()
                 service_match = norm_search_casefolded in norm_service_casefolded
                 
@@ -481,23 +506,18 @@ class EmptyPopupDialog(QDialog):
             f"Click to toggle between '{self.SCOPE_CHARACTERS}' and '{self.SCOPE_CREATORS}' scopes.\n"
             f"'{self.SCOPE_CHARACTERS}': (Planned) Downloads into character-named folders directly in the main Download Location (artists mixed).\n"
             f"'{self.SCOPE_CREATORS}': (Planned) Downloads into artist-named subfolders within the main Download Location, then character folders inside those.")
-        # You can add logic here to react to the mode change if needed in the future
 
     def _get_domain_for_service(self, service_name):
         """Determines the base domain for a given service."""
         service_lower = service_name.lower()
-        # Common Coomer services
         if service_lower in ['onlyfans', 'fansly']:
             return "coomer.su" # Or coomer.party, adjust if needed
-        # Default to Kemono for others
         return "kemono.su"
 
     def _handle_add_selected(self):
         """Gathers globally selected creators and processes them."""
         selected_display_names = []
         self.selected_creators_for_queue.clear() # Clear before populating
-
-        # Iterate over the globally stored selected creators
         for creator_data in self.globally_selected_creators.values():
             creator_name = creator_data.get('name')
             self.selected_creators_for_queue.append(creator_data) # Store the full creator object
@@ -507,7 +527,6 @@ class EmptyPopupDialog(QDialog):
         if selected_display_names:
             main_app_window = self.parent() # QDialog's parent is the DownloaderApp instance
             if hasattr(main_app_window, 'link_input'):
-                # Sort display names alphabetically for consistent UI
                 main_app_window.link_input.setText(", ".join(sorted(selected_display_names)))
             self.accept() # Close the dialog
         else:
@@ -523,7 +542,6 @@ class EmptyPopupDialog(QDialog):
         creator_id = creator_data.get('id')
 
         if service is None or creator_id is None:
-            # This should ideally not happen for valid creator entries
             print(f"Warning: Creator data in list item missing service or id: {creator_data.get('name')}")
             return
 
@@ -537,7 +555,6 @@ class EmptyPopupDialog(QDialog):
 
 class CookieHelpDialog(QDialog):
     """A dialog to explain how to get a cookies.txt file."""
-    # Define constants for user choices
     CHOICE_PROCEED_WITHOUT_COOKIES = 1
     CHOICE_CANCEL_DOWNLOAD = 2
     CHOICE_OK_INFO_ONLY = 3
@@ -548,8 +565,6 @@ class CookieHelpDialog(QDialog):
         self.setModal(True)
         self.offer_download_without_option = offer_download_without_option
         self.user_choice = None # Will be set by button actions
-
-        # Main layout
         main_layout = QVBoxLayout(self)
 
         instruction_text = """
@@ -578,8 +593,6 @@ class CookieHelpDialog(QDialog):
         info_label.setOpenExternalLinks(True)
         info_label.setWordWrap(True)
         main_layout.addWidget(info_label)
-
-        # Button layout
         button_layout = QHBoxLayout()
         if self.offer_download_without_option:
             button_layout.addStretch(1) # Push both buttons to the right
@@ -742,8 +755,6 @@ class FavoriteArtistsDialog(QDialog):
             }""")
         main_layout.addWidget(self.artist_list_widget)
         self.artist_list_widget.setAlternatingRowColors(True)
-
-        # Initially hide list and search until content is loaded
         self.search_input.setVisible(False)
         self.artist_list_widget.setVisible(False)
 
@@ -945,8 +956,6 @@ class FavoritePostsFetcherThread(QThread):
             if not isinstance(posts_data_from_api, list):
                 self.finished.emit([], f"Error: API did not return a list of posts (got {type(posts_data_from_api)}).")
                 return
-            
-            # --- This is the creator name fetching logic, moved from FavoritePostsDialog ---
             all_fetched_posts_temp = []
             for post_entry in posts_data_from_api:
                 post_id = post_entry.get("id")
@@ -962,9 +971,6 @@ class FavoritePostsFetcherThread(QThread):
                     })
                 else:
                     self._logger(f"Warning: Skipping favorite post entry due to missing data: {post_entry}")
-
-            # Creator name fetching logic removed.
-            # Sort by service, then creator_id, then date for consistent grouping
             all_fetched_posts_temp.sort(key=lambda x: (x.get('service','').lower(), x.get('creator_id','').lower(), (x.get('added_date') or '')), reverse=False)
             self.finished.emit(all_fetched_posts_temp, None)
 
@@ -996,21 +1002,15 @@ class PostListItemWidget(QWidget):
     def _setup_display_text(self):
         suffix_plain = self.post_data.get('suffix_for_display', "") # Changed from prefix_for_display
         title_plain = self.post_data.get('title', 'Untitled Post')
-        
-        # Escape them for HTML display
         escaped_suffix = html.escape(suffix_plain) # Changed from escaped_prefix
         escaped_title = html.escape(title_plain)
-
-        # Styles
         p_style_paragraph = "font-size:10.5pt; margin:0; padding:0;" # Base paragraph style (size, margins)
         title_span_style = "font-weight:bold; color:#E0E0E0;"       # Style for the title part (bold, bright white)
         suffix_span_style = "color:#999999; font-weight:normal; font-size:9.5pt;" # Style for the suffix (dimmer gray, normal weight, slightly smaller)
 
         if escaped_suffix:
-            # Title part is bold and bright, suffix part is normal weight and dimmer
             display_html_content = f"<p style='{p_style_paragraph}'><span style='{title_span_style}'>{escaped_title}</span><span style='{suffix_span_style}'>{escaped_suffix}</span></p>"
         else:
-            # Only title part
             display_html_content = f"<p style='{p_style_paragraph}'><span style='{title_span_style}'>{escaped_title}</span></p>"
 
         self.info_label.setText(display_html_content)
@@ -1101,12 +1101,9 @@ class FavoritePostsDialog(QDialog):
         self._logger("Attempting to load creators.json for Favorite Posts Dialog.")
 
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # Running as a PyInstaller bundle, creators.json is bundled
             base_path_for_creators = sys._MEIPASS
             self._logger(f"  Running bundled. Using _MEIPASS: {base_path_for_creators}")
         else:
-            # Running as a script, or _MEIPASS not available.
-            # self.parent_app.app_base_dir is correctly set by DownloaderApp.
             base_path_for_creators = self.parent_app.app_base_dir
             self._logger(f"  Not bundled or _MEIPASS unavailable. Using app_base_dir: {base_path_for_creators}")
 
@@ -1134,7 +1131,6 @@ class FavoritePostsDialog(QDialog):
                     name = creator_data.get("name")
                     service = creator_data.get("service")
                     if creator_id and name and service:
-                        # Ensure IDs are strings for consistent lookup
                         self.creator_name_cache[(service.lower(), str(creator_id))] = name
             self._logger(f"Successfully loaded {len(self.creator_name_cache)} creator names from 'creators.json'.")
         except Exception as e:
@@ -1190,8 +1186,6 @@ class FavoritePostsDialog(QDialog):
 
 
         processed_one_missing_log = False # Flag to log only one missing key example per fetch
-
-        # Add creator name to each post
         for post_entry in fetched_posts_list:
             service_from_post = post_entry.get('service', '')
             creator_id_from_post = post_entry.get('creator_id', '')
@@ -1238,28 +1232,20 @@ class FavoritePostsDialog(QDialog):
 
         for known_entry in self.known_names_list_ref:
             aliases_to_check = set()
-            # Add all explicit aliases from the known entry
             for alias_val in known_entry.get("aliases", []):
                 aliases_to_check.add(alias_val)
-            # For non-group entries, the primary name is also a key alias
             if not known_entry.get("is_group", False):
                 aliases_to_check.add(known_entry["name"])
-
-            # Sort this entry's aliases by length (longest first)
-            # to prioritize more specific aliases within the same known_entry
             sorted_aliases_for_entry = sorted(list(aliases_to_check), key=len, reverse=True)
 
             for alias in sorted_aliases_for_entry:
                 alias_lower = alias.lower()
                 if not alias_lower:
                     continue
-                
-                # Check for whole word match using regex
                 if re.search(r'\b' + re.escape(alias_lower) + r'\b', title_lower):
                     if len(alias_lower) > longest_match_len:
                         longest_match_len = len(alias_lower)
                         best_match_known_name_primary = known_entry["name"] # Store the primary name
-                    # Since aliases for this entry are sorted by length, first match is the best for this entry
                     break # Move to the next known_entry
         return best_match_known_name_primary
 
@@ -1267,8 +1253,6 @@ class FavoritePostsDialog(QDialog):
         self.post_list_widget.clear()
         
         source_list_for_grouping = posts_to_display if posts_to_display is not None else self.all_fetched_posts
-
-        # Group posts by (service, creator_id)
         grouped_posts = {}
         for post in source_list_for_grouping:
             service = post.get('service', 'unknown_service')
@@ -1285,13 +1269,11 @@ class FavoritePostsDialog(QDialog):
             for key in sorted_group_keys # type: ignore
         }
         for service, creator_id_val in sorted_group_keys:
-            # Resolve creator name for header
             creator_name_display = self.creator_name_cache.get(
                 (service.lower(), str(creator_id_val)), # Ensure service is lower and id is str for lookup
                 str(creator_id_val) # Fallback to creator_id_val if not found
             )
             artist_header_display_text = f"{creator_name_display} ({service.capitalize()} / {creator_id_val})"
-            # Add artist header item
             artist_header_item = QListWidgetItem(f"🎨 {artist_header_display_text}")
             artist_header_item.setFlags(Qt.NoItemFlags) # Not selectable, not checkable
             font = artist_header_item.font()
@@ -1300,12 +1282,8 @@ class FavoritePostsDialog(QDialog):
             artist_header_item.setFont(font)
             artist_header_item.setForeground(Qt.cyan) # Style for header
             self.post_list_widget.addItem(artist_header_item)
-
-            # Add post items for this artist
             for post_data in self.displayable_grouped_posts[(service, creator_id_val)]:
                 post_title_raw = post_data.get('title', 'Untitled Post')
-                
-                # Find if a known name is in the title and prepare prefix
                 found_known_name_primary = self._find_best_known_name_match_in_title(post_title_raw)
                 
                 plain_text_title_for_list_item = post_title_raw
@@ -1331,7 +1309,6 @@ class FavoritePostsDialog(QDialog):
         
         filtered_posts_to_group = []
         for post in self.all_fetched_posts:
-            # Check if search text matches post title, creator name, creator ID, or service
             matches_post_title = search_text in post.get('title', '').lower()
             matches_creator_name = search_text in post.get('creator_name_resolved', '').lower() # Search resolved name
             matches_creator_id = search_text in post.get('creator_id', '').lower()
@@ -1951,12 +1928,8 @@ class DownloaderApp(QWidget):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
         if getattr(sys, 'frozen', False):
-            # If the application is run as a bundle (one-file or one-dir),
-            # sys.executable is the path to the executable.
-            # os.path.dirname(sys.executable) gives the directory where the .exe is.
             self.app_base_dir = os.path.dirname(sys.executable)
         else:
-            # The application is run as a normal Python script.
             self.app_base_dir = os.path.dirname(os.path.abspath(__file__))
         self.config_file = os.path.join(self.app_base_dir, "Known.txt")
 
@@ -1972,6 +1945,7 @@ class DownloaderApp(QWidget):
         self.is_processing_favorites_queue = False         
         self.download_counter = 0
         self.favorite_download_queue = deque()
+        self.permanently_failed_files_for_dialog = [] # For the error dialog        
         self.last_link_input_text_for_queue_sync = "" # For syncing queue with link_input
         self.is_fetcher_thread_running = False
         self.is_processing_favorites_queue = False
@@ -2043,11 +2017,8 @@ class DownloaderApp(QWidget):
         self.already_logged_bold_key_terms = set()
         self.missed_key_terms_buffer = []
         self.char_filter_scope_toggle_button = None
-
-        # --- MODIFICATION: Set fixed default scopes, do not load from settings ---
         self.skip_words_scope = SKIP_SCOPE_POSTS
         self.char_filter_scope = CHAR_SCOPE_TITLE
-        # --- END MODIFICATION ---
         self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
         self.current_theme = self.settings.value(THEME_KEY, "dark", type=str) # Load theme, default to dark        
         self.allow_multipart_download_setting = False 
@@ -2099,7 +2070,6 @@ class DownloaderApp(QWidget):
             self.setStyleSheet("") # Clear stylesheet for default light theme
             if not initial_load:
                 self.log_signal.emit("🎨 Switched to Light Mode.")
-        # Force style update on children if necessary (usually not needed with setStyleSheet on top level)
         self.update()
 
     def _get_tooltip_for_character_input(self):
@@ -2183,6 +2153,8 @@ class DownloaderApp(QWidget):
             self.favorite_mode_posts_button.clicked.connect(self._show_favorite_posts_dialog)
         if hasattr(self, 'favorite_scope_toggle_button'):
             self.favorite_scope_toggle_button.clicked.connect(self._cycle_favorite_scope)
+        if hasattr(self, 'error_btn'): # Connect the error button
+            self.error_btn.clicked.connect(self._show_error_files_dialog)
 
     def _on_character_input_changed_live(self, text):
         """
@@ -2347,8 +2319,6 @@ class DownloaderApp(QWidget):
     def closeEvent(self, event):
         self.save_known_names()
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
-        # self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope) # Do not save to persist default
-        # self.settings.setValue(CHAR_FILTER_SCOPE_KEY, self.char_filter_scope) # Do not save to persist default
         self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
         self.settings.setValue(COOKIE_TEXT_KEY, self.cookie_text_input.text() if hasattr(self, 'cookie_text_input') else "")
         self.settings.setValue(SCAN_CONTENT_IMAGES_KEY, self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False)         
@@ -2418,8 +2388,6 @@ class DownloaderApp(QWidget):
         self.link_input.setToolTip("Enter the full URL of a Kemono/Coomer creator's page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765")
         self.link_input.textChanged.connect(self.update_custom_folder_visibility)
         url_input_layout.addWidget(self.link_input, 1)
-
-        # Add the new empty popup button
         self.empty_popup_button = QPushButton("🎨") # Changed text to emoji
         self.empty_popup_button.setToolTip(
             "Open Creator Selection\n\n"
@@ -2473,7 +2441,6 @@ class DownloaderApp(QWidget):
         self.favorite_mode_posts_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)         
         
         self.favorite_scope_toggle_button = QPushButton()
-        # self.favorite_scope_toggle_button.setStyleSheet("padding: 6px 10px;") # Old
         self.favorite_scope_toggle_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.favorite_scope_toggle_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
                 
@@ -2531,7 +2498,6 @@ class DownloaderApp(QWidget):
 
         self.char_filter_scope_toggle_button = QPushButton()
         self._update_char_filter_scope_button_text()
-        # self.char_filter_scope_toggle_button.setStyleSheet("padding: 6px 10px;") # Old
         self.char_filter_scope_toggle_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.char_filter_scope_toggle_button.setMinimumWidth(100)
         char_input_and_button_layout.addWidget(self.char_filter_scope_toggle_button, 1)
@@ -2575,7 +2541,6 @@ class DownloaderApp(QWidget):
         skip_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
         skip_input_and_button_layout.setSpacing(10)
         self.skip_words_input = QLineEdit()
-        # Updated tooltip for skip_words_input
         self.skip_words_input.setToolTip(
             "Enter words, comma-separated, to skip downloading certain content (e.g., WIP, sketch, preview).\n\n"
             "The 'Scope: [Type]' button next to this input cycles how this filter applies:\n"
@@ -2588,7 +2553,6 @@ class DownloaderApp(QWidget):
 
         self.skip_scope_toggle_button = QPushButton()
         self._update_skip_scope_button_text()
-        # self.skip_scope_toggle_button.setStyleSheet("padding: 6px 10px;") # Old
         self.skip_scope_toggle_button.setStyleSheet("padding: 4px 10px;") # Standardized padding
         self.skip_scope_toggle_button.setMinimumWidth(100)
         skip_input_and_button_layout.addWidget(self.skip_scope_toggle_button, 0)
@@ -2799,9 +2763,15 @@ class DownloaderApp(QWidget):
         self.cancel_btn.setToolTip("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
         self.cancel_btn.setStyleSheet("padding: 4px 12px;") 
         self.cancel_btn.clicked.connect(self.cancel_download_button_action)
+
+        self.error_btn = QPushButton("Error")
+        self.error_btn.setToolTip("View error details (functionality TBD).")
+        self.error_btn.setStyleSheet("padding: 4px 8px;") # Smaller padding
+        self.error_btn.setEnabled(True) # Initially enabled
         btn_layout.addWidget(self.download_btn)
         btn_layout.addWidget(self.pause_btn)
         btn_layout.addWidget(self.cancel_btn)
+        btn_layout.addWidget(self.error_btn) # Add the error button to the layout
         self.standard_action_buttons_widget.setLayout(btn_layout)
 
         self.bottom_action_buttons_stack = QStackedWidget()
@@ -2871,13 +2841,10 @@ class DownloaderApp(QWidget):
         self.future_settings_button.setStyleSheet("padding: 4px 6px;") # Standardized padding
         self.future_settings_button.setToolTip("Open placeholder for future settings.")
         self.future_settings_button.clicked.connect(self._show_future_settings_dialog)
-
-        # Revert stretch factors to original values (likely 1 for these buttons to allow some stretch)
         char_manage_layout.addWidget(self.add_to_filter_button, 1) 
         char_manage_layout.addWidget(self.delete_char_button, 1) 
         char_manage_layout.addWidget(self.known_names_help_button, 0) # Keep stretch 0 for fixed width
         char_manage_layout.addWidget(self.future_settings_button, 0) # Add the new settings button
-        # char_manage_layout.addStretch(1) # Remove the added stretch from previous change
         left_layout.addLayout(char_manage_layout)
         left_layout.addStretch(0) # Add back the stretch for the left_layout
 
@@ -3126,26 +3093,21 @@ class DownloaderApp(QWidget):
         """
 
     def browse_directory(self):
-        # Determine a safe starting path
         initial_dir_text = self.dir_input.text()
         start_path = ""
         if initial_dir_text and os.path.isdir(initial_dir_text):
             start_path = initial_dir_text
         else:
-            # Fallback to standard locations if input is invalid or empty
             home_location = QStandardPaths.writableLocation(QStandardPaths.HomeLocation)
             documents_location = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
             if home_location and os.path.isdir(home_location):
                 start_path = home_location
             elif documents_location and os.path.isdir(documents_location):
                 start_path = documents_location
-            # If all else fails, start_path remains "", letting Qt decide.
 
         self.log_signal.emit(f"ℹ️ Opening folder dialog. Suggested start path: '{start_path}'")
 
         try:
-            # Use Qt's non-native dialog to potentially avoid OS-level hangs/warnings
-            # The options are combined directly here.
             folder = QFileDialog.getExistingDirectory(
                 self,
                 "Select Download Folder",
@@ -3159,7 +3121,6 @@ class DownloaderApp(QWidget):
             else:
                 self.log_signal.emit(f"ℹ️ Folder selection cancelled by user.")
         except RuntimeError as e:
-            # This can sometimes happen if Qt has issues with the windowing system or graphics
             self.log_signal.emit(f"❌ RuntimeError opening folder dialog: {e}. This might indicate a deeper Qt or system issue.")
             QMessageBox.critical(self, "Dialog Error", f"A runtime error occurred while trying to open the folder dialog: {e}")
         except Exception as e:
@@ -4209,8 +4170,6 @@ class DownloaderApp(QWidget):
         if self._is_download_active():
             QMessageBox.warning(self, "Busy", "A download is already running.")
             return False # Indicate failure to start
-        
-        # Check if this "Start Download" is for processing a queue from the creator popup
         if not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
             is_from_creator_popup = False
             if self.favorite_download_queue: # Ensure queue is not empty before peeking
@@ -4219,15 +4178,9 @@ class DownloaderApp(QWidget):
                     is_from_creator_popup = True
             
             if is_from_creator_popup:
-                # The queue was populated by the creator popup.
-                # The link_input field contains display names and should be ignored for URL parsing.
-                # Start processing the queue directly.
                 self.log_signal.emit(f"ℹ️ Detected {len(self.favorite_download_queue)} creators queued from popup. Starting processing...")
                 self._process_next_favorite_download() # This will set is_processing_favorites_queue
                 return True # Indicate that the process has started
-            # If not from creator_popup, let the normal flow handle it.
-            # This allows other uses of favorite_download_queue (e.g., from Favorite Artists/Posts dialogs)
-            # to proceed if they call start_download differently or if link_input is meant to be a URL.
 
 
         if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url:
@@ -4250,7 +4203,6 @@ class DownloaderApp(QWidget):
             if num_threads_from_gui < 1: num_threads_from_gui = 1
         except ValueError:
             QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
-            # self.set_ui_enabled(True) # Removed
             return False # Indicate failure to start
 
         if use_multithreading_enabled_by_checkbox:
@@ -4307,9 +4259,6 @@ class DownloaderApp(QWidget):
         selected_cookie_file_path_for_backend = self.selected_cookie_filepath if use_cookie_from_checkbox and self.selected_cookie_filepath else None
 
         if use_cookie_from_checkbox and not direct_api_url: # Don't show for individual items in favorite queue if they fail this check
-            # Perform an early check for cookies if 'Use Cookie' is checked for the main UI interaction
-            # The actual cookies for download/API calls will be prepared by the backend.
-            # This is for proactive UI feedback.
             temp_cookies_for_check = prepare_cookies_for_request(
                 use_cookie_for_this_run, # Use the potentially modified flag
                 cookie_text_from_input,
@@ -4364,7 +4313,6 @@ class DownloaderApp(QWidget):
                 QMessageBox.critical(self, "Configuration Error",
                                     "The main 'Download Location' must be set in the UI "
                                     "before downloading favorites with 'Artist Folders' scope.")
-                # self.set_ui_enabled(True) # Removed
                 if self.is_processing_favorites_queue: # Ensure queue logic can proceed
                     self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory not set.")
                 return False # Indicate failure to start
@@ -4373,7 +4321,6 @@ class DownloaderApp(QWidget):
                 QMessageBox.critical(self, "Directory Error",
                                     f"The main 'Download Location' ('{main_ui_download_dir}') "
                                     "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
-                # self.set_ui_enabled(True) # Removed
                 if self.is_processing_favorites_queue:
                     self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory invalid.")
                 return False # Indicate failure to start
@@ -4381,7 +4328,6 @@ class DownloaderApp(QWidget):
         else:
             if not extract_links_only and not main_ui_download_dir:
                 QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode.")
-                # self.set_ui_enabled(True) # Removed
                 return False # Indicate failure to start
 
             if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
@@ -4394,11 +4340,9 @@ class DownloaderApp(QWidget):
                         self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
                     except Exception as e:
                         QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
-                        # self.set_ui_enabled(True) # Removed
                         return False # Indicate failure to start
                 else:
                     self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
-                    # self.set_ui_enabled(True) # Removed
                     return False # Indicate failure to start
             effective_output_dir_for_run = main_ui_download_dir
 
@@ -4462,11 +4406,9 @@ class DownloaderApp(QWidget):
 
                     if msg_box.clickedButton() == cancel_button:
                         self.log_signal.emit("❌ Download cancelled by user due to Manga Mode & Page Range warning.")
-                        # self.set_ui_enabled(True); # Removed
                         return False # Indicate failure to start
             except ValueError as e:
                 QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}")
-                # self.set_ui_enabled(True); # Removed
                 return False # Indicate failure to start
         self.external_link_queue.clear(); self.extracted_links_cache = []; self._is_processing_external_link_queue = False; self._current_link_post_title = None
 
@@ -4520,7 +4462,6 @@ class DownloaderApp(QWidget):
 
                     if dialog_result == CONFIRM_ADD_ALL_CANCEL_DOWNLOAD:
                         self.log_signal.emit("❌ Download cancelled by user at new name confirmation stage.")
-                        # self.set_ui_enabled(True); # Removed
                         return False # Indicate failure to start
                     elif isinstance(dialog_result, list): # User chose to add selected items
                         if dialog_result: # If the list of selected filter_objects is not empty
@@ -4592,6 +4533,8 @@ class DownloaderApp(QWidget):
         self.progress_label.setText("Progress: Initializing...")
 
         self.retryable_failed_files_info.clear() # Clear previous retryable failures before new session
+        self.permanently_failed_files_for_dialog.clear() # Clear permanent failures for new session
+        
         manga_date_file_counter_ref_for_thread = None
         if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not extract_links_only:
             manga_date_file_counter_ref_for_thread = None # Placeholder, actual init in thread
@@ -4798,6 +4741,18 @@ class DownloaderApp(QWidget):
             QMessageBox.critical(self, "Thread Start Error", f"Failed to start download process: {e}")
             if self.pause_event: self.pause_event.clear()            
             self.is_paused = False # Ensure pause state is reset on error
+
+    def _show_error_files_dialog(self):
+        """Shows the dialog with files that were skipped due to errors."""
+        if not self.permanently_failed_files_for_dialog:
+            QMessageBox.information(self, "No Errors Logged",
+                                    "No files were recorded as skipped due to errors in the last session or after retries.")
+            return
+        dialog = ErrorFilesDialog(self.permanently_failed_files_for_dialog, self) # type: ignore
+        dialog.retry_selected_signal.connect(self._handle_retry_from_error_dialog)
+        dialog.exec_()
+    def _handle_retry_from_error_dialog(self, selected_files_to_retry):
+        self._start_failed_files_retry_session(files_to_retry_list=selected_files_to_retry)
 
     def _handle_retryable_file_failure(self, list_of_retry_details):
         """Appends details of files that failed but might be retryable later."""
@@ -5059,10 +5014,11 @@ class DownloaderApp(QWidget):
             elif future.exception():
                 self.log_signal.emit(f"❌ Post processing worker error: {future.exception()}")
             else: # Future completed successfully
-                downloaded_files_from_future, skipped_files_from_future, kept_originals_from_future, retryable_failures_from_post = future.result()
+                downloaded_files_from_future, skipped_files_from_future, kept_originals_from_future, retryable_failures_from_post, permanent_failures_from_post = future.result()
                 if retryable_failures_from_post:
                     self.retryable_failed_files_info.extend(retryable_failures_from_post)
-
+                if permanent_failures_from_post:
+                    self.permanently_failed_files_for_dialog.extend(permanent_failures_from_post)
             with self.downloaded_files_lock:
                 self.download_counter += downloaded_files_from_future
                 self.skip_counter += skipped_files_from_future
@@ -5263,6 +5219,7 @@ class DownloaderApp(QWidget):
         
         if hasattr(self, 'link_input'): # Update for queue sync
             self.last_link_input_text_for_queue_sync = self.link_input.text()
+        self.permanently_failed_files_for_dialog.clear() # Clear errors on soft reset
         self.filter_character_list(self.character_search_input.text())
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION # Reset scope
         self._update_favorite_scope_button_text()
@@ -5305,7 +5262,8 @@ class DownloaderApp(QWidget):
         if self.retryable_failed_files_info:
             self.log_signal.emit(f"    Discarding {len(self.retryable_failed_files_info)} pending retryable file(s) due to cancellation.")
             self.retryable_failed_files_info.clear()
-        self.favorite_download_queue.clear()
+        self.favorite_download_queue.clear() # type: ignore
+        self.permanently_failed_files_for_dialog.clear() # Also clear permanent failures on cancel        
         self.is_processing_favorites_queue = False
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION # Reset scope
         self._update_favorite_scope_button_text()
@@ -5386,6 +5344,9 @@ class DownloaderApp(QWidget):
                 return # Don't fully reset UI if retrying
             else:
                 self.log_signal.emit("ℹ️ User chose not to retry failed files.")
+                self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info) # Add to permanent list
+                if self.permanently_failed_files_for_dialog: # Log if there are now permanent errors
+                    self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) can be viewed.")                
                 self.retryable_failed_files_info.clear() # Clear if not retrying
 
         self.is_fetcher_thread_running = False # Ensure it's reset
@@ -5417,19 +5378,24 @@ class DownloaderApp(QWidget):
             self.scan_content_images_checkbox.setChecked(False) 
             self.scan_content_images_checkbox.setToolTip(self._original_scan_content_tooltip)
 
-    def _start_failed_files_retry_session(self):
-        self.log_signal.emit(f"🔄 Starting retry session for {len(self.retryable_failed_files_info)} file(s)...")
+    def _start_failed_files_retry_session(self, files_to_retry_list=None):
+        if files_to_retry_list:
+            self.files_for_current_retry_session = list(files_to_retry_list)
+            self.permanently_failed_files_for_dialog = [f for f in self.permanently_failed_files_for_dialog if f not in files_to_retry_list]
+        else:
+            self.files_for_current_retry_session = list(self.retryable_failed_files_info)
+            self.retryable_failed_files_info.clear() # Clear original list if using default
+        self.log_signal.emit(f"🔄 Starting retry session for {len(self.files_for_current_retry_session)} file(s)...")
         self.set_ui_enabled(False) # Disable UI, but cancel button will be enabled
         if self.cancel_btn: self.cancel_btn.setText("❌ Cancel Retry")
 
-        self.files_for_current_retry_session = list(self.retryable_failed_files_info)
-        self.retryable_failed_files_info.clear() # Clear original list
 
         self.active_retry_futures = []
         self.processed_retry_count = 0
         self.succeeded_retry_count = 0
         self.failed_retry_count_in_session = 0 # Renamed to avoid clash
         self.total_files_for_retry = len(self.files_for_current_retry_session)
+        self.active_retry_futures_map = {} # Initialize map for tracking futures to job_details
 
         self.progress_label.setText(f"Retrying 0 / {self.total_files_for_retry} files...")
         self.cancellation_event.clear() # Clear main cancellation for retry session
@@ -5476,6 +5442,7 @@ class DownloaderApp(QWidget):
         for job_details in self.files_for_current_retry_session:
             future = self.retry_thread_pool.submit(self._execute_single_file_retry, job_details, common_ppw_args_for_retry)
             future.add_done_callback(self._handle_retry_future_result)
+            self.active_retry_futures_map[future] = job_details # Map future to its job_details            
             self.active_retry_futures.append(future)
 
     def _execute_single_file_retry(self, job_details, common_args):
@@ -5521,19 +5488,23 @@ class DownloaderApp(QWidget):
                 self.log_signal.emit(f"❌ Retry task worker error: {future.exception()}")
             else:
                 was_successful = future.result()
+                job_details = self.active_retry_futures_map.pop(future, None) # Get and remove from map             
                 if was_successful:
                     self.succeeded_retry_count += 1
                 else:
                     self.failed_retry_count_in_session += 1
+                    if job_details: # If retry failed, add its details to the permanent list
+                        self.permanently_failed_files_for_dialog.append(job_details)        
         except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_retry_future_result: {e}")
-            self.failed_retry_count_in_session +=1
+            self.failed_retry_count_in_session += 1
 
         self.progress_label.setText(f"Retrying {self.processed_retry_count} / {self.total_files_for_retry} files... (Succeeded: {self.succeeded_retry_count}, Failed: {self.failed_retry_count_in_session})")
 
         if self.processed_retry_count >= self.total_files_for_retry:
             if all(f.done() for f in self.active_retry_futures):
-                self._retry_session_finished()
+                QTimer.singleShot(0, self._retry_session_finished)
+
 
     def _retry_session_finished(self):
         self.log_signal.emit("🏁 Retry session finished.")
@@ -5544,8 +5515,12 @@ class DownloaderApp(QWidget):
             self.retry_thread_pool = None
         
         self.active_retry_futures.clear()
+        self.active_retry_futures_map.clear() # Clear the map        
         self.files_for_current_retry_session.clear()
-        
+
+        if self.permanently_failed_files_for_dialog: # Log if there are permanent errors after retry
+            self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) ultimately failed and can be viewed.")
+
         self.set_ui_enabled(True) # Re-enable UI
         if self.cancel_btn: self.cancel_btn.setText("❌ Cancel & Reset UI") # Reset cancel button text
         self.progress_label.setText(f"Retry Finished. Succeeded: {self.succeeded_retry_count}, Failed: {self.failed_retry_count_in_session}. Ready for new task.")
@@ -5592,6 +5567,7 @@ class DownloaderApp(QWidget):
         self.already_logged_bold_key_terms.clear()
         self.missed_key_terms_buffer.clear()
         self.favorite_download_queue.clear()
+        self.permanently_failed_files_for_dialog.clear() # Clear errors on full reset        
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION # Reset scope
         self._update_favorite_scope_button_text()        
         self.retryable_failed_files_info.clear() # Clear any pending retries
@@ -5645,6 +5621,7 @@ class DownloaderApp(QWidget):
         self.missed_key_terms_buffer.clear()
         if self.missed_character_log_output: self.missed_character_log_output.clear()
 
+        self.permanently_failed_files_for_dialog.clear() # Ensure cleared on default reset too
         self.allow_multipart_download_setting = False # Default to OFF
         self._update_multipart_toggle_button_text() # Update button text
 
@@ -6188,8 +6165,6 @@ class DownloaderApp(QWidget):
         """Creates and shows the empty popup dialog."""
         dialog = EmptyPopupDialog(self.app_base_dir, self)
         if dialog.exec_() == QDialog.Accepted: # "Add Selected" was clicked in the dialog
-            # The dialog's _handle_add_selected method has already set the link_input text.
-            # Now, we populate the internal download queue if creators were selected.
             if hasattr(dialog, 'selected_creators_for_queue') and dialog.selected_creators_for_queue:
                 self.favorite_download_queue.clear() # Clear any previous queue items
 
@@ -6197,9 +6172,6 @@ class DownloaderApp(QWidget):
                     service = creator_data.get('service')
                     creator_id = creator_data.get('id')
                     creator_name = creator_data.get('name', 'Unknown Creator')
-                    
-                    # Reconstruct URL for the queue item
-                    # (Alternatively, creator_data could store the full URL directly)
                     domain = dialog._get_domain_for_service(service) 
                     
                     if service and creator_id:
@@ -6217,9 +6189,6 @@ class DownloaderApp(QWidget):
                     self.log_signal.emit(f"ℹ️ {len(self.favorite_download_queue)} creators added to download queue from popup. Click 'Start Download' to process.")
                     if hasattr(self, 'link_input'): # Update last_link_input for sync after queue is rebuilt
                         self.last_link_input_text_for_queue_sync = self.link_input.text()
-
-                # If the queue is empty here, it means "Add Selected" was clicked with no items checked in the dialog.
-                # The link_input would have been cleared or set to empty by the dialog's logic.
 
     def _show_favorite_artists_dialog(self):
         if self._is_download_active() or self.is_processing_favorites_queue:
@@ -6239,9 +6208,6 @@ class DownloaderApp(QWidget):
             if selected_artists:
                 if len(selected_artists) > 1:
                     display_names = ", ".join([artist['name'] for artist in selected_artists])
-                    # For multiple artists, we don't set the link_input as it's confusing.
-                    # The queue will handle individual URLs.
-                    # self.link_input.setText(display_names) # Avoid setting this
                     if self.link_input: # Clear it if it was showing a single URL before
                         self.link_input.clear()
                         self.link_input.setPlaceholderText(f"{len(selected_artists)} favorite artists selected for download queue.")
@@ -6255,7 +6221,6 @@ class DownloaderApp(QWidget):
                     self.favorite_download_queue.append({'url': artist_data['url'], 'name': artist_data['name'], 'name_for_folder': artist_data['name'], 'type': 'artist'})
                 
                 if not self.is_processing_favorites_queue:
-                    # self.is_processing_favorites_queue = True # This will be set in _process_next_favorite_download
                     self._process_next_favorite_download()
             else:
                 self.log_signal.emit("ℹ️ No favorite artists were selected for download.")
@@ -6274,8 +6239,6 @@ class DownloaderApp(QWidget):
             'app_base_dir': self.app_base_dir
         }
         global KNOWN_NAMES # Ensure we have access to the global
-
-        # Perform cookie check before showing the FavoritePostsDialog if cookies are enabled
         if cookies_config['use_cookie']:
             temp_cookies_for_check = prepare_cookies_for_request(
                 cookies_config['use_cookie'],
@@ -6295,8 +6258,6 @@ class DownloaderApp(QWidget):
             if selected_posts:
                 self.log_signal.emit(f"ℹ️ Queuing {len(selected_posts)} favorite post(s) for download.")
                 for post_data in selected_posts:
-                    # Construct direct post URL: https://<domain>/<service>/user/<creator_id>/post/<post_id>
-                    # For now, assume kemono.su. TODO: Handle coomer.su if applicable
                     domain = "kemono.su" # Or determine from service/parent app settings
                     direct_post_url = f"https://{domain}/{post_data['service']}/user/{post_data['creator_id']}/post/{post_data['post_id']}"
                     
@@ -6309,7 +6270,6 @@ class DownloaderApp(QWidget):
                     self.favorite_download_queue.append(queue_item)
                 
                 if not self.is_processing_favorites_queue:
-                    # self.is_processing_favorites_queue = True # This will be set in _process_next_favorite_download
                     self._process_next_favorite_download()
             else:
                 self.log_signal.emit("ℹ️ No favorite posts were selected for download.")
@@ -6317,26 +6277,18 @@ class DownloaderApp(QWidget):
             self.log_signal.emit("ℹ️ Favorite posts selection cancelled.")
 
     def _process_next_favorite_download(self):
-        # If a download is already active (could be a regular download or a previous favorite item),
-        # wait for it to complete. download_finished will re-trigger this method.
         if self._is_download_active():
             self.log_signal.emit("ℹ️ Waiting for current download to finish before starting next favorite.")
             return
-
-        # If the queue is empty, it means all favorites (if any were queued) are done.
         if not self.favorite_download_queue:
             if self.is_processing_favorites_queue: # If we were in the middle of processing favorites
                 self.is_processing_favorites_queue = False
                 item_type_log = "item" # Default
-                # Check if current_processing_favorite_item_info was set (i.e., at least one item was processed)
                 if hasattr(self, 'current_processing_favorite_item_info') and self.current_processing_favorite_item_info:
                     item_type_log = self.current_processing_favorite_item_info.get('type', 'item')
                 self.log_signal.emit(f"✅ All {item_type_log} downloads from favorite queue have been processed.")
                 self.set_ui_enabled(True) # Re-enable UI fully
             return
-
-        # If we reach here, queue is not empty and no other download is active.
-        # This is where we commit to processing the next favorite item.
         if not self.is_processing_favorites_queue: # Set flag if starting a new queue processing
             self.is_processing_favorites_queue = True
         self.current_processing_favorite_item_info = self.favorite_download_queue.popleft()
@@ -6346,7 +6298,6 @@ class DownloaderApp(QWidget):
         self.log_signal.emit(f"▶️ Processing next favorite from queue: '{item_display_name}' ({next_url})")
         
         override_dir = None
-        # Determine scope: from popup if available, otherwise from main app's favorite scope setting
         item_scope = self.current_processing_favorite_item_info.get('scope_from_popup')
         if item_scope is None: # Not from creator popup, use the main favorite scope
             item_scope = self.favorite_download_scope
@@ -6362,12 +6313,7 @@ class DownloaderApp(QWidget):
         success_starting_download = self.start_download(direct_api_url=next_url, override_output_dir=override_dir)
 
         if not success_starting_download:
-            # If start_download failed (e.g., due to a QMessageBox validation error),
-            # we need to manually trigger the logic that download_finished would handle
-            # to ensure the queue continues or terminates correctly.
             self.log_signal.emit(f"⚠️ Failed to initiate download for '{item_display_name}'. Skipping this item in queue.")
-            # Simulate a "cancelled" finish for this item to process the next or end the queue.
-            # This will call _process_next_favorite_download again if queue is not empty via download_finished.
             self.download_finished(total_downloaded=0, total_skipped=1, cancelled_by_user=True, kept_original_names_list=[])
 
 if __name__ == '__main__':
