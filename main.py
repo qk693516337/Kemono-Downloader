@@ -439,16 +439,38 @@ class EmptyPopupDialog(QDialog):
             QCoreApplication.processEvents() # Process events after file load/parse
             if not self.isVisible(): return
 
+            raw_data_list = []
             if isinstance(data, list) and len(data) > 0 and isinstance(data[0], list):
-                self.all_creators_data = data[0]
+                raw_data_list = data[0]
             elif isinstance(data, list) and all(isinstance(item, dict) for item in data): # Handle flat list too
-                self.all_creators_data = data
+                raw_data_list = data
             else:
                 self.list_widget.addItem("Error: Invalid format in creators.json.")
                 self.all_creators_data = []
                 self.progress_bar.setVisible(False); QCoreApplication.processEvents(); return
 
-            self.all_creators_data.sort(key=lambda c: c.get('favorited', 0), reverse=True) # This can be slow
+            # De-duplicate based on (service, id)
+            unique_creators_map = {}
+            duplicates_skipped_count = 0
+            for creator_entry in raw_data_list:
+                service = creator_entry.get('service')
+                creator_id = creator_entry.get('id')
+                name_for_log = creator_entry.get('name', 'Unknown')
+
+                if service and creator_id:
+                    key = (str(service).lower().strip(), str(creator_id).strip())
+                    if key not in unique_creators_map:
+                        unique_creators_map[key] = creator_entry
+                    else:
+                        duplicates_skipped_count += 1
+                else:
+                    print(f"Warning: Creator entry in creators.json missing service or ID: {name_for_log}")
+
+            self.all_creators_data = list(unique_creators_map.values())
+            if duplicates_skipped_count > 0:
+                print(f"INFO (Creator Popup): Skipped {duplicates_skipped_count} duplicate creator entries from creators.json based on (service, id).")
+
+            self.all_creators_data.sort(key=lambda c: (-c.get('favorited', 0), c.get('name', '').lower())) # Sort by favorited (desc), then name (asc)
             QCoreApplication.processEvents() # Process events after sort
             if not self.isVisible(): return
 
@@ -630,7 +652,7 @@ class EmptyPopupDialog(QDialog):
         if selected_display_names:
             main_app_window = self.parent() # QDialog's parent is the DownloaderApp instance
             if hasattr(main_app_window, 'link_input'):
-                main_app_window.link_input.setText(", ".join(sorted(selected_display_names)))
+                main_app_window.link_input.setText(", ".join(selected_display_names)) # Removed sorted()
             self.accept() # Close the dialog
         else:
             QMessageBox.information(self, "No Selection", "No creators selected to add.")
@@ -1612,7 +1634,7 @@ class TourDialog(QDialog):
 
     CONFIG_ORGANIZATION_NAME = "KemonoDownloader"
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
-    TOUR_SHOWN_KEY = "neverShowTourAgainV15" 
+    TOUR_SHOWN_KEY = "neverShowTourAgainV16" 
 
     def __init__(self, parent=None):
         super().__init__(parent)
