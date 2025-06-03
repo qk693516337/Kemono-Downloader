@@ -67,33 +67,6 @@ FOLDER_NAME_STOP_WORDS = {
     "right", "s", "she", "so", "technically", "tell", "the", "their", "they", "this",
     "to", "ve", "was", "we", "well", "were", "with", "www", "year", "you", "your",
 }
-
-DEFAULT_UNWANTED_FOLDER_KEYWORDS_FOR_GENERIC_NAMING = { # Keywords to avoid for folder names if UI filter is empty
-    "fan-art", "fanart", "request", "requests", "poll", "holiday", "commission", "commissions",
-    "jan", "feb", "mar", "apr", "may", "jun", 
-    "jul", "aug", "sep", "oct", "nov", "dec", 
-    "january", "february", "march", "april", "may", "june", # Full month names (some were already here)
-    "july", "august", "september", "october", "november", "december", # Full month names
-    "mon", "tue", "wed", "thu", "fri", "sat", "sun", 
-    "couple", "cuff", "cuffs", "flash", "first", "second", "third", "fourth", "fifth", "etc", "futa", # Added "cuffs"
-    "late", "early", "form", "post", "dawn", "dark", # Added "late", "early", "form", "dawn", "dark". "post", "first" were already effectively covered or present.
-    "red", "blue", "green", "black", "white", "yellow", "pink", "purple", "orange", "brown", "gray", "grey", "silver", "gold",
-    "open", "close", "batch", "winner", "loser", # Added new words
-    "web", "cum", "sfw", # Added per new request ("nsfw" is in BASE_UNWANTED_KEYWORDS_FOR_FOLDERS)
-    "big", "small", "another", "other", "some", "more", "new", "old",
-    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", # Numbers as words
-    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", # Added 11-20 as words
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0", # Numbers as digits
-    "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", # Added 10-20 as digits
-    "let", "lot", "better", "post", "image", "video", "art", "drawing", "sketch"
-}
-
-BASE_UNWANTED_KEYWORDS_FOR_FOLDERS = {'spicy', 'hd', 'nsfw', '4k', 'preview', 'teaser', 'clip'}
-
-FILENAME_TOKEN_STRIPPABLE_PARTS = {"web", "cum", "nsfw", "sfw"} # Parts to strip from filename tokens for folder naming
-
-
-
 def parse_cookie_string(cookie_string):
     """Parses a 'name=value; name2=value2' cookie string into a dict."""
     cookies = {}
@@ -188,30 +161,13 @@ def strip_html_tags(html_text):
 def extract_folder_name_from_title(title, unwanted_keywords):
     if not title: return 'Uncategorized'
     title_lower = title.lower()
-    tokens = re.findall(r'\b[\w\-]+\b', title_lower) # Finds words
+    tokens = re.findall(r'\b[\w\-]+\b', title_lower)
     for token in tokens:
-        clean_token = clean_folder_name(token) # clean_folder_name also removes FOLDER_NAME_STOP_WORDS
+        clean_token = clean_folder_name(token)
         if clean_token and clean_token.lower() not in unwanted_keywords:
             return clean_token
-    # If no single valid token, try the full title
-    cleaned_full_title = clean_folder_name(title) # This already applies FOLDER_NAME_STOP_WORDS
-
-    if cleaned_full_title:
-        # Now, check if this cleaned_full_title is composed *entirely* of unwanted_keywords
-        # Re-tokenize the cleaned_full_title for this check
-        cleaned_title_tokens = re.findall(r'\b[\w\-]+\b', cleaned_full_title.lower())
-        if not cleaned_title_tokens: # If cleaned_full_title became empty after tokenizing (e.g., was just "...")
-            return 'Uncategorized'
-
-        all_tokens_unwanted = True
-        for c_token in cleaned_title_tokens:
-            if c_token not in unwanted_keywords: # c_token is already lowercased
-                all_tokens_unwanted = False
-                break
-        if not all_tokens_unwanted:
-            return cleaned_full_title # It contains at least one desired token
-    
-    return 'Uncategorized' # Fallback if everything is unwanted or title cleans to empty
+    cleaned_full_title = clean_folder_name(title)
+    return cleaned_full_title if cleaned_full_title else 'Uncategorized'
 def match_folders_from_title(title, names_to_match, unwanted_keywords):
     """
     Matches folder names from a title based on a list of known name objects.
@@ -237,41 +193,6 @@ def match_folders_from_title(title, names_to_match, unwanted_keywords):
                     matched_cleaned_names.add(cleaned_primary_name)
                     break # Found a match for this primary name via one of its aliases
     return sorted(list(matched_cleaned_names))
-
-def extract_folder_name_from_filename_tokens(filename, unwanted_keywords, strippable_suffixes_prefixes):
-    """
-    Extracts a folder name from a filename by finding the first token
-    with 4 or more alphabetic characters that is not in unwanted_keywords,
-    after attempting to strip common suffixes/prefixes.
-    """
-    if not filename:
-        return None
-    # Extract base name without extension
-    base_name, _ = os.path.splitext(filename)
-    if not base_name:
-        return None
-
-    tokens = re.findall(r'\b[\w\-]+\b', base_name) # Finds words
-    
-    for token_candidate in tokens:
-        modified_token = token_candidate
-        for part in strippable_suffixes_prefixes:
-            # Case-insensitive suffix stripping
-            if modified_token.lower().endswith(part.lower()):
-                modified_token = modified_token[:-len(part)]
-            # Case-insensitive prefix stripping (can be added if needed for other words)
-            # elif modified_token.lower().startswith(part.lower()):
-            #    modified_token = modified_token[len(part):]
-
-        # Clean the (potentially) modified token
-        cleaned_token = clean_folder_name(modified_token)
-        
-        # Validate the final cleaned token
-        alpha_chars_count = sum(1 for char in cleaned_token if char.isalpha())
-        if alpha_chars_count >= 4:
-            if cleaned_token and cleaned_token.lower() not in unwanted_keywords:
-                return cleaned_token # Return the first valid one
-    return None
 def is_image(filename):
     if not filename: return False
     _, ext = os.path.splitext(filename)
@@ -1121,15 +1042,6 @@ class PostProcessorWorker:
         permanent_failures_this_post = [] # New list for permanent failures
         total_downloaded_this_post = 0
         total_skipped_this_post = 0
-        
-        # Determine effective unwanted keywords for folder naming
-        effective_unwanted_keywords_for_folders = set(BASE_UNWANTED_KEYWORDS_FOR_FOLDERS) # Start with base
-        if not current_character_filters: # UI filter is empty
-            self.logger("   UI 'Filter by Character(s)' is empty. Applying extended unwanted keywords for folder naming.")
-            effective_unwanted_keywords_for_folders.update(DEFAULT_UNWANTED_FOLDER_KEYWORDS_FOR_GENERIC_NAMING)
-        else:
-            self.logger(f"   UI 'Filter by Character(s)' is NOT empty. Using base unwanted keywords for folder naming: {effective_unwanted_keywords_for_folders}")
-        
         parsed_api_url = urlparse(self.api_url_input)
         referer_url = f"https://{parsed_api_url.netloc}/"
         headers = {'User-Agent': 'Mozilla/5.0', 'Referer': referer_url, 'Accept': '*/*'}
@@ -1279,135 +1191,41 @@ class PostProcessorWorker:
         if not self.extract_links_only and self.use_subfolders:
             if self._check_pause(f"Subfolder determination for post {post_id}"): return 0, num_potential_files_in_post, []
             primary_char_filter_for_folder = None # type: ignore
-            folder_name_from_ui_post_match = None # Will store the cleaned folder name if a UI filter matches the post
             log_reason_for_folder = ""
-
-            # Only consider UI filters if they are actually provided by the user
-            if current_character_filters:
-                # Check if a UI-provided character filter matched the post at a post-level (Title or Comment scope)
-                if self.char_filter_scope == CHAR_SCOPE_COMMENTS:
-                    if post_is_candidate_by_file_char_match_in_comment_scope and char_filter_that_matched_file_in_comment_scope:
-                        folder_name_from_ui_post_match = clean_folder_name(char_filter_that_matched_file_in_comment_scope["name"])
-                        log_reason_for_folder = "UI Filter: Matched char filter in filename (Comments scope)"
-                    elif post_is_candidate_by_comment_char_match and char_filter_that_matched_comment:
-                        folder_name_from_ui_post_match = clean_folder_name(char_filter_that_matched_comment["name"])
-                        log_reason_for_folder = "UI Filter: Matched char filter in comments (Comments scope, no file match)"
-                elif (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and char_filter_that_matched_title:
-                    folder_name_from_ui_post_match = clean_folder_name(char_filter_that_matched_title["name"])
-                    log_reason_for_folder = "UI Filter: Matched char filter in title"
-                # Note: CHAR_SCOPE_FILES from UI filter doesn't set a post-level folder here; it's handled per-file.
-
-            if folder_name_from_ui_post_match:
-                base_folder_names_for_post_content = [folder_name_from_ui_post_match]
+            if self.char_filter_scope == CHAR_SCOPE_COMMENTS and char_filter_that_matched_comment:
+                if post_is_candidate_by_file_char_match_in_comment_scope and char_filter_that_matched_file_in_comment_scope:
+                    primary_char_filter_for_folder = char_filter_that_matched_file_in_comment_scope
+                    log_reason_for_folder = "Matched char filter in filename (Comments scope)"
+                elif post_is_candidate_by_comment_char_match and char_filter_that_matched_comment: # Fallback to comment match
+                    primary_char_filter_for_folder = char_filter_that_matched_comment
+                    log_reason_for_folder = "Matched char filter in comments (Comments scope, no file match)"
+            elif (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and char_filter_that_matched_title: # Existing logic for other scopes
+                primary_char_filter_for_folder = char_filter_that_matched_title
+                log_reason_for_folder = "Matched char filter in title"
+            if primary_char_filter_for_folder:
+                base_folder_names_for_post_content = [clean_folder_name(primary_char_filter_for_folder["name"])]
                 self.logger(f"   Base folder name(s) for post content ({log_reason_for_folder}): {', '.join(base_folder_names_for_post_content)}")
-            
-            # If no post-level UI filter match, OR if UI filters are empty, try Known.txt
-            if not base_folder_names_for_post_content and self.known_names:
-                derived_folders = match_folders_from_title(post_title, self.known_names, effective_unwanted_keywords_for_folders)
+            elif not current_character_filters: # No char filters defined, use generic logic
+                derived_folders = match_folders_from_title(post_title, self.known_names, self.unwanted_keywords)
                 if derived_folders:
-                    base_folder_names_for_post_content.extend(derived_folders)
-                    log_msg_known_txt = "Matched from Known.txt"
-                    if not current_character_filters: # UI filter input was empty
-                        log_msg_known_txt += " (UI filter was empty)"
-                    else: # UI filters were present but didn't result in a post-level folder name
-                        log_msg_known_txt += " (No post-level UI filter match from UI)"
-                    self.logger(f"   Base folder name(s) for post content ({log_msg_known_txt}): {', '.join(base_folder_names_for_post_content)}")
-
-            # If still no folder name (e.g., no UI match, Known.txt empty or no match from Known.txt), fallback to generic title extraction.
-            if not base_folder_names_for_post_content:
-                generic_folder_name_from_title = extract_folder_name_from_title(post_title, effective_unwanted_keywords_for_folders)
-                
-                # If UI filter is empty AND title was generic/unwanted AND Known.txt exists, try Known.txt against filenames
-                if not current_character_filters and generic_folder_name_from_title.lower() == 'uncategorized' and self.known_names:
-                    self.logger("   Title was generic/unwanted (UI filter empty). Trying Known.txt against filenames...")
-                    found_match_from_filename = False
-                    # all_files_from_post_api_for_char_check is populated earlier and contains {'_original_name_for_log': ...}
-                    for file_info_item in all_files_from_post_api_for_char_check: # Ensure this list is available
-                        current_api_original_filename_for_check = file_info_item.get('_original_name_for_log')
-                        if not current_api_original_filename_for_check: continue
-                        
-                        derived_folders_from_filename = match_folders_from_title(
-                            current_api_original_filename_for_check, 
-                            self.known_names, 
-                            effective_unwanted_keywords_for_folders # Use the same unwanted keywords for consistency
-                        )
-                        if derived_folders_from_filename:
-                            base_folder_names_for_post_content.extend(derived_folders_from_filename)
-                            self.logger(f"   Base folder name(s) for post content (Known.txt matched filename '{current_api_original_filename_for_check}'): {', '.join(base_folder_names_for_post_content)}")
-                            found_match_from_filename = True
-                            break # Stop after first filename match that yields folder(s)
-                    if not found_match_from_filename:
-                        self.logger("   Known.txt did not match any filenames after generic title check.")
-
-                # If Known.txt vs Filenames didn't work (and still under generic title + empty UI filter), try Filename Token Extraction
-                if not base_folder_names_for_post_content and not current_character_filters and generic_folder_name_from_title.lower() == 'uncategorized' and all_files_from_post_api_for_char_check:
-                    self.logger("   Known.txt vs filenames failed or N/A. Trying filename token extraction (min 4 alpha chars)...")
-                    found_match_from_filename_token = False
-                    for file_info_item in all_files_from_post_api_for_char_check:
-                        current_api_original_filename_for_check = file_info_item.get('_original_name_for_log')
-                        if not current_api_original_filename_for_check: continue
-                        
-                        folder_from_filename_token = extract_folder_name_from_filename_tokens(
-                            current_api_original_filename_for_check,
-                            effective_unwanted_keywords_for_folders,
-                            FILENAME_TOKEN_STRIPPABLE_PARTS # Pass the new set
-                        )
-                        if folder_from_filename_token: # extract_folder_name_from_filename_tokens returns a single string or None
-                            base_folder_names_for_post_content.append(folder_from_filename_token)
-                            self.logger(f"   Base folder name(s) for post content (Filename token '{folder_from_filename_token}' from '{current_api_original_filename_for_check}'): {', '.join(base_folder_names_for_post_content)}")
-                            found_match_from_filename_token = True
-                            break # First suitable token wins
-                    if not found_match_from_filename_token:
-                        self.logger("   Filename token extraction did not yield a folder name.")
-                
-                # If, after the above filename check (if it ran), we still don't have a folder,
-                # OR if the title wasn't generic/unwanted, OR if UI filter was NOT empty,
-                # then consider using the generic_folder_name_from_title (if it's valid).
-                if not base_folder_names_for_post_content: 
-                    if generic_folder_name_from_title and generic_folder_name_from_title.lower() != 'uncategorized':
-                        base_folder_names_for_post_content.append(generic_folder_name_from_title)
-                        self.logger(f"   Base folder name(s) for post content (Generic title parsing - no specific filter match from UI/Known.txt(title/filename)/FilenameToken): {', '.join(base_folder_names_for_post_content)}")
-                    else: # generic_folder_name_from_title was 'uncategorized' and filename check (if ran) didn't yield anything
-                        self.logger(f"   Base folder name(s) for post content (Generic title parsing resulted in 'uncategorized', no match from Known.txt(vs filename) or FilenameToken): N/A")
-
-            # Final cleanup: ensure there's at least one valid folder name.
-            base_folder_names_for_post_content = [name for name in base_folder_names_for_post_content if name and name.strip()]
-            if not base_folder_names_for_post_content:
-                ultimate_fallback_candidate = clean_folder_name(post_title if post_title else "untitled_creator_content")
-                if not current_character_filters and ultimate_fallback_candidate.lower() in effective_unwanted_keywords_for_folders:
-                    base_folder_names_for_post_content = ["general_content"] # A very generic, safe fallback
+                    base_folder_names_for_post_content.extend(match_folders_from_title(post_title, KNOWN_NAMES, self.unwanted_keywords))
                 else:
-                    base_folder_names_for_post_content = [ultimate_fallback_candidate if ultimate_fallback_candidate else "general_content"]
-                self.logger(f"   Base folder name(s) for post content (Ultimate fallback): {', '.join(base_folder_names_for_post_content)}")
+                    base_folder_names_for_post_content.append(extract_folder_name_from_title(post_title, self.unwanted_keywords))
+                if not base_folder_names_for_post_content or not base_folder_names_for_post_content[0]:
+                    base_folder_names_for_post_content = [clean_folder_name(post_title if post_title else "untitled_creator_content")]
+                self.logger(f"   Base folder name(s) for post content (Generic title parsing - no char filters): {', '.join(base_folder_names_for_post_content)}")
         if not self.extract_links_only and self.use_subfolders and self.skip_words_list:
             if self._check_pause(f"Folder keyword skip check for post {post_id}"): return 0, num_potential_files_in_post, []
             for folder_name_to_check in base_folder_names_for_post_content: # type: ignore
                 if not folder_name_to_check: continue
                 if any(skip_word.lower() in folder_name_to_check.lower() for skip_word in self.skip_words_list):
                     matched_skip = next((sw for sw in self.skip_words_list if sw.lower() in folder_name_to_check.lower()), "unknown_skip_word") # type: ignore
-        # Determine if the special per-file character folder logic should be activated for this post
-        is_ui_filter_empty_for_per_file_logic = not current_character_filters
-        # Check if the determined base_folder_names_for_post_content are generic
-        # This implies that neither UI filters nor Known.txt (against title) yielded a specific folder.
-        is_base_folder_generic_for_per_file_logic = False
-        if not base_folder_names_for_post_content:
-            is_base_folder_generic_for_per_file_logic = True
-        elif len(base_folder_names_for_post_content) == 1 and \
-             base_folder_names_for_post_content[0].lower() == 'uncategorized': # A common generic fallback
-            is_base_folder_generic_for_per_file_logic = True
-        
-        activate_per_file_character_folder_logic = (
-            is_ui_filter_empty_for_per_file_logic and
-            is_base_folder_generic_for_per_file_logic and
-            self.use_subfolders and # User wants subfolders
-            not self.extract_links_only # Not in links-only mode
-        )
-        if activate_per_file_character_folder_logic:
-            self.logger(f"   ℹ️ Per-file character folder logic activated for post {post_id} (UI filter empty, generic post title/folder).")
+                    self.logger(f"   -> Skip Post (Folder Keyword): Potential folder '{folder_name_to_check}' contains '{matched_skip}'.")
+                    return 0, num_potential_files_in_post, [], [], []
         if (self.show_external_links or self.extract_links_only) and post_content_html: # type: ignore
             if self._check_pause(f"External link extraction for post {post_id}"): return 0, num_potential_files_in_post, [], []
             try:
-                mega_key_pattern = re.compile(r'\b([a-zA-Z0-9_-]{22,43})\b') # Adjusted for typical Mega key lengths
+                mega_key_pattern = re.compile(r'\b([a-zA-Z0-9_-]{43}|[a-zA-Z0-9_-]{22})\b') # type: ignore
                 unique_links_data = {} 
                 for match in link_pattern.finditer(post_content_html):
                     link_url = match.group(1).strip()
@@ -1572,16 +1390,11 @@ class PostProcessorWorker:
                 if self._check_pause(f"File processing loop for post {post_id}, file {file_idx}"): break
                 if self.check_cancel(): break
                 current_api_original_filename = file_info_to_dl.get('_original_name_for_log')
-           
                 file_is_candidate_by_char_filter_scope = False
                 char_filter_info_that_matched_file = None 
-           
                 if not current_character_filters: 
                     file_is_candidate_by_char_filter_scope = True
                 else:
-                    # This block determines if the file is a candidate based on the *overall post/comment/file filter scope*
-                    # It's important for deciding if the file should be downloaded *at all* if UI filters are present.
-                    # The new per-file logic for folder naming is separate but related.                   
                     if self.char_filter_scope == CHAR_SCOPE_FILES:
                         for filter_item_obj in current_character_filters:
                             terms_to_check_for_file = list(filter_item_obj["aliases"])
@@ -1594,9 +1407,7 @@ class PostProcessorWorker:
                                     char_filter_info_that_matched_file = filter_item_obj
                                     self.logger(f"   File '{current_api_original_filename}' matches char filter term '{term_to_match}' (from '{filter_item_obj['name']}'). Scope: Files.")
                                     break
-                   
                             if file_is_candidate_by_char_filter_scope: break
-                    # ... (rest of the existing char_filter_scope logic for CHAR_SCOPE_TITLE, CHAR_SCOPE_BOTH, CHAR_SCOPE_COMMENTS) ...
                     elif self.char_filter_scope == CHAR_SCOPE_TITLE:
                         if post_is_candidate_by_title_char_match:
                             file_is_candidate_by_char_filter_scope = True
@@ -1621,66 +1432,31 @@ class PostProcessorWorker:
                                         break
                                 if file_is_candidate_by_char_filter_scope: break
                     elif self.char_filter_scope == CHAR_SCOPE_COMMENTS:
-                        if post_is_candidate_by_file_char_match_in_comment_scope:
+                        if post_is_candidate_by_file_char_match_in_comment_scope: # Post was candidate due to a file match
                             file_is_candidate_by_char_filter_scope = True
-                            char_filter_info_that_matched_file = char_filter_that_matched_file_in_comment_scope
+                            char_filter_info_that_matched_file = char_filter_that_matched_file_in_comment_scope # Use the filter that matched a file in the post
                             self.logger(f"   File '{current_api_original_filename}' is candidate because a file in this post matched char filter (Overall Scope: Comments).")
-                        elif post_is_candidate_by_comment_char_match:
+                        elif post_is_candidate_by_comment_char_match: # Post was candidate due to comment match (no file match for post)
                             file_is_candidate_by_char_filter_scope = True
-                            char_filter_info_that_matched_file = char_filter_that_matched_comment
+                            char_filter_info_that_matched_file = char_filter_that_matched_comment # Use the filter that matched comments
                             self.logger(f"   File '{current_api_original_filename}' is candidate because post comments matched char filter (Overall Scope: Comments).")
-
                 if not file_is_candidate_by_char_filter_scope:
                     self.logger(f"   -> Skip File (Char Filter Scope '{self.char_filter_scope}'): '{current_api_original_filename}' no match.")
                     total_skipped_this_post += 1
                     continue
-
-                # Determine the target subfolder for *this specific file*
-                target_path_subfolder_component_for_this_file = None
-                log_reason_for_file_subfolder = "Default post-level folder"
-
-                if activate_per_file_character_folder_logic:
-                    base_name_for_file_logic, _ = os.path.splitext(current_api_original_filename)
-                    stripped_base_name_for_file_logic = base_name_for_file_logic
-                    for keyword_to_strip in FILENAME_TOKEN_STRIPPABLE_PARTS:
-                        if stripped_base_name_for_file_logic.lower().endswith(keyword_to_strip.lower()):
-                            stripped_base_name_for_file_logic = stripped_base_name_for_file_logic[:-len(keyword_to_strip)]
-                    stripped_base_name_for_file_logic = stripped_base_name_for_file_logic.strip()
-                    PotentialCharacterName_for_file = clean_folder_name(stripped_base_name_for_file_logic)
-
-                    if PotentialCharacterName_for_file and self.known_names:
-                        for known_entry in self.known_names:
-                            primary_known_name = known_entry['name']
-                            aliases_to_check = set(known_entry.get("aliases", []))
-                            if not known_entry.get("is_group", False): # For non-groups, primary name is also an alias
-                                aliases_to_check.add(primary_known_name)
-                            
-                            if any(PotentialCharacterName_for_file.lower() == alias.lower() for alias in aliases_to_check):
-                                character_subfolder_candidate = clean_folder_name(primary_known_name)
-                                if character_subfolder_candidate and \
-                                   character_subfolder_candidate.lower() not in effective_unwanted_keywords_for_folders:
-                                    target_path_subfolder_component_for_this_file = character_subfolder_candidate
-                                    log_reason_for_file_subfolder = f"File '{current_api_original_filename}' matched Known Name '{primary_known_name}'"
-                                    self.logger(f"   {log_reason_for_file_subfolder}. Using subfolder: '{target_path_subfolder_component_for_this_file}'")
-                                    break 
-                
-                # If per-file logic didn't find a specific character folder, or wasn't active,
-                # fall back to the general post-level folder determination.
-                if target_path_subfolder_component_for_this_file is None and self.use_subfolders:
+                current_path_for_file = self.override_output_dir if self.override_output_dir else self.download_root # Use override if provided
+                if self.use_subfolders:
+                    char_title_subfolder_name = None
                     if self.target_post_id_from_initial_url and self.custom_folder_name:
-                        target_path_subfolder_component_for_this_file = self.custom_folder_name
-                        log_reason_for_file_subfolder = "Custom folder name for single post"
-                    elif char_filter_info_that_matched_file: # This is from the UI filter check earlier
-                        target_path_subfolder_component_for_this_file = clean_folder_name(char_filter_info_that_matched_file["name"])
-                        log_reason_for_file_subfolder = f"UI Filter matched ({char_filter_info_that_matched_file['name']})"
-                    elif base_folder_names_for_post_content: # From Known.txt on title or generic title extraction
-                        target_path_subfolder_component_for_this_file = base_folder_names_for_post_content[0]
-                        log_reason_for_file_subfolder = f"Post-level folder derived from title/Known.txt ('{base_folder_names_for_post_content[0]}')"
-                    # If still None, it means no subfolder is applicable based on these rules.
-                # Construct the full path
-                current_path_for_file = self.override_output_dir if self.override_output_dir else self.download_root # Use override if provided                   
-                if target_path_subfolder_component_for_this_file: # If a subfolder name was determined
-                    current_path_for_file = os.path.join(current_path_for_file, target_path_subfolder_component_for_this_file)
+                        char_title_subfolder_name = self.custom_folder_name
+                    elif char_filter_info_that_matched_file: 
+                        char_title_subfolder_name = clean_folder_name(char_filter_info_that_matched_file["name"])
+                    elif char_filter_that_matched_title: 
+                        char_title_subfolder_name = clean_folder_name(char_filter_that_matched_title["name"])
+                    elif base_folder_names_for_post_content:
+                        char_title_subfolder_name = base_folder_names_for_post_content[0]
+                    if char_title_subfolder_name:
+                        current_path_for_file = os.path.join(current_path_for_file, char_title_subfolder_name)
                 if self.use_post_subfolders:
                     cleaned_title_for_subfolder = clean_folder_name(post_title)
                     post_specific_subfolder_name = cleaned_title_for_subfolder # Use only the cleaned title
@@ -1688,8 +1464,11 @@ class PostProcessorWorker:
                 target_folder_path_for_this_file = current_path_for_file
                 manga_date_counter_to_pass = None
                 manga_global_counter_to_pass = None
-                if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED: manga_date_counter_to_pass = self.manga_date_file_counter_ref
-                if self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING: manga_global_counter_to_pass = self.manga_global_file_counter_ref
+                if self.manga_mode_active:
+                    if self.manga_filename_style == STYLE_DATE_BASED:
+                        manga_date_counter_to_pass = self.manga_date_file_counter_ref
+                    elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
+                        manga_global_counter_to_pass = self.manga_global_file_counter_ref if self.manga_global_file_counter_ref is not None else self.manga_date_file_counter_ref
                 futures_list.append(file_pool.submit(
                     self._download_single_file,
                     file_info_to_dl,
