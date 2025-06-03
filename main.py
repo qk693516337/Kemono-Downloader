@@ -842,10 +842,11 @@ class KnownNamesFilterDialog(QDialog):
 
 class FavoriteArtistsDialog(QDialog):
     """Dialog to display and select favorite artists."""
-    def __init__(self, parent_app, cookies_config):
+    def __init__(self, parent_app, cookies_config, target_service_domain):
         super().__init__(parent_app)
         self.parent_app = parent_app
         self.cookies_config = cookies_config
+        self.target_service_domain = target_service_domain # Store the target domain        
         self.all_fetched_artists = []
         self.selected_artist_urls = []
 
@@ -923,9 +924,8 @@ class FavoriteArtistsDialog(QDialog):
         self.artist_list_widget.setVisible(show)
 
     def _fetch_favorite_artists(self):
-        fav_url = "https://kemono.su/api/v1/account/favorites?type=artist"
-        self._logger(f"Attempting to fetch favorite artists from: {fav_url}")
-
+        fav_url = f"https://{self.target_service_domain}/api/v1/account/favorites?type=artist"
+        self._logger(f"Attempting to fetch favorite artists from: {fav_url} (Targeting: {self.target_service_domain})")
         cookies_dict = prepare_cookies_for_request(
             self.cookies_config['use_cookie'],
             self.cookies_config['cookie_text'],
@@ -964,7 +964,7 @@ class FavoriteArtistsDialog(QDialog):
                 artist_service = artist_entry.get("service")
 
                 if artist_id and artist_name and artist_service:
-                    full_url = f"https://kemono.su/{artist_service}/user/{artist_id}"
+                    full_url = f"https://{self.target_service_domain}/{artist_service}/user/{artist_id}"
                     self.all_fetched_artists.append({'name': artist_name, 'url': full_url, 'service': artist_service})
                 else:
                     self._logger(f"Warning: Skipping favorite artist entry due to missing data: {artist_entry}")
@@ -1045,18 +1045,19 @@ class FavoritePostsFetcherThread(QThread):
     progress_bar_update = pyqtSignal(int, int) # value, maximum
     finished = pyqtSignal(list, str) # list of posts, error message (or None)
 
-    def __init__(self, cookies_config, parent_logger_func): # Removed parent_get_domain_func
+    def __init__(self, cookies_config, parent_logger_func, target_service_domain):
         super().__init__()
         self.cookies_config = cookies_config
         self.parent_logger_func = parent_logger_func
+        self.target_service_domain = target_service_domain       
         self.cancellation_event = threading.Event()
 
     def _logger(self, message):
         self.parent_logger_func(f"[FavPostsFetcherThread] {message}")
 
     def run(self):
-        fav_url = "https://kemono.su/api/v1/account/favorites?type=post"
-        self._logger(f"Attempting to fetch favorite posts from: {fav_url}")
+        fav_url = f"https://{self.target_service_domain}/api/v1/account/favorites?type=post"
+        self._logger(f"Attempting to fetch favorite posts from: {fav_url} (Targeting: {self.target_service_domain})")
         self.status_update.emit("Fetching list of favorite posts...")
         self.progress_bar_update.emit(0, 0) # Indeterminate state for initial fetch
 
@@ -1146,10 +1147,11 @@ class PostListItemWidget(QWidget):
 
 class FavoritePostsDialog(QDialog):
     """Dialog to display and select favorite posts."""
-    def __init__(self, parent_app, cookies_config, known_names_list_ref):
+    def __init__(self, parent_app, cookies_config, known_names_list_ref, target_service_domain):
         super().__init__(parent_app)
         self.parent_app = parent_app
         self.cookies_config = cookies_config
+        self.target_service_domain = target_service_domain # Store the target domain      
         self.all_fetched_posts = []
         self.selected_posts_data = []
         self.known_names_list_ref = known_names_list_ref # Store reference to global KNOWN_NAMES
@@ -1267,8 +1269,9 @@ class FavoritePostsDialog(QDialog):
         
         self.fetcher_thread = FavoritePostsFetcherThread(
             self.cookies_config, 
-            self.parent_app.log_signal.emit, # Pass parent's logger
-        ) # Removed _get_domain_for_service
+            self.parent_app.log_signal.emit, # Pass parent's logger,
+            self.target_service_domain # Pass the target domain
+        )
         self.fetcher_thread.status_update.connect(self.status_label.setText)
         self.fetcher_thread.finished.connect(self._on_fetch_completed)
         self.fetcher_thread.progress_bar_update.connect(self._set_progress_bar_value) # Connect the missing signal
@@ -1462,7 +1465,7 @@ class FavoritePostsDialog(QDialog):
             item = self.post_list_widget.item(i)
             if item and item.checkState() == Qt.Checked:
                 post_data_for_download = item.data(Qt.UserRole)
-                self.selected_posts_data.append(post_data_for_download)
+                self.selected_posts_data.append(post_data_for_download)        
         
         if not self.selected_posts_data:
             QMessageBox.information(self, "No Selection", "Please select at least one post to download.")
@@ -6327,7 +6330,13 @@ class DownloaderApp(QWidget):
             'app_base_dir': self.app_base_dir
         }
 
-        dialog = FavoriteArtistsDialog(self, cookies_config)
+        cookie_text_lower = self.cookie_text_input.text().lower() if hasattr(self, 'cookie_text_input') else ""
+        selected_path_lower = self.selected_cookie_filepath.lower() if self.selected_cookie_filepath else ""
+        target_service_domain = "kemono.su" # Default
+        if "coomer.su" in cookie_text_lower or "coomer.party" in cookie_text_lower or \
+           ("coomer" in selected_path_lower and ".txt" in selected_path_lower): # Check if "coomer" is in the filename part
+            target_service_domain = "coomer.su"
+        dialog = FavoriteArtistsDialog(self, cookies_config, target_service_domain)
         if dialog.exec_() == QDialog.Accepted:
             selected_artists = dialog.get_selected_artists() # Changed method name
             if selected_artists:
@@ -6377,14 +6386,20 @@ class DownloaderApp(QWidget):
                 cookie_help_dialog.exec_()
                 return # Don't proceed to show FavoritePostsDialog if cookies are needed but not found
 
-        dialog = FavoritePostsDialog(self, cookies_config, KNOWN_NAMES) # Pass KNOWN_NAMES
+        cookie_text_lower = self.cookie_text_input.text().lower() if hasattr(self, 'cookie_text_input') else ""
+        selected_path_lower = self.selected_cookie_filepath.lower() if self.selected_cookie_filepath else ""
+        target_service_domain_for_posts = "kemono.su" # Default
+        if "coomer.su" in cookie_text_lower or "coomer.party" in cookie_text_lower or \
+           ("coomer" in selected_path_lower and ".txt" in selected_path_lower):
+            target_service_domain_for_posts = "coomer.su"
+            
+        dialog = FavoritePostsDialog(self, cookies_config, KNOWN_NAMES, target_service_domain_for_posts) # Pass KNOWN_NAMES and target_service_domain
         if dialog.exec_() == QDialog.Accepted:
             selected_posts = dialog.get_selected_posts()
             if selected_posts:
                 self.log_signal.emit(f"ℹ️ Queuing {len(selected_posts)} favorite post(s) for download.")
                 for post_data in selected_posts:
-                    domain = "kemono.su" # Or determine from service/parent app settings
-                    direct_post_url = f"https://{domain}/{post_data['service']}/user/{post_data['creator_id']}/post/{post_data['post_id']}"
+                    direct_post_url = f"https://{target_service_domain_for_posts}/{post_data['service']}/user/{post_data['creator_id']}/post/{post_data['post_id']}"
                     
                     queue_item = {
                         'url': direct_post_url,
