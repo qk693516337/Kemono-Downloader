@@ -819,8 +819,8 @@ class PostProcessorWorker:
                         counter_lock = manga_date_file_counter_ref[1]
                         with counter_lock:
                             counter_val_for_filename = manga_date_file_counter_ref[0]
-                            manga_date_file_counter_ref[0] += 1
-                        base_numbered_name = f"{counter_val_for_filename:03d}"
+                            manga_date_file_counter_ref[0] += 1 # type: ignore
+                        base_numbered_name = f"{counter_val_for_filename:03d}" # type: ignore
                         if self.manga_date_prefix and self.manga_date_prefix.strip():
                             cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
                             if cleaned_prefix: # Ensure prefix is not empty after cleaning
@@ -832,7 +832,6 @@ class PostProcessorWorker:
                     else:
                         self.logger(f"⚠️ Manga Date Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_date_file_counter_ref}")
                         filename_to_save_in_main_path = clean_filename(api_original_filename)
-                        self.logger(f"⚠️ Manga mode (Date Based Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
                 elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
                     if manga_global_file_counter_ref is not None and len(manga_global_file_counter_ref) == 2:
                         counter_val_for_filename = -1
@@ -842,9 +841,10 @@ class PostProcessorWorker:
                             manga_global_file_counter_ref[0] += 1
                         cleaned_post_title_base_for_global = clean_filename(post_title.strip() if post_title and post_title.strip() else "post")
                         filename_to_save_in_main_path = f"{cleaned_post_title_base_for_global}_{counter_val_for_filename:03d}{original_ext}"
-                    else:
+                    else: # Counter ref not provided or malformed
                         self.logger(f"⚠️ Manga Title+GlobalNum Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_global_file_counter_ref}")
-                        self.logger(f"⚠️ Manga mode (Date Based Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
+                        filename_to_save_in_main_path = clean_filename(api_original_filename) # Fallback to original
+                        self.logger(f"⚠️ Manga mode (Title+GlobalNum Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
                 else: 
                     self.logger(f"⚠️ Manga mode: Unknown filename style '{self.manga_filename_style}'. Defaulting to original filename for '{api_original_filename}'.")
                     filename_to_save_in_main_path = clean_filename(api_original_filename)
@@ -1809,30 +1809,39 @@ class DownloadThread(QThread):
         grand_total_skipped_files = 0
         grand_list_of_kept_original_filenames = [] 
         was_process_cancelled = False
-        current_manga_date_file_counter_ref = self.manga_date_file_counter_ref
+        # Initialize manga_date_file_counter_ref if needed
         if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED and \
-           not self.extract_links_only and current_manga_date_file_counter_ref is None: # Check if it needs calculation
+           not self.extract_links_only and self.manga_date_file_counter_ref is None:
             series_scan_dir = self.output_dir
             if self.use_subfolders:
                 if self.filter_character_list_objects_initial and self.filter_character_list_objects_initial[0] and self.filter_character_list_objects_initial[0].get("name"):
                     series_folder_name = clean_folder_name(self.filter_character_list_objects_initial[0]["name"])
                     series_scan_dir = os.path.join(series_scan_dir, series_folder_name)
                 elif self.service and self.user_id:
-                    creator_based_folder_name = clean_folder_name(self.user_id)
+                    creator_based_folder_name = clean_folder_name(str(self.user_id)) # Ensure user_id is string for clean_folder_name
                     series_scan_dir = os.path.join(series_scan_dir, creator_based_folder_name)
             highest_num = 0
             if os.path.isdir(series_scan_dir):
                 self.logger(f"ℹ️ [Thread] Manga Date Mode: Scanning for existing files in '{series_scan_dir}'...")
                 for dirpath, _, filenames_in_dir in os.walk(series_scan_dir):
                     for filename_to_check in filenames_in_dir:
-                        base_name_no_ext = os.path.splitext(filename_to_check)[0]
-                        match = re.match(r"(\d{3,})", base_name_no_ext)
-                        if match: highest_num = max(highest_num, int(match.group(1))) # Corrected indentation
-            current_manga_date_file_counter_ref = [highest_num + 1, threading.Lock()]
-            self.logger(f"ℹ️ [Thread] Manga Date Mode: Initialized counter at {current_manga_date_file_counter_ref[0]}.")
-        elif self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and not self.extract_links_only and current_manga_date_file_counter_ref is None: # Use current_manga_date_file_counter_ref for STYLE_POST_TITLE_GLOBAL_NUMBERING as well
-            current_manga_date_file_counter_ref = [1, threading.Lock()] # Start global numbering at 1
-            self.logger(f"ℹ️ [Thread] Manga Title+GlobalNum Mode: Initialized counter at {current_manga_date_file_counter_ref[0]}.")
+                        # Check if filename starts with the manga_date_prefix if it's set
+                        prefix_to_check = clean_filename(self.manga_date_prefix.strip()) if self.manga_date_prefix and self.manga_date_prefix.strip() else ""
+                        name_part_to_match = filename_to_check
+                        if prefix_to_check and name_part_to_match.startswith(prefix_to_check):
+                            name_part_to_match = name_part_to_match[len(prefix_to_check):].lstrip() # Remove prefix and leading space
+                        
+                        base_name_no_ext = os.path.splitext(name_part_to_match)[0]
+                        match = re.match(r"(\d+)", base_name_no_ext) # Match any number of digits at the start
+                        if match: highest_num = max(highest_num, int(match.group(1)))
+            self.manga_date_file_counter_ref = [highest_num + 1, threading.Lock()]
+            self.logger(f"ℹ️ [Thread] Manga Date Mode: Initialized date-based counter at {self.manga_date_file_counter_ref[0]}.")
+
+        # Initialize manga_global_file_counter_ref if needed (separate from date_based)
+        if self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and \
+           not self.extract_links_only and self.manga_global_file_counter_ref is None:
+            self.manga_global_file_counter_ref = [1, threading.Lock()] # Assign to the member variable
+            self.logger(f"ℹ️ [Thread] Manga Title+GlobalNum Mode: Initialized global counter at {self.manga_global_file_counter_ref[0]}.")
         worker_signals_obj = PostProcessorSignals()
         try:
             worker_signals_obj.progress_signal.connect(self.progress_signal)
@@ -1899,9 +1908,8 @@ class DownloadThread(QThread):
                          cookie_text=self.cookie_text, # Pass cookie text
                          override_output_dir=self.override_output_dir, # Pass override dir
                          manga_global_file_counter_ref=self.manga_global_file_counter_ref, # Pass the ref
-                         use_cookie=self.use_cookie, # Pass cookie setting to worker
-                         manga_date_file_counter_ref=current_manga_date_file_counter_ref, # Pass the calculated or passed-in ref
-                         scan_content_for_images=self.scan_content_for_images, # Pass new flag
+                         use_cookie=self.use_cookie, 
+                         manga_date_file_counter_ref=self.manga_date_file_counter_ref, # Pass the member variable                         scan_content_for_images=self.scan_content_for_images, # Pass new flag
                          creator_download_folder_ignore_words=self.creator_download_folder_ignore_words, # Pass new ignore words                    
                          )
                     try:
