@@ -69,10 +69,11 @@ FOLDER_NAME_STOP_WORDS = {
 }
 
 CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
-    "poll", "cover", "fan-art", "fanart", "requests", "request", "holiday",
-    "batch", "open", "closed", "winner", "loser", # Added new words
+    "poll", "cover", "fan-art", "fanart", "requests", "request", "holiday", "suggest", "suggestions",
+    "batch", "open", "closed", "winner", "loser", "minor", "adult", "wip",
+    "update", "news", "discussion", "question", "stream", "video", "sketchbook", "artwork", # Added more generic words
     # Numbers 1-20 (as strings and words)
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", # Added "WIP" here as well for consistency
     "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
     "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
     "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
@@ -240,6 +241,42 @@ def match_folders_from_title(title, names_to_match, unwanted_keywords):
                     matched_cleaned_names.add(cleaned_primary_name)
                     break # Found a match for this primary name via one of its aliases
     return sorted(list(matched_cleaned_names))
+
+def match_folders_from_filename_enhanced(filename, names_to_match, unwanted_keywords):
+    if not filename or not names_to_match:
+        return []
+
+    filename_lower = filename.lower() # Raw filename, lowercase, no KNOWN_TXT_MATCH_CLEANUP_PATTERNS
+    matched_primary_names = set()
+
+    # Create a flat list of (alias_lower, primary_folder_name_cleaned)
+    # and sort by alias length (descending) to prioritize longer, more specific alias matches.
+    alias_map_to_primary = []
+    for name_obj in names_to_match:
+        primary_folder_name = name_obj.get("name")
+        if not primary_folder_name:
+            continue
+        # Clean the primary name once here
+        cleaned_primary_name = clean_folder_name(primary_folder_name)
+        # Only consider this known_name entry if its cleaned primary name is valid and not an unwanted keyword
+        if not cleaned_primary_name or cleaned_primary_name.lower() in unwanted_keywords:
+            continue
+            
+        aliases_for_obj = name_obj.get("aliases", [])
+        for alias in aliases_for_obj:
+            alias_lower = alias.lower()
+            if alias_lower: # Ensure alias is not empty
+                alias_map_to_primary.append((alias_lower, cleaned_primary_name))
+
+    alias_map_to_primary.sort(key=lambda x: len(x[0]), reverse=True)
+
+    for alias_lower, primary_name_for_alias in alias_map_to_primary:
+        if filename_lower.startswith(alias_lower):
+            if primary_name_for_alias not in matched_primary_names: 
+                 matched_primary_names.add(primary_name_for_alias)
+
+    return sorted(list(matched_primary_names))
+
 def is_image(filename):
     if not filename: return False
     _, ext = os.path.splitext(filename)
