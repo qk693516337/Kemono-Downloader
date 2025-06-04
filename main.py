@@ -59,7 +59,8 @@ try:
         CHAR_SCOPE_COMMENTS,
         FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER,
         STYLE_DATE_BASED,
-        STYLE_POST_TITLE_GLOBAL_NUMBERING
+        STYLE_POST_TITLE_GLOBAL_NUMBERING,
+        CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS # Added import
 
     )
     print("Successfully imported names from downloader_utils.")
@@ -93,6 +94,7 @@ except ImportError as e:
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER = "failed_retry_later"
     STYLE_DATE_BASED = "date_based"
     STYLE_POST_TITLE_GLOBAL_NUMBERING = "post_title_global_numbering"
+    CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = set() # Mock for import error
 
 except Exception as e:
     print(f"--- UNEXPECTED IMPORT ERROR ---")
@@ -3077,8 +3079,12 @@ class DownloaderApp(QWidget):
 
 
         self.main_splitter.addWidget(left_panel_widget)
-        self.main_splitter.addWidget(right_panel_widget)
-        initial_width = self.width()
+        self.main_splitter.addWidget(right_panel_widget) # type: ignore
+        # Ensure the window has a size before calculating splitter sizes
+        if self.width() == 0 or self.height() == 0: # Default size if not shown yet
+            initial_width = 1024 # A reasonable default
+        else:
+            initial_width = self.width()
         left_width = int(initial_width * 0.35)
         right_width = initial_width - left_width
         self.main_splitter.setSizes([left_width, right_width])
@@ -4476,6 +4482,16 @@ class DownloaderApp(QWidget):
             QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
             return False # Indicate failure to start
 
+        creator_folder_ignore_words_for_run = None
+        is_full_creator_download = not post_id_from_url
+        # Use actual_filters_to_use_for_run which is populated after parsing character_input
+        # This check needs to happen *after* actual_filters_to_use_for_run is determined.
+        # We will move this logic block down.
+        # if is_full_creator_download and character_filters_are_empty:
+        #     creator_folder_ignore_words_for_run = CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS
+        #     log_messages.append(f"    Creator Download (No Char Filter): Applying default folder name ignore list ({len(creator_folder_ignore_words_for_run)} words).")
+
+
 
         if compress_images and Image is None:
             QMessageBox.warning(self, "Missing Dependency", "Pillow library (for image compression) not found. Compression will be disabled.")
@@ -4635,6 +4651,13 @@ class DownloaderApp(QWidget):
             else:
                 self.log_signal.emit("⚠️ Proceeding with Manga Mode without a specific title filter.")
         self.dynamic_character_filter_holder.set_filters(actual_filters_to_use_for_run)
+        
+        # Determine creator_folder_ignore_words_for_run *after* actual_filters_to_use_for_run is set
+        creator_folder_ignore_words_for_run = None
+        character_filters_are_empty = not actual_filters_to_use_for_run # Now this is accurate
+        if is_full_creator_download and character_filters_are_empty: # is_full_creator_download defined earlier
+            creator_folder_ignore_words_for_run = CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS
+            log_messages.append(f"    Creator Download (No Char Filter): Applying default folder name ignore list ({len(creator_folder_ignore_words_for_run)} words).")
 
         custom_folder_name_cleaned = None
         if use_subfolders and post_id_from_url and self.custom_folder_widget and self.custom_folder_widget.isVisible() and not extract_links_only: 
@@ -4747,8 +4770,8 @@ class DownloaderApp(QWidget):
         should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
         if manga_mode and (self.manga_filename_style == STYLE_DATE_BASED or self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING) and not post_id_from_url:
             enforced_by_style = "Date Mode" if self.manga_filename_style == STYLE_DATE_BASED else "Title+GlobalNum Mode"
-            log_messages.append(f"    Threading: Single-threaded (posts) - Enforced by Manga {enforced_by_style}")
             should_use_multithreading_for_posts = False # Ensure this reflects the forced state
+            log_messages.append(f"    Threading: Single-threaded (posts) - Enforced by Manga {enforced_by_style} (Actual workers: {effective_num_post_workers if effective_num_post_workers > 1 else 1})")
         else:
             log_messages.append(f"    Threading: {'Multi-threaded (posts)' if should_use_multithreading_for_posts else 'Single-threaded (posts)'}")
         if should_use_multithreading_for_posts:
@@ -4757,8 +4780,10 @@ class DownloaderApp(QWidget):
         for msg in log_messages: self.log_signal.emit(msg)
 
         self.set_ui_enabled(False)
-
-        unwanted_keywords_for_folders = {'spicy', 'hd', 'nsfw', '4k', 'preview', 'teaser', 'clip'}
+        
+        # Use the global FOLDER_NAME_STOP_WORDS from downloader_utils
+        from downloader_utils import FOLDER_NAME_STOP_WORDS
+        # unwanted_keywords_for_folders = {'spicy', 'hd', 'nsfw', '4k', 'preview', 'teaser', 'clip'} # Old specific set
         
         args_template = {
             'api_url_input': api_url,
@@ -4790,8 +4815,8 @@ class DownloaderApp(QWidget):
             'end_page': end_page,
             'target_post_id_from_initial_url': post_id_from_url,
             'custom_folder_name': custom_folder_name_cleaned,
-            'manga_mode_active': manga_mode,
-            'unwanted_keywords': unwanted_keywords_for_folders,
+            'manga_mode_active': manga_mode, # type: ignore
+            'unwanted_keywords': FOLDER_NAME_STOP_WORDS, # Pass the global set
             'cancellation_event': self.cancellation_event,
             'manga_date_prefix': manga_date_prefix_text, # NEW ARGUMENT            
             'dynamic_character_filter_holder': self.dynamic_character_filter_holder, # Pass the holder
@@ -4806,6 +4831,7 @@ class DownloaderApp(QWidget):
             'manga_global_file_counter_ref': manga_global_file_counter_ref_for_thread, # Pass new counter            
             'app_base_dir': app_base_dir_for_cookies, # Pass app base dir
             'use_cookie': use_cookie_for_this_run, # Pass the potentially modified cookie setting
+            'creator_download_folder_ignore_words': creator_folder_ignore_words_for_run, # New
         }
 
         args_template['override_output_dir'] = override_output_dir # Pass override dir in template
@@ -5044,7 +5070,9 @@ class DownloaderApp(QWidget):
             'num_file_threads', 'skip_current_file_flag', 'manga_date_file_counter_ref', 'scan_content_for_images', # Added scan_content_for_images
             'manga_mode_active', 'manga_filename_style', 'manga_date_prefix', # ADD manga_date_prefix
             'manga_global_file_counter_ref' # Add new counter here
-        ]
+                    , 'creator_download_folder_ignore_words' # Add new ignore words list
+                ] # type: ignore
+                
         ppw_optional_keys_with_defaults = {
             'skip_words_list', 'skip_words_scope', 'char_filter_scope', 'remove_from_filename_words_list',
             'show_external_links', 'extract_links_only', 'duplicate_file_mode', # Added duplicate_file_mode here

@@ -67,6 +67,24 @@ FOLDER_NAME_STOP_WORDS = {
     "right", "s", "she", "so", "technically", "tell", "the", "their", "they", "this",
     "to", "ve", "was", "we", "well", "were", "with", "www", "year", "you", "your",
 }
+
+CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
+    "poll", "cover", "fan-art", "fanart", "requests", "request", "holiday",
+    # Numbers 1-20 (as strings and words)
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
+    "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+    "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen",
+    "eighteen", "nineteen", "twenty",
+    # Months (short and long)
+    "jan", "january", "feb", "february", "mar", "march", "apr", "april",
+    "may", "jun", "june", "jul", "july", "aug", "august", "sep", "september",
+    "oct", "october", "nov", "november", "dec", "december",
+    # Weekdays (short and long)
+    "mon", "monday", "tue", "tuesday", "wed", "wednesday", "thu", "thursday",
+    "fri", "friday", "sat", "saturday", "sun", "sunday"
+}
+
 def parse_cookie_string(cookie_string):
     """Parses a 'name=value; name2=value2' cookie string into a dict."""
     cookies = {}
@@ -588,6 +606,7 @@ class PostProcessorWorker:
                  manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT, # New parameter for date-based prefix
                  manga_date_file_counter_ref=None, # New parameter for date-based manga naming
                  scan_content_for_images=False, # New flag for scanning HTML content
+                 creator_download_folder_ignore_words=None, # New: For ignoring specific words for folder names              
                  manga_global_file_counter_ref=None, # New parameter for global numbering
                  ): # type: ignore
         self.post = post_data # type: ignore
@@ -637,7 +656,9 @@ class PostProcessorWorker:
         self.use_cookie = use_cookie # Store cookie setting
         self.override_output_dir = override_output_dir # Store the override directory
         self.scan_content_for_images = scan_content_for_images # Store new flag
+        self.creator_download_folder_ignore_words = creator_download_folder_ignore_words # Store new ignore words
         if self.compress_images and Image is None:
+            # self.logger is not available yet, PostProcessorSignals.progress_signal.emit can be used or print        
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
     def _emit_signal(self, signal_type_str, *payload_args):
@@ -1052,6 +1073,13 @@ class PostProcessorWorker:
         post_id = post_data.get('id', 'unknown_id')
         post_main_file_info = post_data.get('file')
         post_attachments = post_data.get('attachments', [])
+
+        effective_unwanted_keywords_for_folder_naming = self.unwanted_keywords.copy()
+        is_full_creator_download_no_char_filter = not self.target_post_id_from_initial_url and not current_character_filters
+        if is_full_creator_download_no_char_filter and self.creator_download_folder_ignore_words:
+            self.logger(f"   Applying creator download specific folder ignore words ({len(self.creator_download_folder_ignore_words)} words).")
+            effective_unwanted_keywords_for_folder_naming.update(self.creator_download_folder_ignore_words)
+
         post_content_html = post_data.get('content', '')
         self.logger(f"\n--- Processing Post {post_id} ('{post_title[:50]}...') (Thread: {threading.current_thread().name}) ---")
         num_potential_files_in_post = len(post_attachments or []) + (1 if post_main_file_info and post_main_file_info.get('path') else 0)
@@ -1204,16 +1232,48 @@ class PostProcessorWorker:
                 log_reason_for_folder = "Matched char filter in title"
             if primary_char_filter_for_folder:
                 base_folder_names_for_post_content = [clean_folder_name(primary_char_filter_for_folder["name"])]
+                cleaned_primary_folder_name = clean_folder_name(primary_char_filter_for_folder["name"])
+                if cleaned_primary_folder_name.lower() in effective_unwanted_keywords_for_folder_naming and cleaned_primary_folder_name.lower() != "untitled_folder":
+                    self.logger(f"   ⚠️ Primary char filter folder name '{cleaned_primary_folder_name}' is in ignore list. Using generic name.")
+                    base_folder_names_for_post_content = ["Generic Post Content"]
+                else:
+                    base_folder_names_for_post_content = [cleaned_primary_folder_name]          
                 self.logger(f"   Base folder name(s) for post content ({log_reason_for_folder}): {', '.join(base_folder_names_for_post_content)}")
             elif not current_character_filters: # No char filters defined, use generic logic
-                derived_folders = match_folders_from_title(post_title, self.known_names, self.unwanted_keywords)
-                if derived_folders:
-                    base_folder_names_for_post_content.extend(match_folders_from_title(post_title, KNOWN_NAMES, self.unwanted_keywords))
+                # 1. Try to match folder names from Known.txt using the post title
+                derived_folders_from_known_txt = match_folders_from_title(
+                    post_title,
+                    self.known_names,
+                    effective_unwanted_keywords_for_folder_naming
+                )
+                
+                # Filter out any "untitled_folder" that might come from Known.txt if the primary name was problematic,
+                # and also filter empty strings.
+                valid_derived_folders = [
+                    name for name in derived_folders_from_known_txt
+                    if name and name.strip() and name.lower() != "untitled_folder"
+                ]
+
+                if valid_derived_folders:
+                    base_folder_names_for_post_content.extend(valid_derived_folders)
+                    self.logger(f"   Base folder name(s) for post content (Derived from Known.txt & Post Title): {', '.join(base_folder_names_for_post_content)}")
                 else:
-                    base_folder_names_for_post_content.append(extract_folder_name_from_title(post_title, self.unwanted_keywords))
-                if not base_folder_names_for_post_content or not base_folder_names_for_post_content[0]:
-                    base_folder_names_for_post_content = [clean_folder_name(post_title if post_title else "untitled_creator_content")]
-                self.logger(f"   Base folder name(s) for post content (Generic title parsing - no char filters): {', '.join(base_folder_names_for_post_content)}")
+                    # 2. If no valid folders from Known.txt, fall back to extracting from title directly.
+                    extracted_folder_name = extract_folder_name_from_title(
+                        post_title,
+                        effective_unwanted_keywords_for_folder_naming
+                    )
+                    base_folder_names_for_post_content.append(extracted_folder_name)
+                    self.logger(f"   Base folder name(s) for post content (Generic title parsing - no valid Known.txt match): {', '.join(base_folder_names_for_post_content)}")
+
+                # 3. Final cleanup: Ensure list is not empty and contains valid, non-empty strings.
+                base_folder_names_for_post_content = [
+                    name for name in base_folder_names_for_post_content if name and name.strip()
+                ]
+                if not base_folder_names_for_post_content:
+                    final_fallback_name = clean_folder_name(post_title if post_title and post_title.strip() else "Generic Post Content")
+                    base_folder_names_for_post_content = [final_fallback_name]
+                    self.logger(f"   Fallback folder name due to all derivations failing: {final_fallback_name}")
         if not self.extract_links_only and self.use_subfolders and self.skip_words_list:
             if self._check_pause(f"Folder keyword skip check for post {post_id}"): return 0, num_potential_files_in_post, []
             for folder_name_to_check in base_folder_names_for_post_content: # type: ignore
@@ -1547,6 +1607,7 @@ class DownloadThread(QThread):
                  manga_global_file_counter_ref=None, # New parameter for global numbering
                  use_cookie=False, # Added: Expected by main.py
                  scan_content_for_images=False, # Added new flag
+                 creator_download_folder_ignore_words=None, # Added for DownloadThread               
                  cookie_text="",   # Added: Expected by main.py
                  ):
         super().__init__()
@@ -1597,6 +1658,7 @@ class DownloadThread(QThread):
         self.override_output_dir = override_output_dir # Store override dir
         self.manga_date_file_counter_ref = manga_date_file_counter_ref # Store for passing to worker by DownloadThread
         self.scan_content_for_images = scan_content_for_images # Store new flag
+        self.creator_download_folder_ignore_words = creator_download_folder_ignore_words # Store new ignore words       
         self.manga_global_file_counter_ref = manga_global_file_counter_ref # Store for global numbering
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -1718,6 +1780,7 @@ class DownloadThread(QThread):
                          use_cookie=self.use_cookie, # Pass cookie setting to worker
                          manga_date_file_counter_ref=current_manga_date_file_counter_ref, # Pass the calculated or passed-in ref
                          scan_content_for_images=self.scan_content_for_images, # Pass new flag
+                         creator_download_folder_ignore_words=self.creator_download_folder_ignore_words, # Pass new ignore words                    
                          )
                     try:
                         dl_count, skip_count, kept_originals_this_post, retryable_failures, permanent_failures = post_processing_worker.process()
