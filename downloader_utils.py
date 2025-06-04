@@ -70,6 +70,7 @@ FOLDER_NAME_STOP_WORDS = {
 
 CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
     "poll", "cover", "fan-art", "fanart", "requests", "request", "holiday",
+    "batch", "open", "closed", "winner", "loser", # Added new words
     # Numbers 1-20 (as strings and words)
     "1", "2", "3", "4", "5", "6", "7", "8", "9", "10",
     "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
@@ -84,6 +85,24 @@ CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
     "mon", "monday", "tue", "tuesday", "wed", "wednesday", "thu", "thursday",
     "fri", "friday", "sat", "saturday", "sun", "sunday"
 }
+
+# New: Patterns to remove from titles/filenames *before* matching against Known.txt
+KNOWN_TXT_MATCH_CLEANUP_PATTERNS = [
+    r'\bcum\b',
+    r'\bnsfw\b',
+    r'\bsfw\b',
+    r'\bweb\b',
+    r'\bhd\b',
+    r'\bhi\s*res\b',      # hi res, hi-res, hires
+    r'\bhigh\s*res\b',    # high res, high-res, highres
+    r'\b\d+p\b',          # 720p, 1080p, 1440p etc.
+    r'\b\d+k\b',          # 2k, 4k, 8k etc.
+    r'\[OC\]',            # [OC]
+    r'\[Request(?:s)?\]', # [Request], [Requests]
+    r'\bCommission\b',
+    r'\bComm\b',
+    r'\bPreview\b',
+]
 
 def parse_cookie_string(cookie_string):
     """Parses a 'name=value; name2=value2' cookie string into a dict."""
@@ -192,10 +211,20 @@ def match_folders_from_title(title, names_to_match, unwanted_keywords):
     Each name object in names_to_match is expected to be a dict:
     {'name': 'PrimaryFolderName', 'aliases': ['alias1', 'alias2', ...]}
     """    
-    if not title or not names_to_match: return []
-    title_lower = title.lower()
+    if not title or not names_to_match: 
+        return []
+
+    # Pre-process the title to remove specific patterns before matching
+    cleaned_title_for_matching = title
+    for pat_str in KNOWN_TXT_MATCH_CLEANUP_PATTERNS:
+        cleaned_title_for_matching = re.sub(pat_str, ' ', cleaned_title_for_matching, flags=re.IGNORECASE) # Replace with space
+    
+    # Condense multiple spaces that might result from removal and strip
+    cleaned_title_for_matching = re.sub(r'\s+', ' ', cleaned_title_for_matching).strip()
+
+    title_lower = cleaned_title_for_matching.lower() # Use the pre-cleaned title for matching
     matched_cleaned_names = set()
-    sorted_name_objects = sorted(names_to_match, key=lambda x: len(x.get("name", "")), reverse=True)
+    sorted_name_objects = sorted(names_to_match, key=lambda x: len(x.get("name", "")), reverse=True) # Sort by primary name length
     for name_obj in sorted_name_objects:
         primary_folder_name = name_obj.get("name")
         aliases = name_obj.get("aliases", [])
@@ -1240,40 +1269,85 @@ class PostProcessorWorker:
                     base_folder_names_for_post_content = [cleaned_primary_folder_name]          
                 self.logger(f"   Base folder name(s) for post content ({log_reason_for_folder}): {', '.join(base_folder_names_for_post_content)}")
             elif not current_character_filters: # No char filters defined, use generic logic
-                # 1. Try to match folder names from Known.txt using the post title
-                derived_folders_from_known_txt = match_folders_from_title(
+                # Stage 1: Try to match folder names from Known.txt using the post title
+                derived_folders_from_title_via_known_txt = match_folders_from_title(
                     post_title,
                     self.known_names,
-                    effective_unwanted_keywords_for_folder_naming
+                    effective_unwanted_keywords_for_folder_naming # Use full ignore list for Known.txt matching
                 )
                 
-                # Filter out any "untitled_folder" that might come from Known.txt if the primary name was problematic,
-                # and also filter empty strings.
-                valid_derived_folders = [
-                    name for name in derived_folders_from_known_txt
+                valid_derived_folders_from_title_known_txt = [
+                    name for name in derived_folders_from_title_via_known_txt
                     if name and name.strip() and name.lower() != "untitled_folder"
                 ]
 
-                if valid_derived_folders:
-                    base_folder_names_for_post_content.extend(valid_derived_folders)
+                if valid_derived_folders_from_title_known_txt:
+                    base_folder_names_for_post_content.extend(valid_derived_folders_from_title_known_txt)
                     self.logger(f"   Base folder name(s) for post content (Derived from Known.txt & Post Title): {', '.join(base_folder_names_for_post_content)}")
                 else:
-                    # 2. If no valid folders from Known.txt, fall back to extracting from title directly.
-                    extracted_folder_name = extract_folder_name_from_title(
+                    # Stage 2: No Known.txt match from title.
+                    # Determine if the title primarily consists of creator-specific ignore words.
+                    
+                    # Get a candidate name from title using only generic FOLDER_NAME_STOP_WORDS.
+                    candidate_name_from_title_basic_clean = extract_folder_name_from_title(
                         post_title,
-                        effective_unwanted_keywords_for_folder_naming
+                        FOLDER_NAME_STOP_WORDS # Only generic stop words
                     )
-                    base_folder_names_for_post_content.append(extracted_folder_name)
-                    self.logger(f"   Base folder name(s) for post content (Generic title parsing - no valid Known.txt match): {', '.join(base_folder_names_for_post_content)}")
 
-                # 3. Final cleanup: Ensure list is not empty and contains valid, non-empty strings.
+                    title_is_only_creator_ignored_words = False
+                    if candidate_name_from_title_basic_clean and \
+                       candidate_name_from_title_basic_clean.lower() != "untitled_folder" and \
+                       self.creator_download_folder_ignore_words: # Check if specific creator ignore list is active
+
+                        candidate_title_words = {word.lower() for word in candidate_name_from_title_basic_clean.split()}
+                        if candidate_title_words and candidate_title_words.issubset(self.creator_download_folder_ignore_words):
+                            title_is_only_creator_ignored_words = True
+                            self.logger(f"   Title-derived name '{candidate_name_from_title_basic_clean}' consists only of creator-specific ignore words.")
+                    
+                    if title_is_only_creator_ignored_words:
+                        # Stage 3: Title is "bad". Try Known.txt match on filenames.
+                        self.logger(f"   Attempting Known.txt match on filenames as title was poor ('{candidate_name_from_title_basic_clean}').")
+                        
+                        filenames_to_check = [
+                            f_info['_original_name_for_log'] for f_info in all_files_from_post_api_for_char_check # Defined earlier in process()
+                            if f_info.get('_original_name_for_log')
+                        ]
+                        
+                        derived_folders_from_filenames_known_txt = set()
+                        if filenames_to_check:
+                            for fname in filenames_to_check:
+                                matches = match_folders_from_title(
+                                    fname, 
+                                    self.known_names, 
+                                    effective_unwanted_keywords_for_folder_naming # Use full ignore list for matching
+                                )
+                                for m in matches:
+                                    if m and m.strip() and m.lower() != "untitled_folder":
+                                        derived_folders_from_filenames_known_txt.add(m)
+                        
+                        if derived_folders_from_filenames_known_txt:
+                            base_folder_names_for_post_content.extend(list(derived_folders_from_filenames_known_txt))
+                            self.logger(f"   Base folder name(s) for post content (Derived from Known.txt & Filenames): {', '.join(base_folder_names_for_post_content)}")
+                        else:
+                            final_title_extract = extract_folder_name_from_title(
+                                post_title, effective_unwanted_keywords_for_folder_naming
+                            )
+                            base_folder_names_for_post_content.append(final_title_extract)
+                            self.logger(f"   No Known.txt match from filenames. Using title-derived name (with full ignore list): '{final_title_extract}'")
+                    else:
+                        extracted_name_from_title_full_ignore = extract_folder_name_from_title(
+                            post_title, effective_unwanted_keywords_for_folder_naming
+                        )
+                        base_folder_names_for_post_content.append(extracted_name_from_title_full_ignore)
+                        self.logger(f"   Base folder name(s) for post content (Generic title parsing - title not solely creator-ignored words): {', '.join(base_folder_names_for_post_content)}")
+
                 base_folder_names_for_post_content = [
                     name for name in base_folder_names_for_post_content if name and name.strip()
                 ]
                 if not base_folder_names_for_post_content:
                     final_fallback_name = clean_folder_name(post_title if post_title and post_title.strip() else "Generic Post Content")
                     base_folder_names_for_post_content = [final_fallback_name]
-                    self.logger(f"   Fallback folder name due to all derivations failing: {final_fallback_name}")
+                    self.logger(f"   Ultimate fallback folder name: {final_fallback_name}")
         if not self.extract_links_only and self.use_subfolders and self.skip_words_list:
             if self._check_pause(f"Folder keyword skip check for post {post_id}"): return 0, num_potential_files_in_post, []
             for folder_name_to_check in base_folder_names_for_post_content: # type: ignore
@@ -1442,10 +1516,10 @@ class PostProcessorWorker:
         if not files_to_download_info_list:
             self.logger(f"   All files for post {post_id} were duplicate original names or skipped earlier.")
             return 0, total_skipped_this_post, [], [], []
-        num_files_in_this_post_for_naming = len(files_to_download_info_list)
-        self.logger(f"   Identified {num_files_in_this_post_for_naming} unique original file(s) for potential download from post {post_id}.")
+        
+        self.logger(f"   Identified {len(files_to_download_info_list)} unique original file(s) for potential download from post {post_id}.")
         with ThreadPoolExecutor(max_workers=self.num_file_threads, thread_name_prefix=f'P{post_id}File_') as file_pool:
-            futures_list = []
+            futures_list = [] # type: list[Future]
             for file_idx, file_info_to_dl in enumerate(files_to_download_info_list):
                 if self._check_pause(f"File processing loop for post {post_id}, file {file_idx}"): break
                 if self.check_cancel(): break
@@ -1504,8 +1578,11 @@ class PostProcessorWorker:
                     self.logger(f"   -> Skip File (Char Filter Scope '{self.char_filter_scope}'): '{current_api_original_filename}' no match.")
                     total_skipped_this_post += 1
                     continue
-                current_path_for_file = self.override_output_dir if self.override_output_dir else self.download_root # Use override if provided
-                if self.use_subfolders:
+
+                # Determine the set of target base folder names for THIS file
+                target_base_folders_for_this_file_iteration = [] # type: list[str]
+
+                if current_character_filters: # Active character filter from UI
                     char_title_subfolder_name = None
                     if self.target_post_id_from_initial_url and self.custom_folder_name:
                         char_title_subfolder_name = self.custom_folder_name
@@ -1513,35 +1590,43 @@ class PostProcessorWorker:
                         char_title_subfolder_name = clean_folder_name(char_filter_info_that_matched_file["name"])
                     elif char_filter_that_matched_title: 
                         char_title_subfolder_name = clean_folder_name(char_filter_that_matched_title["name"])
-                    elif base_folder_names_for_post_content:
-                        char_title_subfolder_name = base_folder_names_for_post_content[0]
+                    elif char_filter_that_matched_comment:
+                         char_title_subfolder_name = clean_folder_name(char_filter_that_matched_comment["name"])
                     if char_title_subfolder_name:
-                        current_path_for_file = os.path.join(current_path_for_file, char_title_subfolder_name)
-                if self.use_post_subfolders:
-                    cleaned_title_for_subfolder = clean_folder_name(post_title)
-                    post_specific_subfolder_name = cleaned_title_for_subfolder # Use only the cleaned title
-                    current_path_for_file = os.path.join(current_path_for_file, post_specific_subfolder_name)
-                target_folder_path_for_this_file = current_path_for_file
-                manga_date_counter_to_pass = None
-                manga_global_counter_to_pass = None
-                if self.manga_mode_active:
-                    if self.manga_filename_style == STYLE_DATE_BASED:
-                        manga_date_counter_to_pass = self.manga_date_file_counter_ref
-                    elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
-                        manga_global_counter_to_pass = self.manga_global_file_counter_ref if self.manga_global_file_counter_ref is not None else self.manga_date_file_counter_ref
-                futures_list.append(file_pool.submit(
-                    self._download_single_file,
-                    file_info_to_dl,
-                    target_folder_path_for_this_file,
-                    headers,
-                    post_id,
-                    self.skip_current_file_flag,
-                    post_title=post_title,
-                    manga_date_file_counter_ref=manga_date_counter_to_pass,
-                    manga_global_file_counter_ref=manga_global_counter_to_pass,
-                    file_index_in_post=file_idx, # Changed to keyword argument
-                    num_files_in_this_post=num_files_in_this_post_for_naming # Changed to keyword argument
-                ))
+                        target_base_folders_for_this_file_iteration.append(char_title_subfolder_name)
+                    else:
+                        self.logger(f"⚠️ File '{current_api_original_filename}' candidate by char filter, but no folder name derived. Using post title.")
+                        target_base_folders_for_this_file_iteration.append(clean_folder_name(post_title))
+                else: # No active character filter, use base_folder_names_for_post_content (which could be multiple from Known.txt)
+                    if base_folder_names_for_post_content:
+                        target_base_folders_for_this_file_iteration.extend(base_folder_names_for_post_content)
+                    else: # Fallback if base_folder_names_for_post_content was somehow empty
+                        target_base_folders_for_this_file_iteration.append(clean_folder_name(post_title))
+
+                if not target_base_folders_for_this_file_iteration: # Ultimate fallback
+                    target_base_folders_for_this_file_iteration.append(clean_folder_name(post_title if post_title else "Uncategorized_Post_Content"))
+
+                for target_base_folder_name_for_instance in target_base_folders_for_this_file_iteration:
+                    current_path_for_file_instance = self.override_output_dir if self.override_output_dir else self.download_root
+                    if self.use_subfolders and target_base_folder_name_for_instance:
+                        current_path_for_file_instance = os.path.join(current_path_for_file_instance, target_base_folder_name_for_instance)
+                    if self.use_post_subfolders:
+                        cleaned_title_for_subfolder_instance = clean_folder_name(post_title)
+                        current_path_for_file_instance = os.path.join(current_path_for_file_instance, cleaned_title_for_subfolder_instance)
+                    
+                    manga_date_counter_to_pass = self.manga_date_file_counter_ref if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED else None
+                    manga_global_counter_to_pass = self.manga_global_file_counter_ref if self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING else None
+
+                    futures_list.append(file_pool.submit(
+                        self._download_single_file,
+                        file_info=file_info_to_dl, # Pass the original file_info
+                        target_folder_path=current_path_for_file_instance,
+                        headers=headers, original_post_id_for_log=post_id, skip_event=self.skip_current_file_flag,
+                        post_title=post_title, manga_date_file_counter_ref=manga_date_counter_to_pass,
+                        manga_global_file_counter_ref=manga_global_counter_to_pass,
+                        file_index_in_post=file_idx, num_files_in_this_post=len(files_to_download_info_list)
+                    ))
+
             for future in as_completed(futures_list):
                 if self.check_cancel():
                     for f_to_cancel in futures_list:
