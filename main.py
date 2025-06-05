@@ -4186,6 +4186,12 @@ class DownloaderApp(QWidget):
             if hasattr(self, 'use_cookie_checkbox'): # Update visibility based on forced True state
                 self._update_cookie_input_visibility(True)            
             self.update_ui_for_manga_mode(False) # Refresh manga UI elements
+            # Explicitly enable favorite buttons when favorite mode is ON
+            if hasattr(self, 'favorite_mode_artists_button'):
+                self.favorite_mode_artists_button.setEnabled(True)
+            if hasattr(self, 'favorite_mode_posts_button'):
+                self.favorite_mode_posts_button.setEnabled(True)
+
         else: # Favorite Mode OFF (URL input visible)
             if self.link_input: self.link_input.setEnabled(True)
             self.update_page_range_enabled_state() # Re-evaluate based on current link_input text
@@ -4196,6 +4202,11 @@ class DownloaderApp(QWidget):
                 self.use_cookie_checkbox.setEnabled(True) # Unlock it
             if hasattr(self, 'use_cookie_checkbox'): # Update visibility based on current state
                 self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked())
+            # Explicitly disable favorite buttons when favorite mode is OFF
+            if hasattr(self, 'favorite_mode_artists_button'):
+                self.favorite_mode_artists_button.setEnabled(False)
+            if hasattr(self, 'favorite_mode_posts_button'):
+                self.favorite_mode_posts_button.setEnabled(False)
 
     def update_ui_for_manga_mode(self, checked):
         is_only_links_mode = self.radio_only_links and self.radio_only_links.isChecked()
@@ -5264,10 +5275,13 @@ class DownloaderApp(QWidget):
         else: # UI is idle or download finished
             pass
 
+        # General UI element enabling/disabling
         for widget in all_potentially_toggleable_widgets:
             if not widget: continue
 
-            if self.is_paused and widget in widgets_to_enable_on_pause:
+            # Skip favorite mode buttons here, they are handled by _handle_favorite_mode_toggle
+            if widget is self.favorite_mode_artists_button or widget is self.favorite_mode_posts_button: continue
+            elif self.is_paused and widget in widgets_to_enable_on_pause:
                 widget.setEnabled(True) # Re-enable specific widgets if paused
             elif widget is self.favorite_mode_checkbox: # Favorite mode checkbox can only be changed when idle
                 widget.setEnabled(enabled)            
@@ -5281,10 +5295,13 @@ class DownloaderApp(QWidget):
         if self.link_input:
             self.link_input.setEnabled(enabled and not is_fav_mode_active)
 
-        if self.favorite_mode_artists_button:
-            self.favorite_mode_artists_button.setEnabled(enabled and is_fav_mode_active)
-        if self.favorite_mode_posts_button:
-            self.favorite_mode_posts_button.setEnabled(enabled and is_fav_mode_active) # Enable/disable this button
+        # If UI is being disabled (download active), ensure favorite buttons are also disabled.
+        # If UI is being enabled, _handle_favorite_mode_toggle will manage their state.
+        if not enabled:
+            if self.favorite_mode_artists_button:
+                self.favorite_mode_artists_button.setEnabled(False)
+            if self.favorite_mode_posts_button:
+                self.favorite_mode_posts_button.setEnabled(False)
 
         if self.download_btn:
             self.download_btn.setEnabled(enabled and not is_fav_mode_active) # Only if UI enabled AND not in fav mode

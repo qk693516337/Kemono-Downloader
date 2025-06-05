@@ -767,30 +767,47 @@ class PostProcessorWorker:
                               manga_global_file_counter_ref=None): # New for global numbering
         was_original_name_kept_flag = False 
         final_filename_saved_for_return = "" 
-        retry_later_details = None # For storing info if retryable failure
+        retry_later_details = None 
+        
+        # self.logger(f"   [DSF_DEBUG] Entered _download_single_file for: {file_info.get('name', 'unknown file') if file_info else 'NO_FILE_INFO'}")
+
         if self._check_pause(f"File download prep for '{file_info.get('name', 'unknown file')}'"): return 0, 1, "", False
         if self.check_cancel() or (skip_event and skip_event.is_set()): return 0, 1, "", False
+        
+        # self.logger(f"   [DSF_DEBUG] Passed pause/cancel checks.")
+
         file_url = file_info.get('url')
         cookies_to_use_for_file = None
         if self.use_cookie: # This flag comes from the checkbox
+            # self.logger(f"   [DSF_DEBUG] Preparing cookies...")
             cookies_to_use_for_file = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger)
+            # self.logger(f"   [DSF_DEBUG] Cookies prepared.")
+
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
+        # self.logger(f"   [DSF_DEBUG] API original filename: '{api_original_filename}'")
+
         filename_to_save_in_main_path = "" 
         if forced_filename_override:
             filename_to_save_in_main_path = forced_filename_override
             self.logger(f"   Retrying with forced filename: '{filename_to_save_in_main_path}'")
         else:
+            # self.logger(f"   [DSF_DEBUG] Starting filename generation logic...")
             if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_FILES or self.skip_words_scope == SKIP_SCOPE_BOTH):
                 filename_to_check_for_skip_words = api_original_filename.lower()
                 for skip_word in self.skip_words_list:
                     if skip_word.lower() in filename_to_check_for_skip_words:
                         self.logger(f"   -> Skip File (Keyword in Original Name '{skip_word}'): '{api_original_filename}'. Scope: {self.skip_words_scope}")
                         return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
-            original_filename_cleaned_base, original_ext = os.path.splitext(clean_filename(api_original_filename))
+            # self.logger(f"   [DSF_DEBUG] About to call clean_filename for: '{api_original_filename}'")
+            cleaned_original_api_filename = clean_filename(api_original_filename)
+            # self.logger(f"   [DSF_DEBUG] clean_filename returned: '{cleaned_original_api_filename}'")
+            original_filename_cleaned_base, original_ext = os.path.splitext(cleaned_original_api_filename)
+
             if not original_ext.startswith('.'): original_ext = '.' + original_ext if original_ext else ''
             if self.manga_mode_active: # Note: duplicate_file_mode is overridden to "Delete" in main.py if manga_mode is on
+                # self.logger(f"   [DSF_DEBUG] Manga mode active. Style: {self.manga_filename_style}")
                 if self.manga_filename_style == STYLE_ORIGINAL_NAME:
-                    filename_to_save_in_main_path = clean_filename(api_original_filename)
+                    filename_to_save_in_main_path = cleaned_original_api_filename # Use already cleaned
                     if self.manga_date_prefix and self.manga_date_prefix.strip():
                         cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
                         if cleaned_prefix:
@@ -810,16 +827,18 @@ class PostProcessorWorker:
                         else:
                             filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
                     else:
-                        filename_to_save_in_main_path = clean_filename(api_original_filename) # Fallback to original if no title
+                        filename_to_save_in_main_path = cleaned_original_api_filename # Fallback to cleaned original
                         self.logger(f"⚠️ Manga mode (Post Title Style): Post title missing for post {original_post_id_for_log}. Using cleaned original filename '{filename_to_save_in_main_path}'.")
                 elif self.manga_filename_style == STYLE_DATE_BASED:
                     current_thread_name = threading.current_thread().name
                     if manga_date_file_counter_ref is not None and len(manga_date_file_counter_ref) == 2:
                         counter_val_for_filename = -1
                         counter_lock = manga_date_file_counter_ref[1]
+                        # self.logger(f"   [DSF_DEBUG] Manga Date Mode: Acquiring counter lock...")
                         with counter_lock:
                             counter_val_for_filename = manga_date_file_counter_ref[0]
                             manga_date_file_counter_ref[0] += 1 # type: ignore
+                        # self.logger(f"   [DSF_DEBUG] Manga Date Mode: Counter lock released. Value: {counter_val_for_filename}")
                         base_numbered_name = f"{counter_val_for_filename:03d}" # type: ignore
                         if self.manga_date_prefix and self.manga_date_prefix.strip():
                             cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
@@ -831,31 +850,38 @@ class PostProcessorWorker:
                             filename_to_save_in_main_path = f"{base_numbered_name}{original_ext}"
                     else:
                         self.logger(f"⚠️ Manga Date Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_date_file_counter_ref}")
-                        filename_to_save_in_main_path = clean_filename(api_original_filename)
+                        filename_to_save_in_main_path = cleaned_original_api_filename
                 elif self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
                     if manga_global_file_counter_ref is not None and len(manga_global_file_counter_ref) == 2:
                         counter_val_for_filename = -1
                         counter_lock = manga_global_file_counter_ref[1]
+                        # self.logger(f"   [DSF_DEBUG] Manga Title+GlobalNum Mode: Acquiring counter lock...")
                         with counter_lock:
                             counter_val_for_filename = manga_global_file_counter_ref[0]
                             manga_global_file_counter_ref[0] += 1
+                        # self.logger(f"   [DSF_DEBUG] Manga Title+GlobalNum Mode: Counter lock released. Value: {counter_val_for_filename}")
                         cleaned_post_title_base_for_global = clean_filename(post_title.strip() if post_title and post_title.strip() else "post")
                         filename_to_save_in_main_path = f"{cleaned_post_title_base_for_global}_{counter_val_for_filename:03d}{original_ext}"
                     else: # Counter ref not provided or malformed
                         self.logger(f"⚠️ Manga Title+GlobalNum Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_global_file_counter_ref}")
-                        filename_to_save_in_main_path = clean_filename(api_original_filename) # Fallback to original
+                        filename_to_save_in_main_path = cleaned_original_api_filename # Fallback to cleaned original
                         self.logger(f"⚠️ Manga mode (Title+GlobalNum Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path}' for post {original_post_id_for_log}.")
                 else: 
                     self.logger(f"⚠️ Manga mode: Unknown filename style '{self.manga_filename_style}'. Defaulting to original filename for '{api_original_filename}'.")
-                    filename_to_save_in_main_path = clean_filename(api_original_filename)
+                    filename_to_save_in_main_path = cleaned_original_api_filename
                 if not filename_to_save_in_main_path: 
                     filename_to_save_in_main_path = f"manga_file_{original_post_id_for_log}_{file_index_in_post + 1}{original_ext}"
                     self.logger(f"⚠️ Manga mode: Generated filename was empty. Using generic fallback: '{filename_to_save_in_main_path}'.")
                     was_original_name_kept_flag = False
             else: 
-                filename_to_save_in_main_path = clean_filename(api_original_filename)
+                # self.logger(f"   [DSF_DEBUG] Non-manga mode. Setting filename_to_save_in_main_path to cleaned original: '{cleaned_original_api_filename}'")
+                filename_to_save_in_main_path = cleaned_original_api_filename
                 was_original_name_kept_flag = False
+            
+            # self.logger(f"   [DSF_DEBUG] Filename after initial/manga logic: '{filename_to_save_in_main_path}'")
+
             if self.remove_from_filename_words_list and filename_to_save_in_main_path:
+                # self.logger(f"   [DSF_DEBUG] Starting 'remove_from_filename_words_list' logic for: '{filename_to_save_in_main_path}'")
                 base_name_for_removal, ext_for_removal = os.path.splitext(filename_to_save_in_main_path)
                 modified_base_name = base_name_for_removal
                 for word_to_remove in self.remove_from_filename_words_list:
@@ -869,7 +895,11 @@ class PostProcessorWorker:
                     filename_to_save_in_main_path = modified_base_name + ext_for_removal
                 else: 
                     filename_to_save_in_main_path = base_name_for_removal + ext_for_removal 
+                # self.logger(f"   [DSF_DEBUG] Filename after 'remove_from_filename_words_list': '{filename_to_save_in_main_path}'")
+            # self.logger(f"   [DSF_DEBUG] Filename generation logic complete. Final base name for download: '{filename_to_save_in_main_path}'")
+
         if not self.download_thumbnails: 
+            # self.logger(f"   [DSF_DEBUG] Starting filter mode checks (thumbnails not downloaded)...")
             is_img_type = is_image(api_original_filename)
             is_vid_type = is_video(api_original_filename)
             is_archive_type = is_archive(api_original_filename)
@@ -896,8 +926,12 @@ class PostProcessorWorker:
             if self.skip_rar and is_rar(api_original_filename):
                 self.logger(f"   -> Pref Skip: '{api_original_filename}' (RAR).")
                 return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
+            # self.logger(f"   [DSF_DEBUG] Filter mode checks complete.")
+
+        # self.logger(f"   [DSF_DEBUG] Attempting to create target folder: '{target_folder_path}'")
         try:
             os.makedirs(target_folder_path, exist_ok=True) # For .part file
+            # self.logger(f"   [DSF_DEBUG] Target folder ensured/created.")
         except OSError as e:
             self.logger(f"   ❌ Critical error creating directory '{target_folder_path}': {e}. Skipping file '{api_original_filename}'.")
             return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None # Treat as skip
@@ -910,6 +944,8 @@ class PostProcessorWorker:
         total_size_bytes = 0 
         download_successful_flag = False 
         last_exception_for_retry_later = None
+
+        # self.logger(f"   [DSF_DEBUG] Entering download retry loop for '{api_original_filename}'...")
         for attempt_num_single_stream in range(max_retries + 1):
             if self._check_pause(f"File download attempt for '{api_original_filename}'"): break
             if self.check_cancel() or (skip_event and skip_event.is_set()): break
