@@ -904,12 +904,13 @@ class PostProcessorWorker:
         max_retries = 3
         retry_delay = 5
         downloaded_size_bytes = 0
-        calculated_file_hash = None
-        file_content_bytes = None 
+        calculated_file_hash = None # Will store the MD5 hash
+        downloaded_part_file_path = None # Path to the .part file on disk
+        was_multipart_download = False # Flag to indicate download method
         total_size_bytes = 0 
         download_successful_flag = False 
         last_exception_for_retry_later = None
-        for attempt_num_single_stream in range(max_retries + 1): 
+        for attempt_num_single_stream in range(max_retries + 1):
             if self._check_pause(f"File download attempt for '{api_original_filename}'"): break
             if self.check_cancel() or (skip_event and skip_event.is_set()): break
             try:
@@ -925,6 +926,7 @@ class PostProcessorWorker:
                                      num_parts_for_file > 1 and total_size_bytes > MIN_SIZE_FOR_MULTIPART_DOWNLOAD and
                                      'bytes' in response.headers.get('Accept-Ranges', '').lower())
                 if self._check_pause(f"Multipart decision for '{api_original_filename}'"): break # Check pause before potentially long operation
+
                 if attempt_multipart:
                     response.close() 
                     self._emit_signal('file_download_status', False)
@@ -939,69 +941,110 @@ class PostProcessorWorker:
                         download_successful_flag = True
                         downloaded_size_bytes = mp_bytes
                         calculated_file_hash = mp_hash
-                        file_content_bytes = mp_file_handle 
+                        # mp_save_path_base_for_part is the path *without* .part
+                        # temp_file_path in download_file_in_parts is save_path + ".part"
+                        downloaded_part_file_path = mp_save_path_base_for_part + ".part" # This is the actual path of the .part file
+                        was_multipart_download = True
+                        if mp_file_handle: mp_file_handle.close() # Close the handle from multipart_downloader
                         break 
                     else: 
                         if attempt_num_single_stream < max_retries:
                             self.logger(f"   Multi-part download attempt failed for '{api_original_filename}'. Retrying with single stream.")
                         else: 
                             download_successful_flag = False; break 
-                self.logger(f"⬇️ Downloading (Single Stream): '{api_original_filename}' (Size: {total_size_bytes / (1024*1024):.2f} MB if known) [Base Name: '{filename_to_save_in_main_path}']")
-                file_content_buffer = BytesIO()
-                current_attempt_downloaded_bytes = 0
-                md5_hasher = hashlib.md5()
-                last_progress_time = time.time()
-                for chunk in response.iter_content(chunk_size=1 * 1024 * 1024):
-                    if self._check_pause(f"Chunk download for '{api_original_filename}'"): break
-                    if self.check_cancel() or (skip_event and skip_event.is_set()): break
-                    if chunk:
-                        file_content_buffer.write(chunk); md5_hasher.update(chunk)
-                        current_attempt_downloaded_bytes += len(chunk)
-                        if time.time() - last_progress_time > 1 and total_size_bytes > 0:
-                            self._emit_signal('file_progress', api_original_filename, (current_attempt_downloaded_bytes, total_size_bytes))
-                            last_progress_time = time.time()
-                if self.check_cancel() or (skip_event and skip_event.is_set()) or (self.pause_event and self.pause_event.is_set()):
-                    if file_content_buffer: file_content_buffer.close(); break
-                if current_attempt_downloaded_bytes > 0 or (total_size_bytes == 0 and response.status_code == 200):
-                    calculated_file_hash = md5_hasher.hexdigest()
-                    downloaded_size_bytes = current_attempt_downloaded_bytes
-                    if file_content_bytes: file_content_bytes.close() 
-                    file_content_bytes = file_content_buffer; file_content_bytes.seek(0)
-                    download_successful_flag = True; break
-                else: 
-                    if file_content_buffer: file_content_buffer.close()
+                else: # Single stream download
+                    self.logger(f"⬇️ Downloading (Single Stream): '{api_original_filename}' (Size: {total_size_bytes / (1024*1024):.2f} MB if known) [Base Name: '{filename_to_save_in_main_path}']")
+                    current_single_stream_part_path = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
+                    current_attempt_downloaded_bytes = 0
+                    md5_hasher = hashlib.md5()
+                    last_progress_time = time.time()
+                    
+                    try:
+                        with open(current_single_stream_part_path, 'wb') as f_part:
+                            for chunk in response.iter_content(chunk_size=1 * 1024 * 1024): # Read 1MB chunks
+                                if self._check_pause(f"Chunk download for '{api_original_filename}'"): break
+                                if self.check_cancel() or (skip_event and skip_event.is_set()): break
+                                if chunk:
+                                    f_part.write(chunk)
+                                    md5_hasher.update(chunk)
+                                    current_attempt_downloaded_bytes += len(chunk)
+                                    if time.time() - last_progress_time > 1 and total_size_bytes > 0:
+                                        self._emit_signal('file_progress', api_original_filename, (current_attempt_downloaded_bytes, total_size_bytes))
+                                        last_progress_time = time.time()
+                        
+                        if self.check_cancel() or (skip_event and skip_event.is_set()) or \
+                           (self.pause_event and self.pause_event.is_set() and not (current_attempt_downloaded_bytes > 0 or (total_size_bytes == 0 and response.status_code == 200))):
+                            if os.path.exists(current_single_stream_part_path): os.remove(current_single_stream_part_path)
+                            break # Break from retry loop
+
+                        if current_attempt_downloaded_bytes > 0 or (total_size_bytes == 0 and response.status_code == 200):
+                            calculated_file_hash = md5_hasher.hexdigest()
+                            downloaded_size_bytes = current_attempt_downloaded_bytes
+                            downloaded_part_file_path = current_single_stream_part_path
+                            was_multipart_download = False
+                            download_successful_flag = True
+                            break # Break from retry loop
+                        else: # No bytes downloaded or error before finishing
+                            if os.path.exists(current_single_stream_part_path): os.remove(current_single_stream_part_path)
+                    except Exception as e_write:
+                        self.logger(f"   ❌ Error writing single-stream to disk for '{api_original_filename}': {e_write}")
+                        if os.path.exists(current_single_stream_part_path): os.remove(current_single_stream_part_path)
+                        # This exception will be caught by the outer try-except for retries
+                        raise
+
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
                 self.logger(f"   ❌ Download Error (Retryable): {api_original_filename}. Error: {e}")
                 last_exception_for_retry_later = e # Store this specific exception
                 if isinstance(e, requests.exceptions.ConnectionError) and \
                    ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
                     self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
-                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close()
             except requests.exceptions.RequestException as e: 
                 self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
                 last_exception_for_retry_later = e # Store this too
                 if ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)): # More general check
                     self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
-                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
+                # For most RequestExceptions (like 404, 403), we break the retry loop as they are unlikely to be fixed by immediate retries.
+                break # Break from retry loop for non-retryable RequestExceptions
             except Exception as e:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
-                if 'file_content_buffer' in locals() and file_content_buffer: file_content_buffer.close(); break
+                last_exception_for_retry_later = e # Capture unexpected errors too for later analysis
+                break # Break from retry loop for other unexpected errors
             finally:
                 self._emit_signal('file_download_status', False)
+
         final_total_for_progress = total_size_bytes if download_successful_flag and total_size_bytes > 0 else downloaded_size_bytes
         self._emit_signal('file_progress', api_original_filename, (downloaded_size_bytes, final_total_for_progress))
+
         if self.check_cancel() or (skip_event and skip_event.is_set()) or (self.pause_event and self.pause_event.is_set() and not download_successful_flag):
             self.logger(f"   ⚠️ Download process interrupted for {api_original_filename}.")
-            if file_content_bytes: file_content_bytes.close()
+            if downloaded_part_file_path and os.path.exists(downloaded_part_file_path): # Cleanup .part file
+                try: os.remove(downloaded_part_file_path)
+                except OSError: pass
             return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+
         if not download_successful_flag:
             self.logger(f"❌ Download failed for '{api_original_filename}' after {max_retries + 1} attempts.")
-            if file_content_bytes: file_content_bytes.close()
+            # .part file should have been cleaned up by the download attempt if it failed to produce a final .part file
+
+            is_actually_incomplete_read = False
             if isinstance(last_exception_for_retry_later, http.client.IncompleteRead):
+                is_actually_incomplete_read = True
+            elif hasattr(last_exception_for_retry_later, '__cause__') and isinstance(last_exception_for_retry_later.__cause__, http.client.IncompleteRead):
+                is_actually_incomplete_read = True
+            # Check if the exception or its arguments contain IncompleteRead information
+            elif last_exception_for_retry_later is not None: # Ensure it's not None
+                str_exc = str(last_exception_for_retry_later).lower()
+                # Check the string representation of the exception and, if it's a tuple, check its elements.
+                if "incompleteread" in str_exc or \
+                   (isinstance(last_exception_for_retry_later, tuple) and \
+                    any("incompleteread" in str(arg).lower() for arg in last_exception_for_retry_later if isinstance(arg, (str, Exception)))): # type: ignore
+                    is_actually_incomplete_read = True
+
+            if is_actually_incomplete_read:
                 self.logger(f"   Marking '{api_original_filename}' for potential retry later due to IncompleteRead.")
                 retry_later_details = {
                     'file_info': file_info,
-                    'target_folder_path': target_folder_path, # This is the base character/post folder
+                    'target_folder_path': target_folder_path,
                     'headers': headers, # Original headers
                     'original_post_id_for_log': original_post_id_for_log,
                     'post_title': post_title,
@@ -1030,51 +1073,63 @@ class PostProcessorWorker:
             if calculated_file_hash in self.downloaded_file_hashes:
                 self.logger(f"   -> Skip Saving Duplicate (Hash Match): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...).")
                 with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Mark logical name
-                if file_content_bytes: file_content_bytes.close()
-                if not isinstance(file_content_bytes, BytesIO): # Indicates multipart download
-                    part_file_to_remove = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
-                    if os.path.exists(part_file_to_remove):
-                        try: os.remove(part_file_to_remove);
-                        except OSError: self.logger(f"  -> Failed to remove .part file for hash duplicate: {part_file_to_remove}") # type: ignore
+                if downloaded_part_file_path and os.path.exists(downloaded_part_file_path): # Cleanup .part file
+                    try: os.remove(downloaded_part_file_path)
+                    except OSError as e_rem: self.logger(f"  -> Failed to remove .part file for hash duplicate: {e_rem}")
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+
         effective_save_folder = target_folder_path  # Default: main character/post folder
         filename_after_styling_and_word_removal = filename_to_save_in_main_path
+
         try: # Ensure the chosen save folder (main or Duplicate) exists
             os.makedirs(effective_save_folder, exist_ok=True)
         except OSError as e:
             self.logger(f"   ❌ Critical error creating directory '{effective_save_folder}': {e}. Skipping file '{api_original_filename}'.")
-            if file_content_bytes: file_content_bytes.close()
-            if not isinstance(file_content_bytes, BytesIO):
-                part_file_to_remove = os.path.join(target_folder_path, filename_to_save_in_main_path + ".part")
-                if os.path.exists(part_file_to_remove): os.remove(part_file_to_remove)
+            if downloaded_part_file_path and os.path.exists(downloaded_part_file_path): # Cleanup .part file
+                try: os.remove(downloaded_part_file_path)
+                except OSError: pass
             return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
-        data_to_write_after_compression = file_content_bytes 
+
+        data_to_write_io = None # This will be BytesIO if compression happens and is used
         filename_after_compression = filename_after_styling_and_word_removal
         is_img_for_compress_check = is_image(api_original_filename)
+
         if is_img_for_compress_check and self.compress_images and Image and downloaded_size_bytes > (1.5 * 1024 * 1024):
             self.logger(f"   Compressing '{api_original_filename}' ({downloaded_size_bytes / (1024*1024):.2f} MB)...")
             if self._check_pause(f"Image compression for '{api_original_filename}'"): return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None # Allow pause before compression
+            
+            img_content_for_pillow = None
             try:
-                file_content_bytes.seek(0) 
-                with Image.open(file_content_bytes) as img_obj: 
-                    if img_obj.mode == 'P': img_obj = img_obj.convert('RGBA')
-                    elif img_obj.mode not in ['RGB', 'RGBA', 'L']: img_obj = img_obj.convert('RGB')
-                    compressed_bytes_io = BytesIO()
-                    img_obj.save(compressed_bytes_io, format='WebP', quality=80, method=4)
-                    compressed_size = compressed_bytes_io.getbuffer().nbytes
-                if compressed_size < downloaded_size_bytes * 0.9:  # If significantly smaller
-                    self.logger(f"   Compression success: {compressed_size / (1024*1024):.2f} MB.")
-                    data_to_write_after_compression = compressed_bytes_io; data_to_write_after_compression.seek(0)
-                    base_name_orig, _ = os.path.splitext(filename_after_compression) 
-                    filename_after_compression = base_name_orig + '.webp'
-                    self.logger(f"   Updated filename (compressed): {filename_after_compression}")
-                else:
-                    self.logger(f"   Compression skipped: WebP not significantly smaller."); file_content_bytes.seek(0) # Reset original stream
-                    data_to_write_after_compression = file_content_bytes # Use original
+                with open(downloaded_part_file_path, 'rb') as f_img_in: # Open the .part file
+                    img_content_for_pillow = BytesIO(f_img_in.read()) # Read its content for Pillow
+                
+                with Image.open(img_content_for_pillow) as img_obj:
+                    if img_obj.mode == 'P': img_obj = img_obj.convert('RGBA') # type: ignore
+                    elif img_obj.mode not in ['RGB', 'RGBA', 'L']: img_obj = img_obj.convert('RGB') # type: ignore
+                    
+                    compressed_output_io = BytesIO()
+                    img_obj.save(compressed_output_io, format='WebP', quality=80, method=4)
+                    compressed_size = compressed_output_io.getbuffer().nbytes
+
+                    if compressed_size < downloaded_size_bytes * 0.9:  # If significantly smaller
+                        self.logger(f"   Compression success: {compressed_size / (1024*1024):.2f} MB.")
+                        data_to_write_io = compressed_output_io
+                        data_to_write_io.seek(0)
+                        base_name_orig, _ = os.path.splitext(filename_after_compression)
+                        filename_after_compression = base_name_orig + '.webp'
+                        self.logger(f"   Updated filename (compressed): {filename_after_compression}")
+                    else:
+                        self.logger(f"   Compression skipped: WebP not significantly smaller.")
+                        # data_to_write_io remains None, original .part file will be used
+                        if compressed_output_io: compressed_output_io.close() # Close unused compressed buffer
             except Exception as comp_e:
-                self.logger(f"❌ Compression failed for '{api_original_filename}': {comp_e}. Saving original."); file_content_bytes.seek(0)
-                data_to_write_after_compression = file_content_bytes # Use original
+                self.logger(f"❌ Compression failed for '{api_original_filename}': {comp_e}. Saving original.")
+                # data_to_write_io remains None
+            finally:
+                if img_content_for_pillow: img_content_for_pillow.close()
+
         final_filename_on_disk = filename_after_compression # This is the name after potential compression
+
         if not (self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED):
             temp_base, temp_ext = os.path.splitext(final_filename_on_disk)
             suffix_counter = 1
@@ -1086,20 +1141,20 @@ class PostProcessorWorker:
         if self._check_pause(f"File saving for '{final_filename_on_disk}'"): return 0, 1, final_filename_on_disk, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
         final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
         try:
-            if data_to_write_after_compression is file_content_bytes and not isinstance(file_content_bytes, BytesIO):
-                original_part_file_actual_path = file_content_bytes.name
-                file_content_bytes.close() # Close handle first
-                os.rename(original_part_file_actual_path, final_save_path)
-                self.logger(f"   Renamed .part file to final: {final_save_path}")
-            else: # Single stream download, or compressed multipart. Write from BytesIO.
+            if data_to_write_io: # If compression produced data_to_write_io (BytesIO)
                 with open(final_save_path, 'wb') as f_out:
-                    f_out.write(data_to_write_after_compression.getvalue())
-                if data_to_write_after_compression is not file_content_bytes and not isinstance(file_content_bytes, BytesIO):
-                    original_part_file_actual_path = file_content_bytes.name
-                    file_content_bytes.close()
-                    if os.path.exists(original_part_file_actual_path):
-                        try: os.remove(original_part_file_actual_path)
-                        except OSError as e_rem: self.logger(f"  -> Failed to remove .part after compression: {e_rem}")
+                    f_out.write(data_to_write_io.getvalue())
+                # Successfully wrote compressed data, now remove the original .part file
+                if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                    try:
+                        os.remove(downloaded_part_file_path)
+                    except OSError as e_rem:
+                        self.logger(f"  -> Failed to remove .part after compression: {e_rem}")
+            else: # No compression or compression not used, rename the .part file
+                if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                    os.rename(downloaded_part_file_path, final_save_path)
+                else: # Should not happen if download was successful
+                    raise FileNotFoundError(f"Original .part file not found for saving: {downloaded_part_file_path}")
             with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
             with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path) # Track by logical name
             final_filename_saved_for_return = final_filename_on_disk
@@ -1111,15 +1166,14 @@ class PostProcessorWorker:
              if os.path.exists(final_save_path):
                   try: os.remove(final_save_path);
                   except OSError: self.logger(f"  -> Failed to remove partially saved file: {final_save_path}")
+             # If rename failed, downloaded_part_file_path might still exist.
+             # If writing compressed failed, final_save_path (partial compressed) was removed. Original .part might still exist.
              return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None # Treat save fail as skip
         finally:
-            if data_to_write_after_compression and hasattr(data_to_write_after_compression, 'close'):
-                data_to_write_after_compression.close()
-            if file_content_bytes and file_content_bytes is not data_to_write_after_compression and hasattr(file_content_bytes, 'close'):
-                try:
-                    if not file_content_bytes.closed: # Check if already closed
-                        file_content_bytes.close()
-                except Exception: pass # Ignore errors on close if already handled
+            if data_to_write_io and hasattr(data_to_write_io, 'close'):
+                data_to_write_io.close()
+            # downloaded_part_file_path is just a path, no open handle from this function's direct scope to close here.
+            # Handles from multipart or single stream write loop are closed within their respective sections or by 'with open'.
     def process(self):
         if self._check_pause(f"Post processing for ID {self.post.get('id', 'N/A')}"): return 0,0,[], [], []
         if self.check_cancel(): return 0, 0, [], [], []

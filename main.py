@@ -549,7 +549,7 @@ class EmptyPopupDialog(QDialog):
         if not check_search_text_for_empty:
             self.progress_bar.setVisible(False) # Ensure it's hidden for fast path
             creators_to_show = self.all_creators_data[:self.INITIAL_LOAD_LIMIT]
-            self._populate_list_widget(creators_to_show)
+            self._populate_list_widget(creators_to_show) # For empty search, show up to INITIAL_LOAD_LIMIT
             self.search_input.setToolTip("Search by name, service, or paste creator URL...")
             QCoreApplication.processEvents() # Ensure UI updates after initial population
         else:
@@ -558,9 +558,15 @@ class EmptyPopupDialog(QDialog):
             if not self.isVisible(): return # Dialog was closed
 
             norm_search_casefolded = unicodedata.normalize('NFKC', raw_search_input).casefold().strip()
-            norm_search_original = unicodedata.normalize('NFKC', raw_search_input).strip()
-
-            filtered_creators = []
+            
+            # This list will store tuples of (score, creator_data_dict)
+            # Score: Higher is better.
+            # 5: Exact URL match
+            # 4: Exact name match (case-insensitive)
+            # 3: Name starts with search term (case-insensitive)
+            # 2: Search term in name (case-insensitive)
+            # 1: Search term in service (case-insensitive)
+            scored_matches = [] 
             
             # Attempt URL parsing
             parsed_service_from_url, parsed_user_id_from_url, _ = extract_post_info(raw_search_input)
@@ -569,28 +575,21 @@ class EmptyPopupDialog(QDialog):
                 # Input is a parsable Kemono/Coomer URL with service and user_id
                 self.search_input.setToolTip(f"Searching for URL: {raw_search_input[:50]}...")
                 for creator_data in self.all_creators_data:
-                    creator_service = creator_data.get('service', '').lower()
+                    creator_service_lower = creator_data.get('service', '').lower()
                     # ID from data can be int (Kemono) or str (Coomer), so always cast to str for comparison
-                    creator_id_in_data = str(creator_data.get('id', '')).lower() 
+                    creator_id_str_lower = str(creator_data.get('id', '')).lower() 
 
-                    if creator_service == parsed_service_from_url.lower() and \
-                       creator_id_in_data == parsed_user_id_from_url.lower():
-                        filtered_creators.append(creator_data)
+                    if creator_service_lower == parsed_service_from_url.lower() and \
+                       creator_id_str_lower == parsed_user_id_from_url.lower():
+                        scored_matches.append((5, creator_data)) # Score 5 for direct URL match
                         # Since creator URLs are unique, we can break after finding the match
                         break 
-                
-                if filtered_creators:
-                    self.search_input.setToolTip(f"Found creator by URL: {filtered_creators[0].get('name')}")
-                else:
-                    self.search_input.setToolTip(f"URL parsed, but no matching creator found in your creators.json.")
             
             else:
                 # Input is not a parsable Kemono/Coomer URL, or parsing failed to yield service/user_id.
                 # Proceed with text-based search on name and service.
                 self.search_input.setToolTip("Searching by name or service...")
                 norm_search_casefolded = unicodedata.normalize('NFKC', raw_search_input).casefold().strip()
-                # We don't need norm_search_original if we only match casefolded name/service
-                # norm_search_original = unicodedata.normalize('NFKC', raw_search_input).strip() 
                 
                 CHUNK_SIZE_FILTER = 500
                 for i in range(0, len(self.all_creators_data), CHUNK_SIZE_FILTER):
@@ -604,22 +603,46 @@ class EmptyPopupDialog(QDialog):
                         norm_creator_name_casefolded = unicodedata.normalize('NFKC', creator_name_raw).casefold()
                         norm_service_casefolded = unicodedata.normalize('NFKC', creator_service_raw).casefold()
                         
-                        name_match = norm_search_casefolded in norm_creator_name_casefolded
-                        service_match = norm_search_casefolded in norm_service_casefolded
+                        current_score = 0
+                        # Score highest for exact name match
+                        if norm_search_casefolded == norm_creator_name_casefolded:
+                            current_score = 4
+                        # Then for name starting with search term
+                        elif norm_creator_name_casefolded.startswith(norm_search_casefolded):
+                            current_score = 3
+                        # Then for name containing search term
+                        elif norm_search_casefolded in norm_creator_name_casefolded:
+                            current_score = 2
+                        # Lowest score for service containing search term
+                        elif norm_search_casefolded in norm_service_casefolded:
+                            current_score = 1
                         
-                        if name_match or service_match:
-                            filtered_creators.append(creator_data)
+                        if current_score > 0:
+                            scored_matches.append((current_score, creator_data))
                     
                     QCoreApplication.processEvents() # Keep UI responsive
 
-            self._populate_list_widget(filtered_creators)
+            # Sort all found matches by score (descending), then by name (ascending, case-insensitive)
+            # This ensures "more similar" (higher score) items are at the top.
+            scored_matches.sort(key=lambda x: (-x[0], unicodedata.normalize('NFKC', x[1].get('name', '')).casefold()))
+            
+            # Get the actual creator data from the sorted list, limited to top 20
+            final_creators_to_display = [creator_data for score, creator_data in scored_matches[:20]]
+            
+            self._populate_list_widget(final_creators_to_display)
             self.progress_bar.setVisible(False) # Hide after populating
-            # Final tooltip update after search, if not set by URL logic
-            if not (parsed_service_from_url and parsed_user_id_from_url):
-                 if filtered_creators:
-                     self.search_input.setToolTip(f"Found {len(filtered_creators)} match(es) for '{raw_search_input[:30]}...'")
-                 else:
-                     self.search_input.setToolTip(f"No matches found for '{raw_search_input[:30]}...'")
+            
+            # Update tooltip based on search results
+            if parsed_service_from_url and parsed_user_id_from_url: # URL search was attempted
+                if final_creators_to_display: # Should be 0 or 1 item if URL search was successful
+                    self.search_input.setToolTip(f"Found creator by URL: {final_creators_to_display[0].get('name')}")
+                else: # URL parsed, but no match found
+                    self.search_input.setToolTip(f"URL parsed, but no matching creator found in your creators.json.")
+            else: # Text search
+                if final_creators_to_display:
+                    self.search_input.setToolTip(f"Showing top {len(final_creators_to_display)} match(es) for '{raw_search_input[:30]}...'")
+                else:
+                    self.search_input.setToolTip(f"No matches found for '{raw_search_input[:30]}...'")
 
     def _toggle_scope_mode(self):
         """Toggles the scope mode and updates the button text."""
@@ -3351,8 +3374,8 @@ class DownloaderApp(QWidget):
         self.external_link_queue.append(link_data)
         if self.radio_only_links and self.radio_only_links.isChecked():
             self.extracted_links_cache.append(link_data)
-        self._try_process_next_external_link()
 
+        # Call _try_process_next_external_link directly or via a zero-delay timer
     def _try_process_next_external_link(self):
         if self._is_processing_external_link_queue or not self.external_link_queue:
             return
@@ -3370,8 +3393,7 @@ class DownloaderApp(QWidget):
         link_data = self.external_link_queue.popleft()
 
         if is_only_links_mode:
-            delay_ms = 80
-            QTimer.singleShot(delay_ms, lambda data=link_data: self._display_and_schedule_next(data))
+            QTimer.singleShot(0, lambda data=link_data: self._display_and_schedule_next(data)) # Process immediately
         elif self._is_download_active():
             delay_ms = random.randint(4000, 8000)
             QTimer.singleShot(delay_ms, lambda data=link_data: self._display_and_schedule_next(data))
