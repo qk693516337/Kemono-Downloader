@@ -13,16 +13,15 @@ from PyQt5 .QtCore import QObject ,pyqtSignal ,QThread ,QMutex ,QMutexLocker
 from urllib .parse import urlparse 
 try :
     from mega import Mega 
-    # Import download functions from drive.py
-    # Assuming drive.py is in the same directory
-    try:
-        from drive import download_mega_file as drive_download_mega_file, \
-                               download_gdrive_file, download_dropbox_file
-        # To avoid confusion, we'll use drive_download_mega_file internally when calling from main
-        # and ensure this module exports it as download_mega_file for compatibility if needed,
-        # or main.py can be updated to call drive_download_mega_file.
-    except ImportError as drive_import_err:
-        print(f"ERROR importing from drive.py: {drive_import_err}. External drive downloads will fail.")
+
+
+    try :
+        from drive import download_mega_file as drive_download_mega_file ,download_gdrive_file ,download_dropbox_file 
+
+
+
+    except ImportError as drive_import_err :
+        print (f"ERROR importing from drive.py: {drive_import_err }. External drive downloads will fail.")
 except ImportError :
     print ("ERROR: mega.py library not found. Please install it: pip install mega.py")
 try :
@@ -57,6 +56,7 @@ FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION ="failed_permanent_session"
 fastapi_app =None 
 KNOWN_NAMES =[]
 MIN_SIZE_FOR_MULTIPART_DOWNLOAD =10 *1024 *1024 
+GOFILE_GUEST_TOKEN =None 
 MAX_PARTS_FOR_MULTIPART_DOWNLOAD =15 
 MAX_FILENAME_COMPONENT_LENGTH =150 
 IMAGE_EXTENSIONS ={
@@ -704,6 +704,7 @@ def get_link_platform (url ):
         if 'mega.nz'in domain or 'mega.io'in domain :return 'mega'
         if 'dropbox.com'in domain :return 'dropbox'
         if 'patreon.com'in domain :return 'patreon'
+        if 'gofile.io'in domain :return 'gofile'
         if 'instagram.com'in domain :return 'instagram'
         if 'twitter.com'in domain or 'x.com'in domain :return 'twitter/x'
         if 'discord.gg'in domain or 'discord.com/invite'in domain :return 'discord invite'
@@ -2133,47 +2134,47 @@ def download_mega_file (mega_link ,download_path =".",logger_func =print ):
 
     try :
 
-        # Pre-flight check for link validity and attributes
-        logger_func(f"   Verifying Mega link and fetching attributes: {mega_link}")
-        file_attributes = m.get_public_url_info(mega_link)
 
-        if not file_attributes or not isinstance(file_attributes, dict):
-            logger_func(f"❌ Error: Could not retrieve valid file information for the Mega link. Link might be invalid, expired, or a folder. Info received: {file_attributes}")
-            raise ValueError(f"Invalid or inaccessible Mega link. get_public_url_info returned: {file_attributes}")
+        logger_func (f"   Verifying Mega link and fetching attributes: {mega_link }")
+        file_attributes =m .get_public_url_info (mega_link )
 
-        expected_filename = file_attributes.get('name') # Changed from 'n'
-        file_size = file_attributes.get('size')         # Changed from 's'
+        if not file_attributes or not isinstance (file_attributes ,dict ):
+            logger_func (f"❌ Error: Could not retrieve valid file information for the Mega link. Link might be invalid, expired, or a folder. Info received: {file_attributes }")
+            raise ValueError (f"Invalid or inaccessible Mega link. get_public_url_info returned: {file_attributes }")
 
-        if not expected_filename:
-            logger_func(f"⚠️ Critical: File name ('name') not found in Mega link attributes. Attributes: {file_attributes}") # Updated log
-            raise ValueError(f"File name ('name') not found in Mega link attributes: {file_attributes}") # Updated ValueError
+        expected_filename =file_attributes .get ('name')
+        file_size =file_attributes .get ('size')
 
-        logger_func(f"   Link verified. Expected filename: '{expected_filename}'. Size: {file_size if file_size is not None else 'Unknown'} bytes.")
+        if not expected_filename :
+            logger_func (f"⚠️ Critical: File name ('name') not found in Mega link attributes. Attributes: {file_attributes }")
+            raise ValueError (f"File name ('name') not found in Mega link attributes: {file_attributes }")
+
+        logger_func (f"   Link verified. Expected filename: '{expected_filename }'. Size: {file_size if file_size is not None else 'Unknown'} bytes.")
 
         if not os .path .exists (download_path ):
             logger_func (f"Download path '{download_path }' does not exist. Creating it...")
             os .makedirs (download_path ,exist_ok =True )
 
-        logger_func(f"Starting download of '{expected_filename}' to '{download_path}'...")
-        
-        # m.download_url returns a tuple (filepath, filename) on success for mega.py 1.0.8
-        download_result = m.download_url(mega_link, dest_path=download_path, dest_filename=None) 
-        
-        if download_result and isinstance(download_result, tuple) and len(download_result) == 2:
-            saved_filepath, saved_filename = download_result
-            # Ensure saved_filepath is an absolute path if dest_path was relative
-            if not os.path.isabs(saved_filepath) and dest_path:
-                saved_filepath = os.path.join(os.path.abspath(dest_path), saved_filename)
-            
-            logger_func(f"File downloaded successfully! Saved as: {saved_filepath}")
-            if not os.path.exists(saved_filepath):
-                 logger_func(f"⚠️ Warning: mega.py reported success but file '{saved_filepath}' not found on disk.")
-            # Optionally, verify filename if needed, though saved_filename should be correct
-            if saved_filename != expected_filename:
-                 logger_func(f"   Note: Saved filename '{saved_filename}' differs from initially expected '{expected_filename}'. This is usually fine.")
+        logger_func (f"Starting download of '{expected_filename }' to '{download_path }'...")
+
+
+        download_result =m .download_url (mega_link ,dest_path =download_path ,dest_filename =None )
+
+        if download_result and isinstance (download_result ,tuple )and len (download_result )==2 :
+            saved_filepath ,saved_filename =download_result 
+
+            if not os .path .isabs (saved_filepath )and dest_path :
+                saved_filepath =os .path .join (os .path .abspath (dest_path ),saved_filename )
+
+            logger_func (f"File downloaded successfully! Saved as: {saved_filepath }")
+            if not os .path .exists (saved_filepath ):
+                 logger_func (f"⚠️ Warning: mega.py reported success but file '{saved_filepath }' not found on disk.")
+
+            if saved_filename !=expected_filename :
+                 logger_func (f"   Note: Saved filename '{saved_filename }' differs from initially expected '{expected_filename }'. This is usually fine.")
         else :
-            logger_func(f"Download failed. The download_url method returned: {download_result}")
-            raise Exception(f"Mega download_url did not return expected result or failed. Result: {download_result}")
+            logger_func (f"Download failed. The download_url method returned: {download_result }")
+            raise Exception (f"Mega download_url did not return expected result or failed. Result: {download_result }")
 
     except PermissionError :
         logger_func (f"Error: Permission denied to write to '{download_path }'. Please check permissions.")
@@ -2184,11 +2185,11 @@ def download_mega_file (mega_link ,download_path =".",logger_func =print ):
     except requests .exceptions .RequestException as e :
         logger_func (f"Error during request to Mega (network issue, etc.): {e }")
         raise 
-    except ValueError as ve: # Catch our custom ValueError from pre-flight
-        logger_func(f"ValueError during Mega processing (likely invalid link): {ve}")
+    except ValueError as ve :
+        logger_func (f"ValueError during Mega processing (likely invalid link): {ve }")
         raise 
     except Exception as e :
-        if isinstance(e, TypeError) and "'bool' object is not subscriptable" in str(e):
-            logger_func("   This specific TypeError occurred despite pre-flight checks. This might indicate a deeper issue with the mega.py library or a very transient API problem for this link.")
+        if isinstance (e ,TypeError )and "'bool' object is not subscriptable"in str (e ):
+            logger_func ("   This specific TypeError occurred despite pre-flight checks. This might indicate a deeper issue with the mega.py library or a very transient API problem for this link.")
         traceback .print_exc ()
         raise 

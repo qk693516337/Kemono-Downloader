@@ -61,9 +61,9 @@ try :
     STYLE_DATE_BASED ,
     STYLE_POST_TITLE_GLOBAL_NUMBERING ,
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS ,
-    download_mega_file as drive_download_mega_file, 
-    download_gdrive_file,
-    download_dropbox_file
+    download_mega_file as drive_download_mega_file ,
+    download_gdrive_file ,
+    download_dropbox_file 
     )
     print ("Successfully imported names from downloader_utils.")
 except ImportError as e :
@@ -97,9 +97,9 @@ except ImportError as e :
     STYLE_DATE_BASED ="date_based"
     STYLE_POST_TITLE_GLOBAL_NUMBERING ="post_title_global_numbering"
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS =set ()
-    def drive_download_mega_file(*args, **kwargs): print("drive_download_mega_file (stub)"); pass
-    def download_gdrive_file(*args, **kwargs): print("download_gdrive_file (stub)"); pass
-    def download_dropbox_file(*args, **kwargs): print("download_dropbox_file (stub)"); pass
+    def drive_download_mega_file (*args ,**kwargs ):print ("drive_download_mega_file (stub)");pass 
+    def download_gdrive_file (*args ,**kwargs ):print ("download_gdrive_file (stub)");pass 
+    def download_dropbox_file (*args ,**kwargs ):print ("download_dropbox_file (stub)");pass 
 
 except Exception as e :
     print (f"--- UNEXPECTED IMPORT ERROR ---")
@@ -141,11 +141,11 @@ FAVORITE_SCOPE_SELECTED_LOCATION ="selected_location"
 FAVORITE_SCOPE_ARTIST_FOLDERS ="artist_folders"
 CONFIRM_ADD_ALL_SKIP_ADDING =2 
 CONFIRM_ADD_ALL_CANCEL_DOWNLOAD =3 
-LOG_DISPLAY_LINKS = "links"
-LOG_DISPLAY_DOWNLOAD_PROGRESS = "download_progress"
+LOG_DISPLAY_LINKS ="links"
+LOG_DISPLAY_DOWNLOAD_PROGRESS ="download_progress"
 
-from collections import defaultdict
-class DownloadExtractedLinksDialog(QDialog):
+from collections import defaultdict 
+class DownloadExtractedLinksDialog (QDialog ):
     """A dialog to select and initiate download for extracted supported links."""
 
     download_requested =pyqtSignal (list )
@@ -154,19 +154,19 @@ class DownloadExtractedLinksDialog(QDialog):
 
 
         super ().__init__ (parent )
-        self .links_data = links_data
+        self .links_data =links_data 
         self .setWindowTitle ("Download Selected External Links")
 
-        # Adjust dialog size relative to parent
-        if parent:
-            parent_width = parent.width()
-            parent_height = parent.height()
-            dialog_width = int(parent_width * 0.6)  # 60% of parent width
-            dialog_height = int(parent_height * 0.7) # 70% of parent height
-            min_w, min_h = 500, 400 # Keep a reasonable minimum
-            self.resize(max(dialog_width, min_w), max(dialog_height, min_h))
-        else:
-            self.setMinimumSize(500, 400) # Fallback if no parent
+
+        if parent :
+            parent_width =parent .width ()
+            parent_height =parent .height ()
+            dialog_width =int (parent_width *0.6 )
+            dialog_height =int (parent_height *0.7 )
+            min_w ,min_h =500 ,400 
+            self .resize (max (dialog_width ,min_w ),max (dialog_height ,min_h ))
+        else :
+            self .setMinimumSize (500 ,400 )
 
 
 
@@ -179,39 +179,39 @@ class DownloadExtractedLinksDialog(QDialog):
         self .links_list_widget =QListWidget ()
         self .links_list_widget .setSelectionMode (QAbstractItemView .NoSelection )
 
-        grouped_links = defaultdict(list)
-        for link_info_item in self.links_data:
-            post_title_for_group = link_info_item.get('title', 'Untitled Post')
-            grouped_links[post_title_for_group].append(link_info_item)
+        grouped_links =defaultdict (list )
+        for link_info_item in self .links_data :
+            post_title_for_group =link_info_item .get ('title','Untitled Post')
+            grouped_links [post_title_for_group ].append (link_info_item )
 
-        # Sort by post title for consistent order
-        sorted_post_titles = sorted(grouped_links.keys(), key=lambda x: x.lower())
 
-        for post_title_key in sorted_post_titles:
-            # Add header for post_title
-            header_item = QListWidgetItem(f"{post_title_key}")
-            header_item.setFlags(Qt.NoItemFlags) # Not selectable, not checkable
-            font = header_item.font()
-            font.setBold(True)
-            font.setPointSize(font.pointSize() + 1) # Slightly larger
-            header_item.setFont(font)
-            if parent and hasattr(parent, 'current_theme') and parent.current_theme == "dark":
-                header_item.setForeground(Qt.cyan)
-            else: # Light theme or no theme info
-                header_item.setForeground(Qt.blue)
-            self.links_list_widget.addItem(header_item)
+        sorted_post_titles =sorted (grouped_links .keys (),key =lambda x :x .lower ())
 
-            for link_info_data in grouped_links[post_title_key]:
-                platform_display = link_info_data.get('platform', 'unknown').upper()
-                display_text = f"  [{platform_display}] {link_info_data['link_text']} ({link_info_data['url']})"
-                item = QListWidgetItem(display_text)
-                item.setData(Qt.UserRole, link_info_data)
-                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Checked)
-                self.links_list_widget.addItem(item)
-            
-            # Add a little space after each group, or a separator item if preferred
-            # self.links_list_widget.addItem(QListWidgetItem("")) # Simple spacer
+        for post_title_key in sorted_post_titles :
+
+            header_item =QListWidgetItem (f"{post_title_key }")
+            header_item .setFlags (Qt .NoItemFlags )
+            font =header_item .font ()
+            font .setBold (True )
+            font .setPointSize (font .pointSize ()+1 )
+            header_item .setFont (font )
+            if parent and hasattr (parent ,'current_theme')and parent .current_theme =="dark":
+                header_item .setForeground (Qt .cyan )
+            else :
+                header_item .setForeground (Qt .blue )
+            self .links_list_widget .addItem (header_item )
+
+            for link_info_data in grouped_links [post_title_key ]:
+                platform_display =link_info_data .get ('platform','unknown').upper ()
+                display_text =f"  [{platform_display }] {link_info_data ['link_text']} ({link_info_data ['url']})"
+                item =QListWidgetItem (display_text )
+                item .setData (Qt .UserRole ,link_info_data )
+                item .setFlags (item .flags ()|Qt .ItemIsUserCheckable )
+                item .setCheckState (Qt .Checked )
+                self .links_list_widget .addItem (item )
+
+
+
 
         layout .addWidget (self .links_list_widget )
 
@@ -240,19 +240,17 @@ class DownloadExtractedLinksDialog(QDialog):
 
     def _set_all_items_checked (self ,check_state ):
         for i in range (self .links_list_widget .count ()):
-            item = self.links_list_widget.item(i)
-            if item.flags() & Qt.ItemIsUserCheckable: # Only operate on checkable items
-                item.setCheckState(check_state)
+            item =self .links_list_widget .item (i )
+            if item .flags ()&Qt .ItemIsUserCheckable :
+                item .setCheckState (check_state )
 
     def _handle_download_selected (self ):
         selected_links =[]
         for i in range (self .links_list_widget .count ()):
             item =self .links_list_widget .item (i )
-            # Ensure item is checkable, actually checked, and has data (is a link item)
-            if item.flags() & Qt.ItemIsUserCheckable and \
-               item.checkState() == Qt.Checked and \
-               item.data(Qt.UserRole) is not None:
-                selected_links.append(item.data(Qt.UserRole))
+
+            if item .flags ()&Qt .ItemIsUserCheckable and item .checkState ()==Qt .Checked and item .data (Qt .UserRole )is not None :
+                selected_links .append (item .data (Qt .UserRole ))
         if selected_links :
             self .download_requested .emit (selected_links )
             self .accept ()
@@ -2328,59 +2326,59 @@ class TourDialog (QDialog ):
             print (f"[Tour] CRITICAL ERROR in run_tour_if_needed: {e }")
             return QDialog .Rejected 
 
-class ExternalLinkDownloadThread(QThread):
+class ExternalLinkDownloadThread (QThread ):
     """A QThread to handle downloading multiple external links sequentially."""
-    progress_signal =pyqtSignal (str )    
+    progress_signal =pyqtSignal (str )
     file_complete_signal =pyqtSignal (str ,bool )
     finished_signal =pyqtSignal ()
 
-    def __init__ (self ,tasks_to_download ,download_base_path ,parent_logger_func ,parent =None):
+    def __init__ (self ,tasks_to_download ,download_base_path ,parent_logger_func ,parent =None ):
         super ().__init__ (parent )
         self .tasks =tasks_to_download 
         self .download_base_path =download_base_path 
         self .parent_logger_func =parent_logger_func 
         self .is_cancelled =False 
 
-    def run(self):
-        self.progress_signal.emit(f"ℹ️ Starting external link download thread for {len(self.tasks)} link(s).")
+    def run (self ):
+        self .progress_signal .emit (f"ℹ️ Starting external link download thread for {len (self .tasks )} link(s).")
         for i ,task_info in enumerate (self .tasks ):
             if self .is_cancelled :
-                self.progress_signal.emit("External link download cancelled by user.")
+                self .progress_signal .emit ("External link download cancelled by user.")
                 break 
 
-            platform = task_info.get('platform', 'unknown').lower()
+            platform =task_info .get ('platform','unknown').lower ()
             full_mega_url =task_info ['url']
             post_title =task_info ['title']
-            key = task_info.get('key', '') # Primarily for Mega
+            key =task_info .get ('key','')
 
-            self.progress_signal.emit(f"Download ({i + 1}/{len(self.tasks)}): Starting '{post_title}' ({platform.upper()}) from {full_mega_url}")
-            
+            self .progress_signal .emit (f"Download ({i +1 }/{len (self .tasks )}): Starting '{post_title }' ({platform .upper ()}) from {full_mega_url }")
+
             try :
-                if platform == 'mega':
-                    # Ensure key is part of the URL for mega.py
-                    if key:
-                        parsed_original_url = urlparse(full_mega_url)
-                        if key not in parsed_original_url.fragment:
-                            base_url_no_fragment = full_mega_url.split('#')[0]
-                            full_mega_url_with_key = f"{base_url_no_fragment}#{key}"
-                            self.progress_signal.emit(f"   Adjusted Mega URL with key: {full_mega_url_with_key}")
-                        else:
-                            full_mega_url_with_key = full_mega_url
-                    else: # No key provided, use URL as is (might fail if key is required and not in fragment)
-                        full_mega_url_with_key = full_mega_url
-                    drive_download_mega_file(full_mega_url_with_key, self.download_base_path, logger_func=self.parent_logger_func)
-                elif platform == 'google drive':
-                    download_gdrive_file(full_mega_url, self.download_base_path, logger_func=self.parent_logger_func)
-                elif platform == 'dropbox':
-                    download_dropbox_file(full_mega_url, self.download_base_path, logger_func=self.parent_logger_func)
-                else:
-                    self.progress_signal.emit(f"⚠️ Unsupported platform '{platform}' for link: {full_mega_url}")
-                    self.file_complete_signal.emit(full_mega_url, False)
-                    continue
-                self.file_complete_signal.emit(full_mega_url, True)
+                if platform =='mega':
+
+                    if key :
+                        parsed_original_url =urlparse (full_mega_url )
+                        if key not in parsed_original_url .fragment :
+                            base_url_no_fragment =full_mega_url .split ('#')[0 ]
+                            full_mega_url_with_key =f"{base_url_no_fragment }#{key }"
+                            self .progress_signal .emit (f"   Adjusted Mega URL with key: {full_mega_url_with_key }")
+                        else :
+                            full_mega_url_with_key =full_mega_url 
+                    else :
+                        full_mega_url_with_key =full_mega_url 
+                    drive_download_mega_file (full_mega_url_with_key ,self .download_base_path ,logger_func =self .parent_logger_func )
+                elif platform =='google drive':
+                    download_gdrive_file (full_mega_url ,self .download_base_path ,logger_func =self .parent_logger_func )
+                elif platform =='dropbox':
+                    download_dropbox_file (full_mega_url ,self .download_base_path ,logger_func =self .parent_logger_func )
+                else :
+                    self .progress_signal .emit (f"⚠️ Unsupported platform '{platform }' for link: {full_mega_url }")
+                    self .file_complete_signal .emit (full_mega_url ,False )
+                    continue 
+                self .file_complete_signal .emit (full_mega_url ,True )
             except Exception as e :
-                self.progress_signal.emit(f"❌ Error downloading ({platform.upper()}) link '{full_mega_url}' (from post '{post_title}'): {e}")
-                self.file_complete_signal.emit(full_mega_url, False)
+                self .progress_signal .emit (f"❌ Error downloading ({platform .upper ()}) link '{full_mega_url }' (from post '{post_title }'): {e }")
+                self .file_complete_signal .emit (full_mega_url ,False )
         self .finished_signal .emit ()
 
     def cancel (self ):
@@ -2507,8 +2505,8 @@ class DownloaderApp (QWidget ):
         self .char_filter_scope =CHAR_SCOPE_TITLE 
         self .manga_filename_style =self .settings .value (MANGA_FILENAME_STYLE_KEY ,STYLE_POST_TITLE ,type =str )
         self .current_theme =self .settings .value (THEME_KEY ,"dark",type =str )
-        self .only_links_log_display_mode = LOG_DISPLAY_LINKS # New state variable       
-        self .mega_download_log_preserved_once = False
+        self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
+        self .mega_download_log_preserved_once =False 
         self .allow_multipart_download_setting =False 
         self .use_cookie_setting =False 
         self .scan_content_images_setting =self .settings .value (SCAN_CONTENT_IMAGES_KEY ,False ,type =bool )
@@ -2618,8 +2616,8 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'download_extracted_links_button'):
             self .download_extracted_links_button .clicked .connect (self ._show_download_extracted_links_dialog )
 
-        if hasattr(self, 'log_display_mode_toggle_button'):
-            self.log_display_mode_toggle_button.clicked.connect(self._toggle_log_display_mode)
+        if hasattr (self ,'log_display_mode_toggle_button'):
+            self .log_display_mode_toggle_button .clicked .connect (self ._toggle_log_display_mode )
 
         if self .manga_rename_toggle_button :self .manga_rename_toggle_button .clicked .connect (self ._toggle_manga_filename_style )
 
@@ -3441,12 +3439,12 @@ class DownloaderApp (QWidget ):
         self .download_extracted_links_button .setEnabled (False )
         self .download_extracted_links_button .setVisible (False )
         export_button_layout .addWidget (self .download_extracted_links_button )
-        self.log_display_mode_toggle_button = QPushButton("🔗 Links View")
-        self.log_display_mode_toggle_button.setToolTip("Toggle log display mode for 'Only Links'")
-        self.log_display_mode_toggle_button.setFixedWidth(120)
-        self.log_display_mode_toggle_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
-        self.log_display_mode_toggle_button.setVisible(False) # Initially hidden
-        export_button_layout.addWidget(self.log_display_mode_toggle_button)  
+        self .log_display_mode_toggle_button =QPushButton ("🔗 Links View")
+        self .log_display_mode_toggle_button .setToolTip ("Toggle log display mode for 'Only Links'")
+        self .log_display_mode_toggle_button .setFixedWidth (120 )
+        self .log_display_mode_toggle_button .setStyleSheet ("padding: 4px 8px; margin-top: 5px;")
+        self .log_display_mode_toggle_button .setVisible (False )
+        export_button_layout .addWidget (self .log_display_mode_toggle_button )
         right_layout .addLayout (export_button_layout )
 
 
@@ -3500,18 +3498,18 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'link_input'):
             self .last_link_input_text_for_queue_sync =self .link_input .text ()
 
-    def _update_download_extracted_links_button_state(self):
-        if hasattr(self, 'download_extracted_links_button') and self.download_extracted_links_button:
-            is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
-            if not is_only_links:
-                self.download_extracted_links_button.setEnabled(False)
-                return
+    def _update_download_extracted_links_button_state (self ):
+        if hasattr (self ,'download_extracted_links_button')and self .download_extracted_links_button :
+            is_only_links =self .radio_only_links and self .radio_only_links .isChecked ()
+            if not is_only_links :
+                self .download_extracted_links_button .setEnabled (False )
+                return 
 
-            supported_platforms_for_button = {'mega', 'google drive', 'dropbox'}
-            has_supported_links = any(
-                link_info[3].lower() in supported_platforms_for_button for link_info in self.extracted_links_cache
+            supported_platforms_for_button ={'mega','google drive','dropbox'}
+            has_supported_links =any (
+            link_info [3 ].lower ()in supported_platforms_for_button for link_info in self .extracted_links_cache 
             )
-            self.download_extracted_links_button.setEnabled(is_only_links and has_supported_links)
+            self .download_extracted_links_button .setEnabled (is_only_links and has_supported_links )
 
     def _show_download_extracted_links_dialog (self ):
         """Shows the placeholder dialog for downloading extracted links."""
@@ -3519,16 +3517,16 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit ("ℹ️ Download extracted links button clicked, but not in 'Only Links' mode.")
             return 
 
-        supported_platforms = {'mega', 'google drive', 'dropbox'}
+        supported_platforms ={'mega','google drive','dropbox'}
         links_to_show_in_dialog =[]
         for link_data_tuple in self .extracted_links_cache :
-            platform = link_data_tuple[3].lower()
-            if platform in supported_platforms:
-                links_to_show_in_dialog.append ({
+            platform =link_data_tuple [3 ].lower ()
+            if platform in supported_platforms :
+                links_to_show_in_dialog .append ({
                 'title':link_data_tuple [0 ],
                 'link_text':link_data_tuple [1 ],
                 'url':link_data_tuple [2 ],
-                'platform':platform,
+                'platform':platform ,
                 'key':link_data_tuple [4 ]
                 })
 
@@ -3536,34 +3534,33 @@ class DownloaderApp (QWidget ):
             QMessageBox .information (self ,"No Supported Links","No Mega, Google Drive, or Dropbox links were found in the extracted links.")
             return 
 
-        dialog = DownloadExtractedLinksDialog(links_to_show_in_dialog, self)
+        dialog =DownloadExtractedLinksDialog (links_to_show_in_dialog ,self )
         dialog .download_requested .connect (self ._handle_extracted_links_download_request )
         dialog .exec_ ()
 
-    def _handle_extracted_links_download_request(self, selected_links_info):
+    def _handle_extracted_links_download_request (self ,selected_links_info ):
         if not selected_links_info :
-            self.log_signal.emit("ℹ️ No links selected for download from dialog.")
+            self .log_signal .emit ("ℹ️ No links selected for download from dialog.")
             return 
 
-        # Preserve log logic (might need adjustment if GDrive/Dropbox have different log styles)
-        if self.radio_only_links and self.radio_only_links.isChecked() and \
-           self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
-            self.main_log_output.clear()
-            self.log_signal.emit("ℹ️ Displaying Mega download progress (extracted links hidden)...")
-            self.mega_download_log_preserved_once = False # Ensure no append logic triggers
+
+        if self .radio_only_links and self .radio_only_links .isChecked ()and self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
+            self .main_log_output .clear ()
+            self .log_signal .emit ("ℹ️ Displaying Mega download progress (extracted links hidden)...")
+            self .mega_download_log_preserved_once =False 
 
         current_main_dir =self .dir_input .text ().strip ()
         download_dir_for_mega =""
 
         if current_main_dir and os .path .isdir (current_main_dir ):
             download_dir_for_mega =current_main_dir 
-            self.log_signal.emit(f"ℹ️ Using existing main download location for external links: {download_dir_for_mega}")
+            self .log_signal .emit (f"ℹ️ Using existing main download location for external links: {download_dir_for_mega }")
         else :
             if not current_main_dir :
-                self.log_signal.emit("ℹ️ Main download location is empty. Prompting for download folder.")
+                self .log_signal .emit ("ℹ️ Main download location is empty. Prompting for download folder.")
             else :
-                self.log_signal.emit(
-                    f"⚠️ Main download location '{current_main_dir}' is not a valid directory. Prompting for download folder.")
+                self .log_signal .emit (
+                f"⚠️ Main download location '{current_main_dir }' is not a valid directory. Prompting for download folder.")
 
 
             suggestion_path =current_main_dir if current_main_dir else QStandardPaths .writableLocation (QStandardPaths .DownloadLocation )
@@ -3571,73 +3568,73 @@ class DownloaderApp (QWidget ):
             chosen_dir =QFileDialog .getExistingDirectory (
             self ,
             "Select Download Folder for Mega Links",
-                suggestion_path,
-                options=QFileDialog.ShowDirsOnly | QFileDialog.DontUseNativeDialog # Added DontUseNativeDialog for consistency
+            suggestion_path ,
+            options =QFileDialog .ShowDirsOnly |QFileDialog .DontUseNativeDialog 
             )
 
             if not chosen_dir :
-                self.log_signal.emit("ℹ️ External links download cancelled - no download directory selected from prompt.")
+                self .log_signal .emit ("ℹ️ External links download cancelled - no download directory selected from prompt.")
                 return 
             download_dir_for_mega =chosen_dir 
 
 
-        self.log_signal.emit(f"ℹ️ Preparing to download {len(selected_links_info)} selected external link(s) to: {download_dir_for_mega}")
+        self .log_signal .emit (f"ℹ️ Preparing to download {len (selected_links_info )} selected external link(s) to: {download_dir_for_mega }")
         if not os .path .exists (download_dir_for_mega ):
-            self.log_signal.emit(f"❌ Critical Error: Selected download directory '{download_dir_for_mega}' does not exist.")
+            self .log_signal .emit (f"❌ Critical Error: Selected download directory '{download_dir_for_mega }' does not exist.")
             return 
 
-        # selected_links_info already contains dicts with 'url', 'title', 'platform', 'key'
-        tasks_for_thread = selected_links_info
 
-        if self.external_link_download_thread and self.external_link_download_thread.isRunning():
-            QMessageBox.warning(self, "Busy", "Another external link download is already in progress.")
-            return
+        tasks_for_thread =selected_links_info 
 
-        self.external_link_download_thread = ExternalLinkDownloadThread(
-            tasks_for_thread,
-            download_dir_for_mega,
-            self.log_signal.emit,
-            self
+        if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
+            QMessageBox .warning (self ,"Busy","Another external link download is already in progress.")
+            return 
+
+        self .external_link_download_thread =ExternalLinkDownloadThread (
+        tasks_for_thread ,
+        download_dir_for_mega ,
+        self .log_signal .emit ,
+        self 
         )
-        self.external_link_download_thread.finished.connect(self._on_external_link_download_thread_finished)
-        # Connect progress_signal if ExternalLinkDownloadThread has it (it does)
-        self.external_link_download_thread.progress_signal.connect(self.handle_main_log)
-        self.external_link_download_thread.file_complete_signal.connect(self._on_single_external_file_complete)
+        self .external_link_download_thread .finished .connect (self ._on_external_link_download_thread_finished )
+
+        self .external_link_download_thread .progress_signal .connect (self .handle_main_log )
+        self .external_link_download_thread .file_complete_signal .connect (self ._on_single_external_file_complete )
 
 
 
         self .set_ui_enabled (False )
-        self.progress_label.setText(f"Downloading External Links (0/{len(tasks_for_thread)})...")
-        self.external_link_download_thread.start()
+        self .progress_label .setText (f"Downloading External Links (0/{len (tasks_for_thread )})...")
+        self .external_link_download_thread .start ()
 
-    def _on_external_link_download_thread_finished(self):
-        self.log_signal.emit("✅ External link download thread finished.")
-        self.progress_label.setText("External link downloads complete. Ready for new task.")
-        
-        self.mega_download_log_preserved_once = True # Mark that a mega download just finished
-        self.log_signal.emit("INTERNAL: mega_download_log_preserved_once SET to True.") # Debug
+    def _on_external_link_download_thread_finished (self ):
+        self .log_signal .emit ("✅ External link download thread finished.")
+        self .progress_label .setText ("External link downloads complete. Ready for new task.")
 
-        if self.radio_only_links and self.radio_only_links.isChecked():
-            self.log_signal.emit(HTML_PREFIX + "<br><hr>--- End of Mega Download Log ---<br>")
-            # The _filter_links_log will be called by set_ui_enabled -> _handle_filter_mode_change
-            # No need to call it directly here as it might interfere with the flag.
+        self .mega_download_log_preserved_once =True 
+        self .log_signal .emit ("INTERNAL: mega_download_log_preserved_once SET to True.")
 
-        self .set_ui_enabled (True ) # Enable UI after potential log update
+        if self .radio_only_links and self .radio_only_links .isChecked ():
+            self .log_signal .emit (HTML_PREFIX +"<br><hr>--- End of Mega Download Log ---<br>")
 
-        # Reset the flag AFTER the UI update cycle (triggered by set_ui_enabled) is complete.
-        # This ensures the flag protects the log content throughout the entire UI update.
-        if self.mega_download_log_preserved_once:
-            self.mega_download_log_preserved_once = False
-            self.log_signal.emit("INTERNAL: mega_download_log_preserved_once RESET to False.") # Debug
 
-        if self.external_link_download_thread:
-            self.external_link_download_thread.deleteLater()
-            self.external_link_download_thread = None
 
-    def _on_single_external_file_complete(self, url, success):
-        # This is a new slot to potentially update progress if needed per file
-        # For now, the thread's own progress_signal handles detailed logging.
-        pass
+        self .set_ui_enabled (True )
+
+
+
+        if self .mega_download_log_preserved_once :
+            self .mega_download_log_preserved_once =False 
+            self .log_signal .emit ("INTERNAL: mega_download_log_preserved_once RESET to False.")
+
+        if self .external_link_download_thread :
+            self .external_link_download_thread .deleteLater ()
+            self .external_link_download_thread =None 
+
+    def _on_single_external_file_complete (self ,url ,success ):
+
+
+        pass 
     def _show_future_settings_dialog (self ):
         """Shows the placeholder dialog for future settings."""
         dialog =FutureSettingsDialog (self )
@@ -3871,8 +3868,8 @@ class DownloaderApp (QWidget ):
         link_data =(post_title ,link_text ,link_url ,platform ,decryption_key )
         self .external_link_queue .append (link_data )
         if self .radio_only_links and self .radio_only_links .isChecked ():
-            self .extracted_links_cache .append (link_data ) # Keep for now, might be redundant with below
-            self ._update_download_extracted_links_button_state() # Update button if in mode
+            self .extracted_links_cache .append (link_data )
+            self ._update_download_extracted_links_button_state ()
 
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
         should_display_in_external_log =self .show_external_links and not is_only_links_mode 
@@ -3883,9 +3880,9 @@ class DownloaderApp (QWidget ):
                 QTimer .singleShot (0 ,self ._try_process_next_external_link )
             return 
 
-        # Always add to extracted_links_cache so it's available if user switches mode later
-        if link_data not in self.extracted_links_cache: # Avoid duplicates if already added above
-            self.extracted_links_cache.append(link_data)
+
+        if link_data not in self .extracted_links_cache :
+            self .extracted_links_cache .append (link_data )
 
     def _try_process_next_external_link (self ):
         if self ._is_processing_external_link_queue or not self .external_link_queue :
@@ -3916,9 +3913,9 @@ class DownloaderApp (QWidget ):
         post_title ,link_text ,link_url ,platform ,decryption_key =link_data 
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
 
-        max_link_text_len =50 # Consistent with _filter_links_log
+        max_link_text_len =50 
         display_text =(link_text [:max_link_text_len ].strip ()+"..."
-                        if len (link_text )>max_link_text_len else link_text .strip ())
+        if len (link_text )>max_link_text_len else link_text .strip ())
         formatted_link_info =f"{display_text } - {link_url } - {platform }"
 
         if decryption_key :
@@ -3929,13 +3926,13 @@ class DownloaderApp (QWidget ):
                 separator_html ="<br>"+"-"*45 +"<br>"
                 if self ._current_link_post_title is not None :
                     self .log_signal .emit (HTML_PREFIX +separator_html )
-                title_html =f'<b style="color: #87CEEB;">{html.escape(post_title)}</b><br>'
+                title_html =f'<b style="color: #87CEEB;">{html .escape (post_title )}</b><br>'
                 self .log_signal .emit (HTML_PREFIX +title_html )
                 self ._current_link_post_title =post_title 
-            # Emit plain text link info; handle_main_log will .append() it
-            self .log_signal .emit (formatted_link_info)
+
+            self .log_signal .emit (formatted_link_info )
         elif self .show_external_links :
-            separator ="-"*45 # This separator is for _append_to_external_log's internal use if it were to use it, not for HTML
+            separator ="-"*45 
             self ._append_to_external_log (formatted_link_info ,separator )
 
         self ._is_processing_external_link_queue =False 
@@ -4061,7 +4058,7 @@ class DownloaderApp (QWidget ):
 
         if hasattr (self ,'download_extracted_links_button')and self .download_extracted_links_button :
             self .download_extracted_links_button .setVisible (is_only_links )
-            self._update_download_extracted_links_button_state()
+            self ._update_download_extracted_links_button_state ()
 
         if self .download_btn :
             if is_only_links :
@@ -4105,20 +4102,19 @@ class DownloaderApp (QWidget ):
         if is_only_links :
             self .progress_log_label .setText ("📜 Extracted Links Log:")
             if self .external_log_output :self .external_log_output .hide ()
-            if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ]) # type: ignore
+            if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
 
-            # Conditional clear to preserve Mega download log in progress view
-            do_clear_log_in_filter_change = True
-            if self.mega_download_log_preserved_once and \
-               self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
-                do_clear_log_in_filter_change = False
-            
-            if self .main_log_output and do_clear_log_in_filter_change:
-                self.log_signal.emit("INTERNAL: _handle_filter_mode_change - About to clear log.") # Debug
+
+            do_clear_log_in_filter_change =True 
+            if self .mega_download_log_preserved_once and self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
+                do_clear_log_in_filter_change =False 
+
+            if self .main_log_output and do_clear_log_in_filter_change :
+                self .log_signal .emit ("INTERNAL: _handle_filter_mode_change - About to clear log.")
                 self .main_log_output .clear ()
-                self.log_signal.emit("INTERNAL: _handle_filter_mode_change - Log cleared by _handle_filter_mode_change.") # Debug
-            
-            if self.main_log_output: self.main_log_output.setMinimumHeight(0)
+                self .log_signal .emit ("INTERNAL: _handle_filter_mode_change - Log cleared by _handle_filter_mode_change.")
+
+            if self .main_log_output :self .main_log_output .setMinimumHeight (0 )
             self .log_signal .emit ("="*20 +" Mode changed to: Only Links "+"="*20 )
             self ._try_process_next_external_link ()
         elif is_only_archives :
@@ -4138,13 +4134,13 @@ class DownloaderApp (QWidget ):
             self .update_external_links_setting (self .external_links_checkbox .isChecked ()if self .external_links_checkbox else False )
             self .log_signal .emit (f"="*20 +f" Mode changed to: {filter_mode_text } "+"="*20 )
 
-        # Call _filter_links_log AFTER potential clear and other UI updates for "Only Links"
-        if is_only_links:
-            self._filter_links_log()
 
-        if hasattr(self, 'log_display_mode_toggle_button'):
-            self.log_display_mode_toggle_button.setVisible(is_only_links)
-            self._update_log_display_mode_button_text()
+        if is_only_links :
+            self ._filter_links_log ()
+
+        if hasattr (self ,'log_display_mode_toggle_button'):
+            self .log_display_mode_toggle_button .setVisible (is_only_links )
+            self ._update_log_display_mode_button_text ()
 
         subfolders_on =self .use_subfolders_checkbox .isChecked ()if self .use_subfolders_checkbox else False 
         manga_on =self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False 
@@ -4174,66 +4170,65 @@ class DownloaderApp (QWidget ):
 
         search_term =self .link_search_input .text ().lower ().strip ()if self .link_search_input else ""
 
-        if self.mega_download_log_preserved_once and \
-           self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
-            # Mega download just finished, in progress view. Preserve the log.
-            # Do nothing to the log content itself.
-            self.log_signal.emit("INTERNAL: _filter_links_log - Preserving Mega log (due to mega_download_log_preserved_once).")
-        elif self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
-            # This is when 'Progress View' is selected for the 'Only Links' log scope,
-            # AND a Mega download hasn't *just* finished (mega_download_log_preserved_once is False).
-            # We should clear the log and show the placeholder message.
-            self.log_signal.emit("INTERNAL: _filter_links_log - In Progress View. Clearing for placeholder.")
-            if self.main_log_output: self.main_log_output.clear()
-            self.log_signal.emit("INTERNAL: _filter_links_log - Cleared for progress placeholder.")
-            self.log_signal.emit("ℹ️ Switched to Mega download progress view. Extracted links are hidden.\n"
-                                 "   Perform a Mega download to see its progress here, or switch back to 🔗 view.")
-            self.log_signal.emit("INTERNAL: _filter_links_log - Placeholder message emitted.")
-    
-        else:  # self.only_links_log_display_mode == LOG_DISPLAY_LINKS
-            # In links view. Clear and show the (filtered) links.
-            self.log_signal.emit("INTERNAL: _filter_links_log - In links view branch. About to clear.") # Debug
-            if self.main_log_output: self.main_log_output.clear()
-            self.log_signal.emit("INTERNAL: _filter_links_log - Cleared for links view.") # Debug
-            
-            current_title_for_display = None
-            any_links_displayed_this_call = False
+        if self .mega_download_log_preserved_once and self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
+
+
+            self .log_signal .emit ("INTERNAL: _filter_links_log - Preserving Mega log (due to mega_download_log_preserved_once).")
+        elif self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
+
+
+
+            self .log_signal .emit ("INTERNAL: _filter_links_log - In Progress View. Clearing for placeholder.")
+            if self .main_log_output :self .main_log_output .clear ()
+            self .log_signal .emit ("INTERNAL: _filter_links_log - Cleared for progress placeholder.")
+            self .log_signal .emit ("ℹ️ Switched to Mega download progress view. Extracted links are hidden.\n"
+            "   Perform a Mega download to see its progress here, or switch back to 🔗 view.")
+            self .log_signal .emit ("INTERNAL: _filter_links_log - Placeholder message emitted.")
+
+        else :
+
+            self .log_signal .emit ("INTERNAL: _filter_links_log - In links view branch. About to clear.")
+            if self .main_log_output :self .main_log_output .clear ()
+            self .log_signal .emit ("INTERNAL: _filter_links_log - Cleared for links view.")
+
+            current_title_for_display =None 
+            any_links_displayed_this_call =False 
             separator_html ="<br>"+"-"*45 +"<br>"
 
-            for post_title, link_text, link_url, platform, decryption_key in self.extracted_links_cache:
-                matches_search = (not search_term or
-                                  search_term in link_text.lower() or
-                                  search_term in link_url.lower() or
-                                  search_term in platform.lower() or
-                                  (decryption_key and search_term in decryption_key.lower())) # type: ignore
-                if not matches_search:
-                    continue
-                
-                any_links_displayed_this_call = True
-                if post_title != current_title_for_display:
-                    if current_title_for_display is not None : # Add separator only if it's not the very first title
-                        if self.main_log_output: self.main_log_output.insertHtml(separator_html)
-                    
-                    title_html = f'<b style="color: #87CEEB;">{html.escape(post_title)}</b><br>'
+            for post_title ,link_text ,link_url ,platform ,decryption_key in self .extracted_links_cache :
+                matches_search =(not search_term or 
+                search_term in link_text .lower ()or 
+                search_term in link_url .lower ()or 
+                search_term in platform .lower ()or 
+                (decryption_key and search_term in decryption_key .lower ()))
+                if not matches_search :
+                    continue 
+
+                any_links_displayed_this_call =True 
+                if post_title !=current_title_for_display :
+                    if current_title_for_display is not None :
+                        if self .main_log_output :self .main_log_output .insertHtml (separator_html )
+
+                    title_html =f'<b style="color: #87CEEB;">{html .escape (post_title )}</b><br>'
                     if self .main_log_output :self .main_log_output .insertHtml (title_html )
-                    current_title_for_display = post_title
+                    current_title_for_display =post_title 
 
-                max_link_text_len = 50 
-                display_text = (link_text[:max_link_text_len].strip() + "..." if len(link_text) > max_link_text_len else link_text.strip())
-                # Construct plain text link line
-                plain_link_info_line = f"{display_text} - {link_url} - {platform}"
-                if decryption_key:
-                    plain_link_info_line += f" (Decryption Key: {decryption_key})"
+                max_link_text_len =50 
+                display_text =(link_text [:max_link_text_len ].strip ()+"..."if len (link_text )>max_link_text_len else link_text .strip ())
+
+                plain_link_info_line =f"{display_text } - {link_url } - {platform }"
+                if decryption_key :
+                    plain_link_info_line +=f" (Decryption Key: {decryption_key })"
                 if self .main_log_output :
-                    self.main_log_output.append(plain_link_info_line) # Appending plain text for default styling & spacing
+                    self .main_log_output .append (plain_link_info_line )
 
-            if any_links_displayed_this_call:
-                if self.main_log_output: self.main_log_output.append("") # Extra blank line at the end
-            elif not search_term and self.main_log_output: # No links in cache at all
-                 self.log_signal.emit("   (No links extracted yet or all filtered out in links view)")
+            if any_links_displayed_this_call :
+                if self .main_log_output :self .main_log_output .append ("")
+            elif not search_term and self .main_log_output :
+                 self .log_signal .emit ("   (No links extracted yet or all filtered out in links view)")
 
-        # self.mega_download_log_preserved_once is now reset in _on_mega_download_thread_finished
-        if self.main_log_output: self.main_log_output.verticalScrollBar().setValue(self.main_log_output.verticalScrollBar().maximum())
+
+        if self .main_log_output :self .main_log_output .verticalScrollBar ().setValue (self .main_log_output .verticalScrollBar ().maximum ())
 
 
     def _export_links_to_file (self ):
@@ -5982,7 +5977,7 @@ class DownloaderApp (QWidget ):
         self .favorite_download_queue .clear ()
         self .is_processing_favorites_queue =False 
 
-        self.only_links_log_display_mode = LOG_DISPLAY_LINKS # Reset on soft reset too
+        self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
 
         if hasattr (self ,'link_input'):
             if self .download_extracted_links_button :
@@ -6003,36 +5998,36 @@ class DownloaderApp (QWidget ):
 
         self .log_signal .emit ("✅ Soft UI reset complete. Preserved URL and Directory (if provided).")
 
-    def _update_log_display_mode_button_text(self):
-        if hasattr(self, 'log_display_mode_toggle_button'):
-            if self.only_links_log_display_mode == LOG_DISPLAY_LINKS:
-                self.log_display_mode_toggle_button.setText("🔗 Links View")
-                self.log_display_mode_toggle_button.setToolTip(
-                    "Current View: Extracted Links.\n"
-                    "After Mega download, Mega log is shown THEN links are appended.\n"
-                    "Click to switch to 'Download Progress View'."
+    def _update_log_display_mode_button_text (self ):
+        if hasattr (self ,'log_display_mode_toggle_button'):
+            if self .only_links_log_display_mode ==LOG_DISPLAY_LINKS :
+                self .log_display_mode_toggle_button .setText ("🔗 Links View")
+                self .log_display_mode_toggle_button .setToolTip (
+                "Current View: Extracted Links.\n"
+                "After Mega download, Mega log is shown THEN links are appended.\n"
+                "Click to switch to 'Download Progress View'."
                 )
-            else: # LOG_DISPLAY_DOWNLOAD_PROGRESS
-                self.log_display_mode_toggle_button.setText("⬇️ Progress View")
-                self.log_display_mode_toggle_button.setToolTip(
-                    "Current View: Mega Download Progress.\n"
-                    "After Mega download, ONLY Mega log is shown (links hidden).\n"
-                    "Click to switch to 'Extracted Links View'."
+            else :
+                self .log_display_mode_toggle_button .setText ("⬇️ Progress View")
+                self .log_display_mode_toggle_button .setToolTip (
+                "Current View: Mega Download Progress.\n"
+                "After Mega download, ONLY Mega log is shown (links hidden).\n"
+                "Click to switch to 'Extracted Links View'."
                 )
 
-    def _toggle_log_display_mode(self):
-        self.only_links_log_display_mode = LOG_DISPLAY_DOWNLOAD_PROGRESS if self.only_links_log_display_mode == LOG_DISPLAY_LINKS else LOG_DISPLAY_LINKS
-        self._update_log_display_mode_button_text()
-        self._filter_links_log() # Refresh the log based on the new mode
+    def _toggle_log_display_mode (self ):
+        self .only_links_log_display_mode =LOG_DISPLAY_DOWNLOAD_PROGRESS if self .only_links_log_display_mode ==LOG_DISPLAY_LINKS else LOG_DISPLAY_LINKS 
+        self ._update_log_display_mode_button_text ()
+        self ._filter_links_log ()
 
     def cancel_download_button_action (self ):
         if not self .cancel_btn .isEnabled ()and not self .cancellation_event .is_set ():self .log_signal .emit ("ℹ️ No active download to cancel or already cancelling.");return 
         self .log_signal .emit ("⚠️ Requesting cancellation of download process (soft reset)...")
 
-        if self .mega_download_thread and self .mega_download_thread .isRunning ():
+        if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
             self .log_signal .emit ("    Cancelling active External Link download thread...")
             self .external_link_download_thread .cancel ()
-        
+
         current_url =self .link_input .text ()
         current_dir =self .dir_input .text ()
 
@@ -6312,9 +6307,9 @@ class DownloaderApp (QWidget ):
             self .retry_thread_pool .shutdown (wait =True )
             self .retry_thread_pool =None 
 
-        if self.external_link_download_thread and not self.external_link_download_thread.isRunning():
-            self.external_link_download_thread.deleteLater()
-            self.external_link_download_thread = None
+        if self .external_link_download_thread and not self .external_link_download_thread .isRunning ():
+            self .external_link_download_thread .deleteLater ()
+            self .external_link_download_thread =None 
 
         self .active_retry_futures .clear ()
         self .active_retry_futures_map .clear ()
@@ -6369,7 +6364,7 @@ class DownloaderApp (QWidget ):
         self .already_logged_bold_key_terms .clear ()
         self .missed_key_terms_buffer .clear ()
         self .favorite_download_queue .clear ()
-        self .only_links_log_display_mode = LOG_DISPLAY_LINKS # Reset on full reset     
+        self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
         self .mega_download_log_preserved_once =False 
         self .permanently_failed_files_for_dialog .clear ()
         self .favorite_download_scope =FAVORITE_SCOPE_SELECTED_LOCATION 
@@ -6424,7 +6419,7 @@ class DownloaderApp (QWidget ):
         self .is_paused =False 
         self .missed_key_terms_buffer .clear ()
         if self .download_extracted_links_button :
-            self .only_links_log_display_mode = LOG_DISPLAY_LINKS        
+            self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
             self .mega_download_log_preserved_once =False 
             self .download_extracted_links_button .setEnabled (False )
 
