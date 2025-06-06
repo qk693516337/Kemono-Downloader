@@ -117,9 +117,13 @@ def parse_cookie_string(cookie_string):
                 if name: # Ensure name is not empty
                     cookies[name] = value
     return cookies if cookies else None
-def load_cookies_from_netscape_file(filepath, logger_func):
-    """Loads cookies from a Netscape-formatted cookies.txt file."""
+def load_cookies_from_netscape_file(filepath, logger_func, target_domain_filter=None): # Added target_domain_filter
+    """Loads cookies from a Netscape-formatted cookies.txt file.
+    If target_domain_filter is provided, only cookies for that domain (or its subdomains) are returned.
+    """
     cookies = {}
+    loaded_for_target_domain_count = 0
+    total_cookies_in_file = 0
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             for line_num, line in enumerate(f, 1):
@@ -127,13 +131,40 @@ def load_cookies_from_netscape_file(filepath, logger_func):
                 if not line or line.startswith('#'):
                     continue
                 parts = line.split('\t')
+                total_cookies_in_file +=1 # Count all valid lines
                 if len(parts) == 7:
+                    cookie_domain_from_file = parts[0] # e.g., ".kemono.su" or "kemono.su"
                     name = parts[5]
                     value = parts[6]
                     if name: # Ensure name is not empty
-                        cookies[name] = value
-        logger_func(f"   🍪 Loaded {len(cookies)} cookies from '{os.path.basename(filepath)}'.")
-        return cookies if cookies else None
+                        if target_domain_filter:
+                            # Standard cookie domain matching logic:
+                            # A cookie set for ".example.com" is valid for "example.com" and "www.example.com".
+                            # A cookie set for "example.com" is valid only for "example.com".
+                            host_to_match = target_domain_filter.lower()
+                            cookie_domain_norm = cookie_domain_from_file.lower()
+                            is_match = False
+                            if cookie_domain_norm.startswith('.'):
+                                # Cookie domain is like ".example.com"
+                                # Valid if host_to_match is "example.com" or "sub.example.com"
+                                # i.e., host_to_match equals cookie_domain_norm[1:] OR host_to_match ends with cookie_domain_norm
+                                if host_to_match == cookie_domain_norm[1:] or host_to_match.endswith(cookie_domain_norm):
+                                    is_match = True
+                            else:
+                                # Cookie domain is like "example.com"
+                                # Valid only if host_to_match is "example.com"
+                                if host_to_match == cookie_domain_norm:
+                                    is_match = True
+                            if is_match:
+                                cookies[name] = value
+                                loaded_for_target_domain_count += 1
+                        else: # No target_domain_filter, load all
+                            cookies[name] = value
+        if target_domain_filter:
+            logger_func(f"   🍪 Scanned {total_cookies_in_file} cookies in '{os.path.basename(filepath)}'. Loaded {loaded_for_target_domain_count} for domain '{target_domain_filter}'.")
+        else:
+            logger_func(f"   🍪 Loaded {len(cookies)} cookies from '{os.path.basename(filepath)}' (no domain filter).")
+        return cookies if cookies else None # Return None if empty, even if filtered
     except FileNotFoundError:
         logger_func(f"   🍪 Cookie file '{os.path.basename(filepath)}' not found at expected location.")
         return None
@@ -328,35 +359,73 @@ def extract_post_info(url_string):
     except Exception as e:
         print(f"Debug: Exception during extract_post_info for URL '{url_string}': {e}")
     return None, None, None
-def prepare_cookies_for_request(use_cookie_flag, cookie_text_input, selected_cookie_file_path, app_base_dir, logger_func):
+def prepare_cookies_for_request(use_cookie_flag, cookie_text_input, selected_cookie_file_path_from_ui, app_base_dir, logger_func, target_domain=None):
     """Prepares a cookie dictionary from text input or cookies.txt file."""
     if not use_cookie_flag:
         return None
-    if selected_cookie_file_path:
-        logger_func(f"   🍪 Attempting to load cookies from selected file: '{os.path.basename(selected_cookie_file_path)}'...")
-        cookies = load_cookies_from_netscape_file(selected_cookie_file_path, logger_func)
-        if cookies:
-            return cookies
-        else:
-            logger_func(f"   ⚠️ Failed to load cookies from selected file: '{os.path.basename(selected_cookie_file_path)}'. Trying other methods.")
-    if app_base_dir: # Only proceed if app_base_dir is available
-        default_cookies_path = os.path.join(app_base_dir, "cookies.txt")
-        if os.path.exists(default_cookies_path): # Only attempt if it exists
-            if not selected_cookie_file_path: # Log attempt only if we didn't just try a selected file
-                logger_func(f"   🍪 No specific file selected. Attempting to load default '{os.path.basename(default_cookies_path)}' from app directory...")
-            cookies = load_cookies_from_netscape_file(default_cookies_path, logger_func)
+
+    attempted_paths = set() # Keep track of paths we've tried to load to avoid redundant attempts/logs
+
+    # Attempt 1: UI-selected file, if relevant for the target_domain
+    if selected_cookie_file_path_from_ui:
+        basename_selected = os.path.basename(selected_cookie_file_path_from_ui)
+        is_relevant_selection = False
+        if target_domain: # If a specific domain is targeted
+            if basename_selected == f"{target_domain}_cookies.txt" or basename_selected == "cookies.txt":
+                is_relevant_selection = True
+        else: # No target_domain, so any selected file is considered relevant (e.g. for direct file downloads)
+            is_relevant_selection = True
+
+        if is_relevant_selection:
+            logger_func(f"   🍪 Attempting to load cookies from UI-selected file: '{basename_selected}' for domain '{target_domain or 'any'}'...")
+            norm_selected_path = os.path.normpath(selected_cookie_file_path_from_ui)
+            attempted_paths.add(norm_selected_path)
+            cookies = load_cookies_from_netscape_file(selected_cookie_file_path_from_ui, logger_func, target_domain_filter=target_domain)
             if cookies:
                 return cookies
-            elif not selected_cookie_file_path: # Log failure only if we tried default as primary file method
-                 logger_func(f"   ⚠️ Failed to load cookies from default file: '{os.path.basename(default_cookies_path)}'. Trying text input.")
+            else:
+                logger_func(f"   ⚠️ Failed to load cookies from UI-selected file: '{basename_selected}'.")
+        else:
+            logger_func(f"   ℹ️ UI-selected cookie file '{basename_selected}' is not specific to target domain '{target_domain}' or generic. Skipping it for this request, will try other sources.")
+
+    # Attempt 2: Domain-specific file in app_base_dir (e.g., <target_domain>_cookies.txt)
+    if app_base_dir and target_domain:
+        domain_specific_filename = f"{target_domain}_cookies.txt"
+        domain_specific_path = os.path.join(app_base_dir, domain_specific_filename)
+        norm_domain_specific_path = os.path.normpath(domain_specific_path)
+        if os.path.exists(domain_specific_path) and norm_domain_specific_path not in attempted_paths:
+            logger_func(f"   🍪 Attempting to load domain-specific cookies: '{domain_specific_filename}' for '{target_domain}' from app directory...")
+            attempted_paths.add(norm_domain_specific_path)
+            cookies = load_cookies_from_netscape_file(domain_specific_path, logger_func, target_domain_filter=target_domain)
+            if cookies:
+                return cookies
+            else:
+                logger_func(f"   ⚠️ Failed to load cookies from '{domain_specific_filename}' in app directory.")
+
+    # Attempt 3: Default cookies.txt in app_base_dir
+    if app_base_dir:
+        default_cookies_filename = "cookies.txt"
+        default_cookies_path = os.path.join(app_base_dir, default_cookies_filename)
+        norm_default_path = os.path.normpath(default_cookies_path)
+        if os.path.exists(default_cookies_path) and norm_default_path not in attempted_paths:
+            logger_func(f"   🍪 Attempting to load default '{default_cookies_filename}' from app directory for domain '{target_domain or 'any'}'...")
+            attempted_paths.add(norm_default_path)
+            cookies = load_cookies_from_netscape_file(default_cookies_path, logger_func, target_domain_filter=target_domain)
+            if cookies:
+                return cookies
+            else:
+                logger_func(f"   ⚠️ Failed to load cookies from default '{default_cookies_filename}' in app directory.")
+
+    # Attempt 4: UI text input
     if cookie_text_input:
-        logger_func("   🍪 Using cookies from UI text input (as file methods failed or were not applicable).")
+        logger_func(f"   🍪 Using cookies from UI text input for domain '{target_domain or 'any'}' (as file methods failed or were not applicable).")
         cookies = parse_cookie_string(cookie_text_input)
         if cookies:
             return cookies
         else:
             logger_func("   ⚠️ UI cookie text input was provided but was empty or invalid.")
-    logger_func("   🍪 Cookie usage enabled, but no valid cookies found from any source (selected file, default file, or text input).")
+
+    logger_func(f"   🍪 Cookie usage enabled for domain '{target_domain or 'any'}', but no valid cookies found from any source.")
     return None
 def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None):    
     if cancellation_event and cancellation_event.is_set(): # type: ignore
@@ -442,7 +511,7 @@ def download_from_api(api_url_input, logger=print, start_page=None, end_page=Non
         api_domain = "kemono.su" # Default domain if input is unusual
     cookies_for_api = None
     if use_cookie and app_base_dir: # app_base_dir is needed for cookies.txt path
-        cookies_for_api = prepare_cookies_for_request(use_cookie, cookie_text, selected_cookie_file, app_base_dir, logger)
+        cookies_for_api = prepare_cookies_for_request(use_cookie, cookie_text, selected_cookie_file, app_base_dir, logger, target_domain=api_domain)
     if target_post_id:
         direct_post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{target_post_id}"
         logger(f"   Attempting direct fetch for target post: {direct_post_api_url}")
@@ -781,7 +850,7 @@ class PostProcessorWorker:
         if self.use_cookie: # This flag comes from the checkbox
             # self.logger(f"   [DSF_DEBUG] Preparing cookies...")
             cookies_to_use_for_file = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger)
-            # self.logger(f"   [DSF_DEBUG] Cookies prepared.")
+            # self.logger(f"   [DSF_DEBUG] Cookies prepared for file download (target_domain not applicable here as it's for API auth, not direct file links).")
 
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
         # self.logger(f"   [DSF_DEBUG] API original filename: '{api_original_filename}'")

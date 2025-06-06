@@ -876,12 +876,20 @@ class FavoriteArtistsDialog(QDialog):
 
         self.setWindowTitle("Favorite Artists")
         self.setModal(True) # type: ignore
-        self.setMinimumSize(500, 500) # Reduced minimum height
+        self.setMinimumSize(500, 500) 
         if hasattr(self.parent_app, 'get_dark_theme'):
             self.setStyleSheet(self.parent_app.get_dark_theme())
 
         self._init_ui()
         self._fetch_favorite_artists()
+
+    def _get_domain_for_service(self, service_name):
+        service_lower = service_name.lower()
+        coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans'}
+        if service_lower in coomer_primary_services:
+            return "coomer.su"
+        else: # For patreon, fanbox, pixiv, etc., default to kemono.su
+            return "kemono.su"
 
     def _init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -908,7 +916,7 @@ class FavoriteArtistsDialog(QDialog):
         self.search_input.setVisible(False)
         self.artist_list_widget.setVisible(False)
 
-        self.status_label.setText("⏳ Loading favorite artists...") # Initial loading message
+        self.status_label.setText("⏳ Loading favorite artists...") 
         self.status_label.setAlignment(Qt.AlignCenter)
         combined_buttons_layout = QHBoxLayout()
 
@@ -948,76 +956,121 @@ class FavoriteArtistsDialog(QDialog):
         self.artist_list_widget.setVisible(show)
 
     def _fetch_favorite_artists(self):
-        fav_url = "https://kemono.su/api/v1/account/favorites?type=artist"
-        self._logger(f"Attempting to fetch favorite artists from: {fav_url}")
+        kemono_fav_url = "https://kemono.su/api/v1/account/favorites?type=artist"
+        coomer_fav_url = "https://coomer.su/api/v1/account/favorites?type=artist"
+        
+        self.all_fetched_artists = []
+        fetched_any_successfully = False
+        errors_occurred = []
+        any_cookies_loaded_successfully_for_any_source = False # New flag
 
-        cookies_dict = prepare_cookies_for_request(
-            self.cookies_config['use_cookie'],
-            self.cookies_config['cookie_text'],
-            self.cookies_config['selected_cookie_file'],
-            self.cookies_config['app_base_dir'],
-            self._logger
-        )
-        if self.cookies_config['use_cookie'] and not cookies_dict:
-            self.status_label.setText("Error: Cookies enabled but could not be loaded. Cannot fetch favorites.")
-            self._show_content_elements(False)
-            self._logger("Error: Cookies enabled but could not be loaded. Showing help dialog.")
-            
+        api_sources = [
+            {"name": "Kemono.su", "url": kemono_fav_url, "domain": "kemono.su"},
+            {"name": "Coomer.su", "url": coomer_fav_url, "domain": "coomer.su"}
+        ]
+
+        for source in api_sources:
+            self._logger(f"Attempting to fetch favorite artists from: {source['name']} ({source['url']})")
+            self.status_label.setText(f"⏳ Loading favorites from {source['name']}...")
+            QCoreApplication.processEvents() # Update UI
+
+            cookies_dict_for_source = None
+            if self.cookies_config['use_cookie']:
+                cookies_dict_for_source = prepare_cookies_for_request(
+                    True, # use_cookie_flag
+                    self.cookies_config['cookie_text'], # cookie_text_input
+                    self.cookies_config['selected_cookie_file'], # selected_cookie_file_path_from_ui
+                    self.cookies_config['app_base_dir'], # app_base_dir
+                    self._logger, # logger_func
+                    target_domain=source['domain'] # target_domain
+                )
+                if cookies_dict_for_source:
+                    any_cookies_loaded_successfully_for_any_source = True
+                else:
+                    self._logger(f"Warning ({source['name']}): Cookies enabled but could not be loaded for this domain. Fetch might fail if cookies are required.")
+            try:
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                response = requests.get(source['url'], headers=headers, cookies=cookies_dict_for_source, timeout=20)
+                response.raise_for_status()
+                artists_data_from_api = response.json()
+
+                if not isinstance(artists_data_from_api, list):
+                    error_msg = f"Error ({source['name']}): API did not return a list of artists (got {type(artists_data_from_api)})."
+                    self._logger(error_msg)
+                    errors_occurred.append(error_msg)
+                    continue
+
+                processed_artists_from_source = 0
+                for artist_entry in artists_data_from_api:
+                    artist_id = artist_entry.get("id")
+                    artist_name = html.unescape(artist_entry.get("name", "Unknown Artist").strip())
+                    artist_service_platform = artist_entry.get("service") # e.g., "patreon", "onlyfans"
+
+                    if artist_id and artist_name and artist_service_platform:
+                        artist_page_domain = self._get_domain_for_service(artist_service_platform)
+                        full_url = f"https://{artist_page_domain}/{artist_service_platform}/user/{artist_id}"
+                        
+                        self.all_fetched_artists.append({
+                            'name': artist_name, 
+                            'url': full_url, 
+                            'service': artist_service_platform,
+                            'id': artist_id, 
+                            '_source_api': source['name'] 
+                        })
+                        processed_artists_from_source += 1
+                    else:
+                        self._logger(f"Warning ({source['name']}): Skipping favorite artist entry due to missing data: {artist_entry}")
+                
+                if processed_artists_from_source > 0:
+                    fetched_any_successfully = True
+                self._logger(f"Fetched {processed_artists_from_source} artists from {source['name']}.")
+
+            except requests.exceptions.RequestException as e:
+                error_msg = f"Error fetching favorites from {source['name']}: {e}"
+                self._logger(error_msg)
+                errors_occurred.append(error_msg)
+            except Exception as e:
+                error_msg = f"An unexpected error occurred with {source['name']}: {e}"
+                self._logger(error_msg)
+                errors_occurred.append(error_msg)
+        
+        # Check if cookies were enabled but none loaded for any source
+        if self.cookies_config['use_cookie'] and not any_cookies_loaded_successfully_for_any_source:
+            self.status_label.setText("Error: Cookies enabled but could not be loaded for any source.")
+            self._logger("Error: Cookies enabled but no cookies loaded for any source. Showing help dialog.")
             cookie_help_dialog = CookieHelpDialog(self)
             cookie_help_dialog.exec_()
-            
             self.download_button.setEnabled(False)
-            return
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(fav_url, headers=headers, cookies=cookies_dict, timeout=20)
-            response.raise_for_status()
+            if not fetched_any_successfully: # Add to errors if this was the sole reason for failure
+                 errors_occurred.append("Cookies enabled but could not be loaded for any API source.")
+        
+        unique_artists_map = {}
+        for artist in self.all_fetched_artists:
+            key = (artist['service'].lower(), str(artist['id']).lower())
+            if key not in unique_artists_map:
+                unique_artists_map[key] = artist
+        self.all_fetched_artists = list(unique_artists_map.values())
 
-            artists_data = response.json()
+        self.all_fetched_artists.sort(key=lambda x: x['name'].lower())
+        self._populate_artist_list_widget()
 
-            if not isinstance(artists_data, list):
-                self.status_label.setText("Error: API did not return a list of artists.")
-                self._show_content_elements(False)
-                self._logger(f"Error: Expected a list from API, got {type(artists_data)}")
-                QMessageBox.critical(self, "API Error", "The favorite artists API did not return the expected data format (list).")
-                return
-
-            self.all_fetched_artists = []
-            for artist_entry in artists_data:
-                artist_id = artist_entry.get("id")
-                artist_name = html.unescape(artist_entry.get("name", "Unknown Artist").strip())
-                artist_service = artist_entry.get("service")
-
-                if artist_id and artist_name and artist_service:
-                    full_url = f"https://kemono.su/{artist_service}/user/{artist_id}"
-                    self.all_fetched_artists.append({'name': artist_name, 'url': full_url, 'service': artist_service})
-                else:
-                    self._logger(f"Warning: Skipping favorite artist entry due to missing data: {artist_entry}")
-
-            self.all_fetched_artists.sort(key=lambda x: x['name'].lower())
-            self._populate_artist_list_widget()
-
-            if self.all_fetched_artists:
-                self.status_label.setText(f"Found {len(self.all_fetched_artists)} favorite artist(s).")
-                self._show_content_elements(True)
-                self.download_button.setEnabled(True)
-            else:
-                self.status_label.setText("No favorite artists found.")
-                self._show_content_elements(False)
-                self.download_button.setEnabled(False)
-
-        except requests.exceptions.RequestException as e:
-            self.status_label.setText(f"Error fetching favorites: {e}")
+        if fetched_any_successfully and self.all_fetched_artists:
+            self.status_label.setText(f"Found {len(self.all_fetched_artists)} total favorite artist(s).")
+            self._show_content_elements(True)
+            self.download_button.setEnabled(True)
+        elif not fetched_any_successfully and not errors_occurred:
+             self.status_label.setText("No favorite artists found on Kemono.su or Coomer.su.")
+             self._show_content_elements(False)
+             self.download_button.setEnabled(False)
+        else: 
+            final_error_message = "Failed to fetch favorites."
+            if errors_occurred:
+                final_error_message += " Errors: " + "; ".join(errors_occurred)
+            self.status_label.setText(final_error_message)
             self._show_content_elements(False)
-            self._logger(f"Error fetching favorites: {e}")
-            QMessageBox.critical(self, "Fetch Error", f"Could not fetch favorite artists: {e}")
             self.download_button.setEnabled(False)
-        except Exception as e:
-            self.status_label.setText(f"An unexpected error occurred: {e}")
-            self._show_content_elements(False)
-            self._logger(f"Unexpected error: {e}")
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
-            self.download_button.setEnabled(False)
+            if fetched_any_successfully and not self.all_fetched_artists: 
+                 self.status_label.setText("No favorite artists found after processing.")
 
     def _populate_artist_list_widget(self, artists_to_display=None):
         self.artist_list_widget.clear()
@@ -1070,64 +1123,146 @@ class FavoritePostsFetcherThread(QThread):
     progress_bar_update = pyqtSignal(int, int) # value, maximum
     finished = pyqtSignal(list, str) # list of posts, error message (or None)
 
-    def __init__(self, cookies_config, parent_logger_func): # Removed parent_get_domain_func
+    def __init__(self, cookies_config, parent_logger_func, target_domain_preference=None):
         super().__init__()
         self.cookies_config = cookies_config
         self.parent_logger_func = parent_logger_func
+        self.target_domain_preference = target_domain_preference
         self.cancellation_event = threading.Event()
 
     def _logger(self, message):
         self.parent_logger_func(f"[FavPostsFetcherThread] {message}")
 
     def run(self):
-        fav_url = "https://kemono.su/api/v1/account/favorites?type=post"
-        self._logger(f"Attempting to fetch favorite posts from: {fav_url}")
+        kemono_fav_posts_url = "https://kemono.su/api/v1/account/favorites?type=post"
+        coomer_fav_posts_url = "https://coomer.su/api/v1/account/favorites?type=post"
+        
+        all_fetched_posts_temp = []
+        errors_occurred = []
+        fetched_any_successfully = False
+        any_cookies_loaded_successfully_for_any_source = False # New flag
+
         self.status_update.emit("Fetching list of favorite posts...")
         self.progress_bar_update.emit(0, 0) # Indeterminate state for initial fetch
 
-        cookies_dict = prepare_cookies_for_request(
-            self.cookies_config['use_cookie'],
-            self.cookies_config['cookie_text'],
-            self.cookies_config['selected_cookie_file'],
-            self.cookies_config['app_base_dir'],
-            self._logger
-        )
+        api_sources = [
+            {"name": "Kemono.su", "url": kemono_fav_posts_url, "domain": "kemono.su"},
+            {"name": "Coomer.su", "url": coomer_fav_posts_url, "domain": "coomer.su"}
+        ]
 
-        if self.cookies_config['use_cookie'] and not cookies_dict:
-            self.finished.emit([], "COOKIES_REQUIRED_BUT_NOT_FOUND")
+        api_sources_to_try = []
+        if self.target_domain_preference:
+            self._logger(f"Targeting specific domain for favorites: {self.target_domain_preference}")
+            for source_def in api_sources:
+                if source_def["domain"] == self.target_domain_preference:
+                    api_sources_to_try.append(source_def)
+                    break
+            if not api_sources_to_try: # Should not happen if preference is valid
+                self._logger(f"Warning: Preferred domain '{self.target_domain_preference}' not a recognized API source. Fetching from all.")
+                api_sources_to_try = api_sources
+        else: # No preference, try all (or if both cookies were available)
+            self._logger("No specific domain preference, or both domains have cookies. Will attempt to fetch from all sources.")
+            api_sources_to_try = api_sources
+
+        for source in api_sources_to_try:
+            if self.cancellation_event.is_set():
+                self.finished.emit([], "Cancelled by user during fetch.")
+                return
+            cookies_dict_for_source = None
+            if self.cookies_config['use_cookie']:
+                cookies_dict_for_source = prepare_cookies_for_request(
+                    True, # use_cookie_flag
+                    self.cookies_config['cookie_text'], # cookie_text_input
+                    self.cookies_config['selected_cookie_file'], # selected_cookie_file_path_from_ui
+                    self.cookies_config['app_base_dir'], # app_base_dir
+                    self._logger, # logger_func
+                    target_domain=source['domain'] # target_domain
+                )
+                if cookies_dict_for_source:
+                    any_cookies_loaded_successfully_for_any_source = True
+                else:
+                    self._logger(f"Warning ({source['name']}): Cookies enabled but could not be loaded for this domain. Fetch might fail if cookies are required.")
+
+            self._logger(f"Attempting to fetch favorite posts from: {source['name']} ({source['url']})")
+            self.status_update.emit(f"Fetching favorites from {source['name']}...")
+            QCoreApplication.processEvents()
+
+            try:
+                headers = {'User-Agent': 'Mozilla/5.0'}
+                response = requests.get(source['url'], headers=headers, cookies=cookies_dict_for_source, timeout=20)
+                response.raise_for_status()
+                posts_data_from_api = response.json()
+
+                if not isinstance(posts_data_from_api, list):
+                    error_msg = f"Error ({source['name']}): API did not return a list of posts (got {type(posts_data_from_api)})."
+                    self._logger(error_msg)
+                    errors_occurred.append(error_msg)
+                    continue
+                
+                processed_posts_from_source = 0
+                for post_entry in posts_data_from_api:
+                    post_id = post_entry.get("id")
+                    post_title = html.unescape(post_entry.get("title", "Untitled Post").strip())
+                    service = post_entry.get("service") 
+                    creator_id = post_entry.get("user")
+                    added_date_str = post_entry.get("added", post_entry.get("published", ""))
+
+                    if post_id and post_title and service and creator_id:
+                        all_fetched_posts_temp.append({
+                            'post_id': post_id, 'title': post_title, 'service': service,
+                            'creator_id': creator_id, 'added_date': added_date_str,
+                            '_source_api': source['name'] 
+                        })
+                        processed_posts_from_source +=1
+                    else:
+                        self._logger(f"Warning ({source['name']}): Skipping favorite post entry due to missing data: {post_entry}")
+                
+                if processed_posts_from_source > 0:
+                    fetched_any_successfully = True
+                self._logger(f"Fetched {processed_posts_from_source} posts from {source['name']}.")
+
+            except requests.exceptions.RequestException as e:
+                error_msg = f"Error fetching favorite posts from {source['name']}: {e}"
+                self._logger(error_msg)
+                errors_occurred.append(error_msg)
+            except Exception as e:
+                error_msg = f"An unexpected error occurred with {source['name']}: {e}"
+                self._logger(error_msg)
+                errors_occurred.append(error_msg)
+
+        if self.cancellation_event.is_set():
+            self.finished.emit([], "Cancelled by user after fetch attempts.")
+            return
+        
+        # Check if cookies were globally enabled but none loaded for any source
+        if self.cookies_config['use_cookie'] and not any_cookies_loaded_successfully_for_any_source:
+            # If a specific domain was targeted and its cookies failed to load, this is also an issue.
+            if self.target_domain_preference and not any_cookies_loaded_successfully_for_any_source:
+                 self.finished.emit([], f"COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_{self.target_domain_preference.upper()}")
+                 return
+            # General case: cookies enabled, but none loaded for any attempted source.
+            self.finished.emit([], "COOKIES_REQUIRED_BUT_NOT_FOUND") # Use existing error code
             return
 
-        try:
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(fav_url, headers=headers, cookies=cookies_dict, timeout=20)
-            response.raise_for_status()
-            posts_data_from_api = response.json()
-
-            if not isinstance(posts_data_from_api, list):
-                self.finished.emit([], f"Error: API did not return a list of posts (got {type(posts_data_from_api)}).")
-                return
-            all_fetched_posts_temp = []
-            for post_entry in posts_data_from_api:
-                post_id = post_entry.get("id")
-                post_title = html.unescape(post_entry.get("title", "Untitled Post").strip())
-                service = post_entry.get("service")
-                creator_id = post_entry.get("user")
-                added_date_str = post_entry.get("added", post_entry.get("published", ""))
-
-                if post_id and post_title and service and creator_id:
-                    all_fetched_posts_temp.append({
-                        'post_id': post_id, 'title': post_title, 'service': service,
-                        'creator_id': creator_id, 'added_date': added_date_str
-                    })
-                else:
-                    self._logger(f"Warning: Skipping favorite post entry due to missing data: {post_entry}")
-            all_fetched_posts_temp.sort(key=lambda x: (x.get('service','').lower(), x.get('creator_id','').lower(), (x.get('added_date') or '')), reverse=False)
+        unique_posts_map = {}
+        for post in all_fetched_posts_temp:
+            key = (post['service'].lower(), str(post['creator_id']).lower(), str(post['post_id']).lower())
+            if key not in unique_posts_map:
+                unique_posts_map[key] = post
+        all_fetched_posts_temp = list(unique_posts_map.values())
+        
+        all_fetched_posts_temp.sort(key=lambda x: (x.get('_source_api','').lower(), x.get('service','').lower(), str(x.get('creator_id','')).lower(), (x.get('added_date') or '')), reverse=False)
+        
+        if errors_occurred:
+            error_summary = "; ".join(errors_occurred)
+            if not fetched_any_successfully: # All attempted sources failed
+                self.finished.emit([], f"Failed to fetch favorites. Errors: {error_summary}")
+            else: # Some succeeded, some failed (only relevant if multiple sources were tried)
+                 self.finished.emit(all_fetched_posts_temp, f"Fetched some favorites, but errors occurred with other sources: {error_summary}")
+        elif not all_fetched_posts_temp and not fetched_any_successfully and not self.target_domain_preference: # No specific target, tried all, found nothing, no errors
+            self.finished.emit([], "No favorite posts found on any platform.")
+        else: 
             self.finished.emit(all_fetched_posts_temp, None)
-
-        except requests.exceptions.RequestException as e:
-            self.finished.emit([], f"Error fetching favorite posts: {e}")
-        except Exception as e:
-            self.finished.emit([], f"An unexpected error occurred: {e}")
 
 class PostListItemWidget(QWidget):
     """Custom widget for displaying a single post in the FavoritePostsDialog list."""
@@ -1171,13 +1306,14 @@ class PostListItemWidget(QWidget):
 
 class FavoritePostsDialog(QDialog):
     """Dialog to display and select favorite posts."""
-    def __init__(self, parent_app, cookies_config, known_names_list_ref):
+    def __init__(self, parent_app, cookies_config, known_names_list_ref, target_domain_preference=None):
         super().__init__(parent_app)
         self.parent_app = parent_app
         self.cookies_config = cookies_config
         self.all_fetched_posts = []
         self.selected_posts_data = []
         self.known_names_list_ref = known_names_list_ref # Store reference to global KNOWN_NAMES
+        self.target_domain_preference_for_this_fetch = target_domain_preference # Store the preference
         self.creator_name_cache = {} # To store (service, id) -> name
         self.displayable_grouped_posts = {} # For storing posts grouped by artist
         self.fetcher_thread = None # For the worker thread
@@ -1292,7 +1428,8 @@ class FavoritePostsDialog(QDialog):
         
         self.fetcher_thread = FavoritePostsFetcherThread(
             self.cookies_config, 
-            self.parent_app.log_signal.emit, # Pass parent's logger
+            self.parent_app.log_signal.emit, # Pass parent's logger,
+            target_domain_preference=self.target_domain_preference_for_this_fetch # Pass the preference
         ) # Removed _get_domain_for_service
         self.fetcher_thread.status_update.connect(self.status_label.setText)
         self.fetcher_thread.finished.connect(self._on_fetch_completed)
@@ -1310,16 +1447,34 @@ class FavoritePostsDialog(QDialog):
 
     def _on_fetch_completed(self, fetched_posts_list, error_msg):
         if error_msg:
-            if error_msg == "COOKIES_REQUIRED_BUT_NOT_FOUND":
+            specific_domain_msg_part = ""
+            if self.target_domain_preference_for_this_fetch:
+                specific_domain_msg_part = f" for {self.target_domain_preference_for_this_fetch}"
+
+            if error_msg.startswith("COOKIES_REQUIRED_BUT_NOT_FOUND"):
                 self.status_label.setText("Error: Cookies are required for favorite posts but could not be loaded.")
-                self._logger("Error: Cookies required for favorite posts but not found. Showing help dialog.")
+                self._logger(f"Error: Cookies required for favorite posts{specific_domain_msg_part} but not found. Showing help dialog.")
                 cookie_help_dialog = CookieHelpDialog(self)
                 cookie_help_dialog.exec_()
                 self.download_button.setEnabled(False) # Ensure it's disabled
-            else:
+            elif "401" in error_msg and ("UNAUTHORIZED" in error_msg.upper() or "Client Error" in error_msg):
+                self.status_label.setText("Error: Authorization failed. Check your cookies.")
+                self._logger(f"Error: 401 Unauthorized fetching favorites{specific_domain_msg_part}. Suggesting cookie check.")
+                QMessageBox.warning(self, "Authorization Failed (401)",
+                                    f"Could not fetch favorites{specific_domain_msg_part} due to an authorization error:\n\n{error_msg}\n\n"
+                                    "This usually means your cookies are missing, invalid, or expired for the site. Please check your cookie setup.")
+                cookie_help_dialog = CookieHelpDialog(self) # Offer help for 401 as well
+                cookie_help_dialog.exec_()
+                self.download_button.setEnabled(False) # Ensure it's disabled
+            else: # General error
                 self.status_label.setText(error_msg)
                 self._logger(error_msg) # Log to main app log
-                QMessageBox.critical(self, "Fetch Error", error_msg)
+                if self.target_domain_preference_for_this_fetch:
+                    QMessageBox.critical(self, "Fetch Error",
+                                         f"Error fetching favorites from {self.target_domain_preference_for_this_fetch}:\n\n{error_msg}")
+                else:
+                    QMessageBox.critical(self, "Fetch Error", error_msg)
+
             self.download_button.setEnabled(False) # Ensure it's disabled on any error
             self.progress_bar.setVisible(False) # Hide progress bar on error
             return
@@ -3139,6 +3294,20 @@ class DownloaderApp(QWidget):
         self._update_favorite_scope_button_text() # Set initial text for fav scope button
         if hasattr(self, 'link_input'): # Initialize last_link_input_text_for_queue_sync
             self.last_link_input_text_for_queue_sync = self.link_input.text()
+
+    # Add this helper method
+    def _get_domain_for_service(self, service_name):
+        """Determines the base domain for a given service platform."""
+        service_lower = service_name.lower()
+        # Services typically found on Coomer
+        coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans'}
+        # Add other services that are primarily hosted/namespaced under coomer.su
+        # For example, if coomer.su mirrors patreon posts under coomer.su/patreon, then 'patreon' might also map to coomer.su
+        # However, for constructing canonical URLs, 'patreon' should generally map to kemono.su.
+        if service_lower in coomer_primary_services:
+            return "coomer.su"
+        else: # For patreon, fanbox, pixiv, etc., default to kemono.su
+            return "kemono.su"
 
     def _show_future_settings_dialog(self):
         """Shows the placeholder dialog for future settings."""
@@ -6431,27 +6600,59 @@ class DownloaderApp(QWidget):
             'app_base_dir': self.app_base_dir
         }
         global KNOWN_NAMES # Ensure we have access to the global
+
+        target_domain_preference_for_fetch = None # Default to fetch all
+
         if cookies_config['use_cookie']:
-            temp_cookies_for_check = prepare_cookies_for_request(
+            self.log_signal.emit("Favorite Posts: 'Use Cookie' is checked. Determining target domain...")
+            kemono_cookies = prepare_cookies_for_request(
                 cookies_config['use_cookie'],
                 cookies_config['cookie_text'],
                 cookies_config['selected_cookie_file'],
                 cookies_config['app_base_dir'],
-                lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}")
+                lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check - Kemono] {msg}"),
+                target_domain="kemono.su"
             )
-            if temp_cookies_for_check is None:
+            coomer_cookies = prepare_cookies_for_request(
+                cookies_config['use_cookie'],
+                cookies_config['cookie_text'],
+                cookies_config['selected_cookie_file'],
+                cookies_config['app_base_dir'],
+                lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check - Coomer] {msg}"),
+                target_domain="coomer.su"
+            )
+
+            kemono_ok = bool(kemono_cookies)
+            coomer_ok = bool(coomer_cookies)
+
+            if kemono_ok and not coomer_ok:
+                target_domain_preference_for_fetch = "kemono.su"
+                self.log_signal.emit("  ↳ Only Kemono.su cookies loaded. Will fetch favorites from Kemono.su only.")
+            elif coomer_ok and not kemono_ok:
+                target_domain_preference_for_fetch = "coomer.su"
+                self.log_signal.emit("  ↳ Only Coomer.su cookies loaded. Will fetch favorites from Coomer.su only.")
+            elif kemono_ok and coomer_ok:
+                target_domain_preference_for_fetch = None # Both available, fetch all
+                self.log_signal.emit("  ↳ Cookies for both Kemono.su and Coomer.su loaded. Will attempt to fetch from both.")
+            else: # Neither loaded
+                self.log_signal.emit("  ↳ No valid cookies loaded for Kemono.su or Coomer.su.")
                 cookie_help_dialog = CookieHelpDialog(self)
                 cookie_help_dialog.exec_()
                 return # Don't proceed to show FavoritePostsDialog if cookies are needed but not found
+        else: # 'Use Cookie' is not checked
+            self.log_signal.emit("Favorite Posts: 'Use Cookie' is NOT checked. Cookies are required.")
+            cookie_help_dialog = CookieHelpDialog(self)
+            cookie_help_dialog.exec_()
+            return
 
-        dialog = FavoritePostsDialog(self, cookies_config, KNOWN_NAMES) # Pass KNOWN_NAMES
+        dialog = FavoritePostsDialog(self, cookies_config, KNOWN_NAMES, target_domain_preference_for_fetch)
         if dialog.exec_() == QDialog.Accepted:
             selected_posts = dialog.get_selected_posts()
             if selected_posts:
                 self.log_signal.emit(f"ℹ️ Queuing {len(selected_posts)} favorite post(s) for download.")
                 for post_data in selected_posts:
-                    domain = "kemono.su" # Or determine from service/parent app settings
-                    direct_post_url = f"https://{domain}/{post_data['service']}/user/{post_data['creator_id']}/post/{post_data['post_id']}"
+                    domain = self._get_domain_for_service(post_data['service'])
+                    direct_post_url = f"https://{domain}/{post_data['service']}/user/{str(post_data['creator_id'])}/post/{str(post_data['post_id'])}"
                     
                     queue_item = {
                         'url': direct_post_url,
