@@ -61,7 +61,7 @@ try :
     STYLE_DATE_BASED ,
     STYLE_POST_TITLE_GLOBAL_NUMBERING ,
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS ,
-    drive_download_mega_file, # Use the aliased import from drive.py
+    download_mega_file as drive_download_mega_file, 
     download_gdrive_file,
     download_dropbox_file
     )
