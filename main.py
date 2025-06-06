@@ -61,8 +61,9 @@ try :
     STYLE_DATE_BASED ,
     STYLE_POST_TITLE_GLOBAL_NUMBERING ,
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS ,
-    download_mega_file 
-
+    drive_download_mega_file, # Use the aliased import from drive.py
+    download_gdrive_file,
+    download_dropbox_file
     )
     print ("Successfully imported names from downloader_utils.")
 except ImportError as e :
@@ -96,7 +97,9 @@ except ImportError as e :
     STYLE_DATE_BASED ="date_based"
     STYLE_POST_TITLE_GLOBAL_NUMBERING ="post_title_global_numbering"
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS =set ()
-    def download_mega_file (*args ,**kwargs ):pass 
+    def drive_download_mega_file(*args, **kwargs): print("drive_download_mega_file (stub)"); pass
+    def download_gdrive_file(*args, **kwargs): print("download_gdrive_file (stub)"); pass
+    def download_dropbox_file(*args, **kwargs): print("download_dropbox_file (stub)"); pass
 
 except Exception as e :
     print (f"--- UNEXPECTED IMPORT ERROR ---")
@@ -141,29 +144,30 @@ CONFIRM_ADD_ALL_CANCEL_DOWNLOAD =3
 LOG_DISPLAY_LINKS = "links"
 LOG_DISPLAY_DOWNLOAD_PROGRESS = "download_progress"
 
-class DownloadMegaLinksDialog (QDialog ):
-    """A dialog to select and initiate download for extracted Mega links."""
+class DownloadExtractedLinksDialog(QDialog):
+    """A dialog to select and initiate download for extracted supported links."""
 
     download_requested =pyqtSignal (list )
 
-    def __init__ (self ,mega_links_data ,parent =None ):
+    def __init__ (self ,links_data ,parent =None ):
 
 
         super ().__init__ (parent )
-        self .mega_links_data =mega_links_data 
-        self .setWindowTitle ("Download Selected Mega Links")
+        self .links_data = links_data
+        self .setWindowTitle ("Download Selected External Links")
         self .setMinimumSize (500 ,400 )
 
         layout =QVBoxLayout (self )
-        label =QLabel (f"Found {len (self .mega_links_data )} Mega link(s). Select which ones to download:")
+        label =QLabel (f"Found {len (self .links_data )} supported link(s) (Mega, GDrive, Dropbox). Select to download:")
         label .setAlignment (Qt .AlignCenter )
         label .setWordWrap (True )
         layout .addWidget (label )
 
         self .links_list_widget =QListWidget ()
         self .links_list_widget .setSelectionMode (QAbstractItemView .NoSelection )
-        for link_info in self .mega_links_data :
-            display_text =f"{link_info ['title']} - {link_info ['link_text']} ({link_info ['url']})"
+        for link_info in self .links_data :
+            platform_display = link_info.get('platform', 'unknown').upper()
+            display_text =f"[{platform_display}] {link_info ['title']} - {link_info ['link_text']} ({link_info ['url']})"
             item =QListWidgetItem (display_text )
             item .setData (Qt .UserRole ,link_info )
             item .setFlags (item .flags ()|Qt .ItemIsUserCheckable )
@@ -209,7 +213,7 @@ class DownloadMegaLinksDialog (QDialog ):
             self .download_requested .emit (selected_links )
             self .accept ()
         else :
-            QMessageBox .information (self ,"No Selection","Please select at least one Mega link to download.")
+            QMessageBox .information (self ,"No Selection","Please select at least one link to download.")
 
 class ConfirmAddAllDialog (QDialog ):
     """A dialog to confirm adding multiple new names to Known.txt."""
@@ -2280,36 +2284,59 @@ class TourDialog (QDialog ):
             print (f"[Tour] CRITICAL ERROR in run_tour_if_needed: {e }")
             return QDialog .Rejected 
 
-class MegaDownloadThread (QThread ):
-    """A QThread to handle downloading multiple Mega links sequentially."""
+class ExternalLinkDownloadThread(QThread):
+    """A QThread to handle downloading multiple external links sequentially."""
     progress_signal =pyqtSignal (str )    
     file_complete_signal =pyqtSignal (str ,bool )
     finished_signal =pyqtSignal ()
 
-    def __init__ (self ,tasks_to_download ,download_base_path ,parent_logger_func ,parent =None ):
+    def __init__ (self ,tasks_to_download ,download_base_path ,parent_logger_func ,parent =None):
         super ().__init__ (parent )
         self .tasks =tasks_to_download 
         self .download_base_path =download_base_path 
         self .parent_logger_func =parent_logger_func 
         self .is_cancelled =False 
 
-    def run (self ):
-        self .progress_signal .emit (f"ℹ️ Starting Mega download thread for {len (self .tasks )} link(s).")
+    def run(self):
+        self.progress_signal.emit(f"ℹ️ Starting external link download thread for {len(self.tasks)} link(s).")
         for i ,task_info in enumerate (self .tasks ):
             if self .is_cancelled :
-                self .progress_signal .emit ("Mega download cancelled by user.")
+                self.progress_signal.emit("External link download cancelled by user.")
                 break 
 
+            platform = task_info.get('platform', 'unknown').lower()
             full_mega_url =task_info ['url']
             post_title =task_info ['title']
-            self .progress_signal .emit (f"Mega Download ({i +1 }/{len (self .tasks )}): Starting '{post_title }' from {full_mega_url }")
-            try :
+            key = task_info.get('key', '') # Primarily for Mega
 
-                download_mega_file (full_mega_url ,self .download_base_path ,logger_func =self .parent_logger_func )
-                self .file_complete_signal .emit (full_mega_url ,True )
+            self.progress_signal.emit(f"Download ({i + 1}/{len(self.tasks)}): Starting '{post_title}' ({platform.upper()}) from {full_mega_url}")
+            
+            try :
+                if platform == 'mega':
+                    # Ensure key is part of the URL for mega.py
+                    if key:
+                        parsed_original_url = urlparse(full_mega_url)
+                        if key not in parsed_original_url.fragment:
+                            base_url_no_fragment = full_mega_url.split('#')[0]
+                            full_mega_url_with_key = f"{base_url_no_fragment}#{key}"
+                            self.progress_signal.emit(f"   Adjusted Mega URL with key: {full_mega_url_with_key}")
+                        else:
+                            full_mega_url_with_key = full_mega_url
+                    else: # No key provided, use URL as is (might fail if key is required and not in fragment)
+                        full_mega_url_with_key = full_mega_url
+                    drive_download_mega_file(full_mega_url_with_key, self.download_base_path, logger_func=self.parent_logger_func)
+                elif platform == 'google drive':
+                    download_gdrive_file(full_mega_url, self.download_base_path, logger_func=self.parent_logger_func)
+                elif platform == 'dropbox':
+                    download_dropbox_file(full_mega_url, self.download_base_path, logger_func=self.parent_logger_func)
+                else:
+                    self.progress_signal.emit(f"⚠️ Unsupported platform '{platform}' for link: {full_mega_url}")
+                    self.file_complete_signal.emit(full_mega_url, False)
+                    continue
+                self.file_complete_signal.emit(full_mega_url, True)
             except Exception as e :
-                self .progress_signal .emit (f"❌ Error downloading Mega link '{full_mega_url }' (from post '{post_title }'): {e }")
-                self .file_complete_signal .emit (full_mega_url ,False )
+                self.progress_signal.emit(f"❌ Error downloading ({platform.upper()}) link '{full_mega_url}' (from post '{post_title}'): {e}")
+                self.file_complete_signal.emit(full_mega_url, False)
         self .finished_signal .emit ()
 
     def cancel (self ):
@@ -2350,7 +2377,7 @@ class DownloaderApp (QWidget ):
         self .download_thread =None 
         self .thread_pool =None 
         self .cancellation_event =threading .Event ()
-        self .mega_download_thread =None 
+        self .external_link_download_thread =None 
         self .pause_event =threading .Event ()
         self .active_futures =[]
         self .total_posts_to_process =0 
@@ -3435,31 +3462,33 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit ("ℹ️ Download extracted links button clicked, but not in 'Only Links' mode.")
             return 
 
-        mega_links_to_show =[]
+        supported_platforms = {'mega', 'google drive', 'dropbox'}
+        links_to_show_in_dialog =[]
         for link_data_tuple in self .extracted_links_cache :
-
-            if link_data_tuple [3 ]=='mega':
-                mega_links_to_show .append ({
+            platform = link_data_tuple[3].lower()
+            if platform in supported_platforms:
+                links_to_show_in_dialog.append ({
                 'title':link_data_tuple [0 ],
                 'link_text':link_data_tuple [1 ],
                 'url':link_data_tuple [2 ],
-                'platform':link_data_tuple [3 ],
+                'platform':platform,
                 'key':link_data_tuple [4 ]
                 })
 
-        if not mega_links_to_show :
-            QMessageBox .information (self ,"No Mega Links","No Mega links were found in the extracted links.")
+        if not links_to_show_in_dialog :
+            QMessageBox .information (self ,"No Supported Links","No Mega, Google Drive, or Dropbox links were found in the extracted links.")
             return 
 
-        dialog =DownloadMegaLinksDialog (mega_links_to_show ,self )
-        dialog .download_requested .connect (self ._handle_mega_links_download_request )
+        dialog = DownloadExtractedLinksDialog(links_to_show_in_dialog, self)
+        dialog .download_requested .connect (self ._handle_extracted_links_download_request )
         dialog .exec_ ()
 
-    def _handle_mega_links_download_request (self ,selected_links_info ):
+    def _handle_extracted_links_download_request(self, selected_links_info):
         if not selected_links_info :
-            self .log_signal .emit ("ℹ️ No Mega links selected for download from dialog.")
+            self.log_signal.emit("ℹ️ No links selected for download from dialog.")
             return 
 
+        # Preserve log logic (might need adjustment if GDrive/Dropbox have different log styles)
         if self.radio_only_links and self.radio_only_links.isChecked() and \
            self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
             self.main_log_output.clear()
@@ -3470,15 +3499,14 @@ class DownloaderApp (QWidget ):
         download_dir_for_mega =""
 
         if current_main_dir and os .path .isdir (current_main_dir ):
-
             download_dir_for_mega =current_main_dir 
-            self .log_signal .emit (f"ℹ️ Using existing main download location for Mega links: {download_dir_for_mega }")
+            self.log_signal.emit(f"ℹ️ Using existing main download location for external links: {download_dir_for_mega}")
         else :
-
             if not current_main_dir :
-                self .log_signal .emit ("ℹ️ Main download location is empty. Prompting for Mega download folder.")
+                self.log_signal.emit("ℹ️ Main download location is empty. Prompting for download folder.")
             else :
-                self .log_signal .emit (f"⚠️ Main download location '{current_main_dir }' is not a valid directory. Prompting for Mega download folder.")
+                self.log_signal.emit(
+                    f"⚠️ Main download location '{current_main_dir}' is not a valid directory. Prompting for download folder.")
 
 
             suggestion_path =current_main_dir if current_main_dir else QStandardPaths .writableLocation (QStandardPaths .DownloadLocation )
@@ -3486,53 +3514,48 @@ class DownloaderApp (QWidget ):
             chosen_dir =QFileDialog .getExistingDirectory (
             self ,
             "Select Download Folder for Mega Links",
-            suggestion_path 
+                suggestion_path,
+                options=QFileDialog.ShowDirsOnly | QFileDialog.DontUseNativeDialog # Added DontUseNativeDialog for consistency
             )
 
             if not chosen_dir :
-                self .log_signal .emit ("ℹ️ Mega links download cancelled - no download directory selected from prompt.")
+                self.log_signal.emit("ℹ️ External links download cancelled - no download directory selected from prompt.")
                 return 
             download_dir_for_mega =chosen_dir 
 
 
-
-        self .log_signal .emit (f"ℹ️ Preparing to download {len (selected_links_info )} selected Mega link(s) to: {download_dir_for_mega }")
+        self.log_signal.emit(f"ℹ️ Preparing to download {len(selected_links_info)} selected external link(s) to: {download_dir_for_mega}")
         if not os .path .exists (download_dir_for_mega ):
-            self .log_signal .emit (f"❌ Critical Error: Selected Mega download directory '{download_dir_for_mega }' does not exist.")
+            self.log_signal.emit(f"❌ Critical Error: Selected download directory '{download_dir_for_mega}' does not exist.")
             return 
 
-        tasks_for_thread =[]
-        for item in selected_links_info :
-            full_url =item ['url']
-            key =item ['key']
+        # selected_links_info already contains dicts with 'url', 'title', 'platform', 'key'
+        tasks_for_thread = selected_links_info
 
-            if key :
-                url_parts =urlparse (full_url )
-                if key not in url_parts .fragment :
-                    if url_parts .fragment :
-                        base_url_no_fragment =full_url .split ('#')[0 ]
-                        full_url =f"{base_url_no_fragment }#{key }"
-                    else :
-                        full_url =f"{full_url }#{key }"
+        if self.external_link_download_thread and self.external_link_download_thread.isRunning():
+            QMessageBox.warning(self, "Busy", "Another external link download is already in progress.")
+            return
 
-            tasks_for_thread .append ({'url':full_url ,'title':item ['title']})
-
-        if self .mega_download_thread and self .mega_download_thread .isRunning ():
-            QMessageBox .warning (self ,"Busy","Another Mega download is already in progress.")
-            return 
-
-        self .mega_download_thread =MegaDownloadThread (tasks_for_thread ,download_dir_for_mega ,self .log_signal .emit ,self )
-        self .mega_download_thread .finished .connect (self ._on_mega_download_thread_finished )
+        self.external_link_download_thread = ExternalLinkDownloadThread(
+            tasks_for_thread,
+            download_dir_for_mega,
+            self.log_signal.emit,
+            self
+        )
+        self.external_link_download_thread.finished.connect(self._on_external_link_download_thread_finished)
+        # Connect progress_signal if ExternalLinkDownloadThread has it (it does)
+        self.external_link_download_thread.progress_signal.connect(self.handle_main_log)
+        self.external_link_download_thread.file_complete_signal.connect(self._on_single_external_file_complete)
 
 
 
         self .set_ui_enabled (False )
-        self .progress_label .setText (f"Downloading Mega Links (0/{len (tasks_for_thread )})...")
-        self .mega_download_thread .start ()
+        self.progress_label.setText(f"Downloading External Links (0/{len(tasks_for_thread)})...")
+        self.external_link_download_thread.start()
 
-    def _on_mega_download_thread_finished (self ):
-        self .log_signal .emit ("✅ Mega download thread finished.")
-        self .progress_label .setText ("Mega downloads complete. Ready for new task.")
+    def _on_external_link_download_thread_finished(self):
+        self.log_signal.emit("✅ External link download thread finished.")
+        self.progress_label.setText("External link downloads complete. Ready for new task.")
         
         self.mega_download_log_preserved_once = True # Mark that a mega download just finished
         self.log_signal.emit("INTERNAL: mega_download_log_preserved_once SET to True.") # Debug
@@ -3550,10 +3573,14 @@ class DownloaderApp (QWidget ):
             self.mega_download_log_preserved_once = False
             self.log_signal.emit("INTERNAL: mega_download_log_preserved_once RESET to False.") # Debug
 
-        if self .mega_download_thread :
-            self .mega_download_thread .deleteLater ()
-            self .mega_download_thread =None 
+        if self.external_link_download_thread:
+            self.external_link_download_thread.deleteLater()
+            self.external_link_download_thread = None
 
+    def _on_single_external_file_complete(self, url, success):
+        # This is a new slot to potentially update progress if needed per file
+        # For now, the thread's own progress_signal handles detailed logging.
+        pass
     def _show_future_settings_dialog (self ):
         """Shows the placeholder dialog for future settings."""
         dialog =FutureSettingsDialog (self )
@@ -5660,7 +5687,7 @@ class DownloaderApp (QWidget ):
         if self .cancellation_event .is_set ():
             self .log_signal .emit ("    Cancellation detected after/during task submission loop.")
 
-            if self .mega_download_thread and self .mega_download_thread .isRunning ():
+            if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
                 self .mega_download_thread .cancel ()
 
 
@@ -5750,9 +5777,9 @@ class DownloaderApp (QWidget ):
             if self .bottom_action_buttons_stack :
                 self .bottom_action_buttons_stack .setCurrentIndex (0 )
 
-            if self .mega_download_thread and self .mega_download_thread .isRunning ():
+            if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
                 self .log_signal .emit ("ℹ️ Cancelling active Mega download due to UI state change.")
-                self .mega_download_thread .cancel ()
+                self .external_link_download_thread .cancel ()
         else :
             pass 
 
@@ -5938,9 +5965,9 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit ("⚠️ Requesting cancellation of download process (soft reset)...")
 
         if self .mega_download_thread and self .mega_download_thread .isRunning ():
-            self .log_signal .emit ("    Cancelling active Mega download thread...")
-            self .mega_download_thread .cancel ()
-
+            self .log_signal .emit ("    Cancelling active External Link download thread...")
+            self .external_link_download_thread .cancel ()
+        
         current_url =self .link_input .text ()
         current_dir =self .dir_input .text ()
 
@@ -6220,9 +6247,9 @@ class DownloaderApp (QWidget ):
             self .retry_thread_pool .shutdown (wait =True )
             self .retry_thread_pool =None 
 
-        if self .mega_download_thread and not self .mega_download_thread .isRunning ():
-            self .mega_download_thread .deleteLater ()
-            self .mega_download_thread =None 
+        if self.external_link_download_thread and not self.external_link_download_thread.isRunning():
+            self.external_link_download_thread.deleteLater()
+            self.external_link_download_thread = None
 
         self .active_retry_futures .clear ()
         self .active_retry_futures_map .clear ()

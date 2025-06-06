@@ -13,6 +13,16 @@ from PyQt5 .QtCore import QObject ,pyqtSignal ,QThread ,QMutex ,QMutexLocker
 from urllib .parse import urlparse 
 try :
     from mega import Mega 
+    # Import download functions from drive.py
+    # Assuming drive.py is in the same directory
+    try:
+        from drive import download_mega_file as drive_download_mega_file, \
+                               download_gdrive_file, download_dropbox_file
+        # To avoid confusion, we'll use drive_download_mega_file internally when calling from main
+        # and ensure this module exports it as download_mega_file for compatibility if needed,
+        # or main.py can be updated to call drive_download_mega_file.
+    except ImportError as drive_import_err:
+        print(f"ERROR importing from drive.py: {drive_import_err}. External drive downloads will fail.")
 except ImportError :
     print ("ERROR: mega.py library not found. Please install it: pip install mega.py")
 try :
