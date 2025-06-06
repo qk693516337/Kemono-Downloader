@@ -144,6 +144,7 @@ CONFIRM_ADD_ALL_CANCEL_DOWNLOAD =3
 LOG_DISPLAY_LINKS = "links"
 LOG_DISPLAY_DOWNLOAD_PROGRESS = "download_progress"
 
+from collections import defaultdict
 class DownloadExtractedLinksDialog(QDialog):
     """A dialog to select and initiate download for extracted supported links."""
 
@@ -155,7 +156,19 @@ class DownloadExtractedLinksDialog(QDialog):
         super ().__init__ (parent )
         self .links_data = links_data
         self .setWindowTitle ("Download Selected External Links")
-        self .setMinimumSize (500 ,400 )
+
+        # Adjust dialog size relative to parent
+        if parent:
+            parent_width = parent.width()
+            parent_height = parent.height()
+            dialog_width = int(parent_width * 0.6)  # 60% of parent width
+            dialog_height = int(parent_height * 0.7) # 70% of parent height
+            min_w, min_h = 500, 400 # Keep a reasonable minimum
+            self.resize(max(dialog_width, min_w), max(dialog_height, min_h))
+        else:
+            self.setMinimumSize(500, 400) # Fallback if no parent
+
+
 
         layout =QVBoxLayout (self )
         label =QLabel (f"Found {len (self .links_data )} supported link(s) (Mega, GDrive, Dropbox). Select to download:")
@@ -165,14 +178,41 @@ class DownloadExtractedLinksDialog(QDialog):
 
         self .links_list_widget =QListWidget ()
         self .links_list_widget .setSelectionMode (QAbstractItemView .NoSelection )
-        for link_info in self .links_data :
-            platform_display = link_info.get('platform', 'unknown').upper()
-            display_text =f"[{platform_display}] {link_info ['title']} - {link_info ['link_text']} ({link_info ['url']})"
-            item =QListWidgetItem (display_text )
-            item .setData (Qt .UserRole ,link_info )
-            item .setFlags (item .flags ()|Qt .ItemIsUserCheckable )
-            item .setCheckState (Qt .Checked )
-            self .links_list_widget .addItem (item )
+
+        grouped_links = defaultdict(list)
+        for link_info_item in self.links_data:
+            post_title_for_group = link_info_item.get('title', 'Untitled Post')
+            grouped_links[post_title_for_group].append(link_info_item)
+
+        # Sort by post title for consistent order
+        sorted_post_titles = sorted(grouped_links.keys(), key=lambda x: x.lower())
+
+        for post_title_key in sorted_post_titles:
+            # Add header for post_title
+            header_item = QListWidgetItem(f"{post_title_key}")
+            header_item.setFlags(Qt.NoItemFlags) # Not selectable, not checkable
+            font = header_item.font()
+            font.setBold(True)
+            font.setPointSize(font.pointSize() + 1) # Slightly larger
+            header_item.setFont(font)
+            if parent and hasattr(parent, 'current_theme') and parent.current_theme == "dark":
+                header_item.setForeground(Qt.cyan)
+            else: # Light theme or no theme info
+                header_item.setForeground(Qt.blue)
+            self.links_list_widget.addItem(header_item)
+
+            for link_info_data in grouped_links[post_title_key]:
+                platform_display = link_info_data.get('platform', 'unknown').upper()
+                display_text = f"  [{platform_display}] {link_info_data['link_text']} ({link_info_data['url']})"
+                item = QListWidgetItem(display_text)
+                item.setData(Qt.UserRole, link_info_data)
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Checked)
+                self.links_list_widget.addItem(item)
+            
+            # Add a little space after each group, or a separator item if preferred
+            # self.links_list_widget.addItem(QListWidgetItem("")) # Simple spacer
+
         layout .addWidget (self .links_list_widget )
 
         button_layout =QHBoxLayout ()
@@ -200,15 +240,19 @@ class DownloadExtractedLinksDialog(QDialog):
 
     def _set_all_items_checked (self ,check_state ):
         for i in range (self .links_list_widget .count ()):
-            self .links_list_widget .item (i ).setCheckState (check_state )
+            item = self.links_list_widget.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable: # Only operate on checkable items
+                item.setCheckState(check_state)
 
     def _handle_download_selected (self ):
         selected_links =[]
         for i in range (self .links_list_widget .count ()):
             item =self .links_list_widget .item (i )
-            if item .checkState ()==Qt .Checked :
-                selected_links .append (item .data (Qt .UserRole ))
-
+            # Ensure item is checkable, actually checked, and has data (is a link item)
+            if item.flags() & Qt.ItemIsUserCheckable and \
+               item.checkState() == Qt.Checked and \
+               item.data(Qt.UserRole) is not None:
+                selected_links.append(item.data(Qt.UserRole))
         if selected_links :
             self .download_requested .emit (selected_links )
             self .accept ()
@@ -3456,6 +3500,19 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'link_input'):
             self .last_link_input_text_for_queue_sync =self .link_input .text ()
 
+    def _update_download_extracted_links_button_state(self):
+        if hasattr(self, 'download_extracted_links_button') and self.download_extracted_links_button:
+            is_only_links = self.radio_only_links and self.radio_only_links.isChecked()
+            if not is_only_links:
+                self.download_extracted_links_button.setEnabled(False)
+                return
+
+            supported_platforms_for_button = {'mega', 'google drive', 'dropbox'}
+            has_supported_links = any(
+                link_info[3].lower() in supported_platforms_for_button for link_info in self.extracted_links_cache
+            )
+            self.download_extracted_links_button.setEnabled(is_only_links and has_supported_links)
+
     def _show_download_extracted_links_dialog (self ):
         """Shows the placeholder dialog for downloading extracted links."""
         if not (self .radio_only_links and self .radio_only_links .isChecked ()):
@@ -3814,8 +3871,21 @@ class DownloaderApp (QWidget ):
         link_data =(post_title ,link_text ,link_url ,platform ,decryption_key )
         self .external_link_queue .append (link_data )
         if self .radio_only_links and self .radio_only_links .isChecked ():
-            self .extracted_links_cache .append (link_data )
+            self .extracted_links_cache .append (link_data ) # Keep for now, might be redundant with below
+            self ._update_download_extracted_links_button_state() # Update button if in mode
 
+        is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
+        should_display_in_external_log =self .show_external_links and not is_only_links_mode 
+
+        if not (is_only_links_mode or should_display_in_external_log ):
+            self ._is_processing_external_link_queue =False 
+            if self .external_link_queue :
+                QTimer .singleShot (0 ,self ._try_process_next_external_link )
+            return 
+
+        # Always add to extracted_links_cache so it's available if user switches mode later
+        if link_data not in self.extracted_links_cache: # Avoid duplicates if already added above
+            self.extracted_links_cache.append(link_data)
 
     def _try_process_next_external_link (self ):
         if self ._is_processing_external_link_queue or not self .external_link_queue :
@@ -3991,12 +4061,7 @@ class DownloaderApp (QWidget ):
 
         if hasattr (self ,'download_extracted_links_button')and self .download_extracted_links_button :
             self .download_extracted_links_button .setVisible (is_only_links )
-            has_mega_links =any (link_info [3 ]=='mega'for link_info in self .extracted_links_cache )
-            self .download_extracted_links_button .setEnabled (is_only_links and has_mega_links )
-
-        if hasattr(self, 'log_display_mode_toggle_button'):
-            self.log_display_mode_toggle_button.setVisible(is_only_links)
-            self._update_log_display_mode_button_text() # Ensure correct icon/tooltip
+            self._update_download_extracted_links_button_state()
 
         if self .download_btn :
             if is_only_links :
@@ -4077,6 +4142,10 @@ class DownloaderApp (QWidget ):
         if is_only_links:
             self._filter_links_log()
 
+        if hasattr(self, 'log_display_mode_toggle_button'):
+            self.log_display_mode_toggle_button.setVisible(is_only_links)
+            self._update_log_display_mode_button_text()
+
         subfolders_on =self .use_subfolders_checkbox .isChecked ()if self .use_subfolders_checkbox else False 
         manga_on =self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False 
 
@@ -4104,10 +4173,6 @@ class DownloaderApp (QWidget ):
         if not (self .radio_only_links and self .radio_only_links .isChecked ()):return 
 
         search_term =self .link_search_input .text ().lower ().strip ()if self .link_search_input else ""
-
-        if self .download_extracted_links_button :
-            has_mega_links =any (link_info [3 ]=='mega'for link_info in self .extracted_links_cache )
-            self .download_extracted_links_button .setEnabled (has_mega_links )
 
         if self.mega_download_log_preserved_once and \
            self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
