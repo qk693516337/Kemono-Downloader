@@ -22,11 +22,6 @@ def download_mega_file (mega_link ,download_path =".",logger_func =print ):
     """
     logger_func ("Initializing Mega client...")
     mega_client =Mega ()
-
-
-
-
-
     m =mega_client .login ()
 
     logger_func (f"Attempting to download from: {mega_link }")
@@ -37,31 +32,13 @@ def download_mega_file (mega_link ,download_path =".",logger_func =print ):
             logger_func (f"Download path '{download_path }' does not exist. Creating it...")
             os .makedirs (download_path ,exist_ok =True )
 
-
-
-
         logger_func (f"Starting download to '{download_path }'...")
-
-
-
+        
         file_handle =m .download_url (mega_link ,dest_path =download_path )
 
         if file_handle :
 
-
-
-
             logger_func (f"File downloaded successfully! (Handle: {file_handle })")
-
-
-
-
-
-
-
-
-
-
             try :
                 info =m .get_public_url_info (mega_link )
                 filename =info .get ('name','downloaded_file')
@@ -193,8 +170,6 @@ def download_dropbox_file (dropbox_link ,download_path =".",logger_func =print )
         raise 
 
 if __name__ =="__main__":
-
-
 
     mega_file_link ="https://mega.nz/file/03oRjBQT#Tcbp5sQVIyPbdmv8sLgbb9Lf9AZvZLdKRSQiuXkNW0k"
 
