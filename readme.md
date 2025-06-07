@@ -135,6 +135,17 @@ This project is released under the MIT License.
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Yuvi9587/Kemono-Downloader&type=Date)](https://www.star-history.com/#Yuvi9587/Kemono-Downloader&Date)
+<table align="center" style="border-collapse: collapse; border: none; margin-left: auto; margin-right: auto;">
+  <tr>
+    <td align="center" valign="middle" style="padding: 10px; border: none;">
+      <a href="https://www.star-history.com/#Yuvi9587/Kemono-Downloader&Date">
+        <img src="https://api.star-history.com/svg?repos=Yuvi9587/Kemono-Downloader&type=Date" alt="Star History Chart" width="650">
+      </a>
+    </td>
+    <td align="center" valign="middle" style="padding: 10px; border: none;">
+      <img src="Read/Cat.gif" alt="Animated Cat GIF" width="250">
+    </td>
+  </tr>
+</table>
 
 👉 See [features.md](features.md) for the full feature list.
