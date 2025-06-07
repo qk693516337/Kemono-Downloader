@@ -131,7 +131,7 @@ Feel free to fork this repo and submit pull requests for bug fixes, new features
 
 ## License
 
-This project is released under the MIT License.
+This project is under the Custom Licence
 
 ## Star History
 
