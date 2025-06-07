@@ -20,49 +20,69 @@ def download_mega_file (mega_link ,download_path =".",logger_func =print ):
                                        Defaults to the current directory.
         logger_func (callable, optional): Function to use for logging. Defaults to print.
     """
-    logger_func ("Initializing Mega client...")
-    mega_client =Mega ()
-    m =mega_client .login ()
+    logger_func ("drive.py: download_mega_file called.")
+    logger_func (f"drive.py: mega_link='{mega_link}', download_path='{download_path}'")
 
-    logger_func (f"Attempting to download from: {mega_link }")
+    logger_func ("drive.py: Initializing Mega client (Mega())...")
+    try:
+        mega_client = Mega()
+    except Exception as e_init:
+        logger_func(f"drive.py: ERROR during Mega() instantiation: {e_init}")
+        traceback.print_exc()
+        raise
+    logger_func ("drive.py: Mega client initialized. Logging in anonymously (m.login())...")
+    try:
+        m = mega_client.login()
+    except Exception as e_login:
+        logger_func(f"drive.py: ERROR during m.login(): {e_login}")
+        traceback.print_exc()
+        raise
+    logger_func ("drive.py: Logged in anonymously.")
+
+    logger_func (f"drive.py: Attempting to download from: {mega_link }")
 
     try :
-
         if not os .path .exists (download_path ):
-            logger_func (f"Download path '{download_path }' does not exist. Creating it...")
+            logger_func (f"drive.py: Download path '{download_path }' does not exist. Creating it...")
             os .makedirs (download_path ,exist_ok =True )
+        logger_func (f"drive.py: Download path ensured: '{download_path }'")
 
-        logger_func (f"Starting download to '{download_path }'...")
+        logger_func (f"drive.py: Calling m.download_url for '{mega_link }' to '{download_path }'...")
         
-        file_handle =m .download_url (mega_link ,dest_path =download_path )
+        # The download_url method returns the local file path of the downloaded file.
+        # It takes dest_path (directory) and dest_filename (optional).
+        # If dest_filename is None, it uses the name from get_public_url_info().
+        downloaded_file_path = m.download_url(mega_link, dest_path=download_path, dest_filename=None)
 
-        if file_handle :
+        logger_func(f"drive.py: m.download_url returned: {downloaded_file_path}")
 
-            logger_func (f"File downloaded successfully! (Handle: {file_handle })")
-            try :
-                info =m .get_public_url_info (mega_link )
-                filename =info .get ('name','downloaded_file')
-                full_download_path =os .path .join (download_path ,filename )
-                logger_func (f"Downloaded file should be at: {full_download_path }")
-                if not os .path .exists (full_download_path ):
-                    logger_func (f"Warning: Expected file '{full_download_path }' not found. The library might have saved it with a different name or failed silently after appearing to succeed.")
-            except Exception as e_info :
-                logger_func (f"Could not retrieve file info to confirm filename: {e_info }")
-
+        if downloaded_file_path and os.path.exists(downloaded_file_path):
+            logger_func(f"drive.py: File downloaded successfully! Saved as: {downloaded_file_path}")
+            # Optional: Verify size if possible, but get_public_url_info is another network call
+            # and might be redundant or problematic if the download itself worked.
+        elif downloaded_file_path:
+            logger_func(f"drive.py: m.download_url returned a path '{downloaded_file_path}', but it does not exist on disk. Download may have failed silently or path is incorrect.")
+            raise Exception(f"Mega download_url returned path '{downloaded_file_path}' which was not found.")
         else :
-            logger_func ("Download failed. The download_url method did not return a file handle.")
+            logger_func ("drive.py: Download failed. m.download_url did not return a valid file path.")
+            raise Exception ("Mega download_url did not return a file path or failed.")
 
-    except PermissionError :
-        logger_func (f"Error: Permission denied to write to '{download_path }'. Please check permissions.")
-    except FileNotFoundError :
-        logger_func (f"Error: The specified download path '{download_path }' is invalid or a component was not found.")
-    except ConnectionError as e :
-        logger_func (f"Error: Connection problem. {e }")
-    except requests .exceptions .RequestException as e :
-        logger_func (f"Error during request to Mega: {e }")
-    except Exception as e :
-        logger_func (f"An error occurred during Mega download: {e }")
-        traceback .print_exc ()
+    except PermissionError as e:
+        logger_func(f"drive.py: PermissionError: {e}. Denied to write to '{download_path}'. Please check permissions.")
+        raise
+    except FileNotFoundError as e:
+        logger_func(f"drive.py: FileNotFoundError: {e}. The path '{download_path}' is invalid.")
+        raise
+    except requests.exceptions.ConnectionError as e: # More specific for network
+        logger_func(f"drive.py: requests.exceptions.ConnectionError: {e}. Network problem during Mega operation.")
+        raise
+    except requests.exceptions.RequestException as e: # General requests error
+        logger_func(f"drive.py: requests.exceptions.RequestException: {e} during request to Mega.")
+        raise
+    except Exception as e: # Catch-all for other errors from mega.py or os calls
+        logger_func(f"drive.py: An unexpected error occurred during Mega download: {e}")
+        traceback.print_exc() # Print full traceback for unexpected errors
+        raise
 
 def download_gdrive_file (gdrive_link ,download_path =".",logger_func =print ):
     """
@@ -183,4 +203,3 @@ if __name__ =="__main__":
 
         print (f"Files will be downloaded to: {download_directory }")
         download_mega_file (mega_file_link ,download_directory ,logger_func =print )
-
