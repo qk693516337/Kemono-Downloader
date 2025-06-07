@@ -88,7 +88,7 @@ Kemono Downloader offers a range of features to streamline your content download
 Open your terminal or command prompt and run:
 
 ```bash
-pip install PyQt5 requests Pillow
+pip install PyQt5 requests Pillow mega.py
 ```
 
 ### Running the Application
@@ -101,6 +101,25 @@ python main.py
 -   **Main Inputs:**
 -   Place your `cookies.txt` in the root directory (if using cookies).
 -   Prepare your `Known.txt` and `creators.json` in the same directory for advanced filtering and selection features.
+
+---
+
+## Troubleshooting
+
+### AttributeError: module 'asyncio' has no attribute 'coroutine'
+
+If you encounter an error message similar to:
+```
+AttributeError: module 'asyncio' has no attribute 'coroutine'. Did you mean: 'coroutines'?
+```
+This usually means that a dependency, often `tenacity` (used by `mega.py`), is an older version that's incompatible with your Python version (typically Python 3.10+).
+
+To fix this, activate your virtual environment and run the following commands to upgrade the libraries:
+
+```bash
+pip install --upgrade tenacity
+pip install --upgrade mega.py
+```
 
 ---
 
