@@ -14,6 +14,6 @@ Users are encouraged to update to **v5.0.0 or newer** versions.
 
 ## Active Maintenance
 
-The Kemono Downloader is actively maintained. We strive to address bugs, implement new features in a timely manner. If you discover any security vulnerabilities, please report them responsibly (details on reporting to be added if a formal process is established).
+The Kemono Downloader is actively maintained. We strive to address bugs, implement new features in a timely manner. If you discover any security vulnerabilities, please report them(details on reporting to be added if a formal process is established).
 
 We appreciate your help in keeping Kemono Downloader secure!
