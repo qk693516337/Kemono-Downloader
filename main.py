@@ -57,6 +57,8 @@ try :
     CHAR_SCOPE_FILES ,
     CHAR_SCOPE_BOTH ,
     CHAR_SCOPE_COMMENTS ,
+    FILE_DOWNLOAD_STATUS_SUCCESS,
+    FILE_DOWNLOAD_STATUS_SKIPPED,
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER ,
     STYLE_DATE_BASED ,
     STYLE_POST_TITLE_GLOBAL_NUMBERING ,
@@ -93,6 +95,8 @@ except ImportError as e :
     CHAR_SCOPE_FILES ="files"
     CHAR_SCOPE_BOTH ="both"
     CHAR_SCOPE_COMMENTS ="comments"
+    FILE_DOWNLOAD_STATUS_SUCCESS = "success"
+    FILE_DOWNLOAD_STATUS_SKIPPED = "skipped"
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER ="failed_retry_later"
     STYLE_DATE_BASED ="date_based"
     STYLE_POST_TITLE_GLOBAL_NUMBERING ="post_title_global_numbering"
@@ -356,6 +360,61 @@ class ConfirmAddAllDialog (QDialog ):
             return CONFIRM_ADD_ALL_SKIP_ADDING 
         return self .user_choice 
 
+class ExportOptionsDialog(QDialog):
+    """Dialog to choose export format for error file links."""
+    EXPORT_MODE_LINK_ONLY = 1
+    EXPORT_MODE_WITH_DETAILS = 2
+
+    def __init__(self, parent_app_ref, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Export Options")
+        self.setModal(True)
+        self.selected_option = self.EXPORT_MODE_LINK_ONLY  # Default
+
+        layout = QVBoxLayout(self)
+
+        description_label = QLabel("Choose the format for exporting error file links:")
+        layout.addWidget(description_label)
+
+        self.radio_group = QButtonGroup(self)
+
+        self.radio_link_only = QRadioButton("Link per line (URL only)")
+        self.radio_link_only.setToolTip("Exports only the direct download URL for each failed file, one URL per line.")
+        self.radio_link_only.setChecked(True)
+        self.radio_group.addButton(self.radio_link_only, self.EXPORT_MODE_LINK_ONLY)
+        layout.addWidget(self.radio_link_only)
+
+        self.radio_with_details = QRadioButton("Export with details (URL [Post, File info])")
+        self.radio_with_details.setToolTip("Exports the URL followed by details like Post Title, Post ID, and Original Filename in brackets.")
+        self.radio_group.addButton(self.radio_with_details, self.EXPORT_MODE_WITH_DETAILS)
+        layout.addWidget(self.radio_with_details)
+
+        button_layout = QHBoxLayout()
+        self.export_button = QPushButton("Export")
+        self.export_button.clicked.connect(self._handle_export)
+        self.export_button.setDefault(True)
+
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.clicked.connect(self.reject)
+
+        button_layout.addStretch(1)
+        button_layout.addWidget(self.export_button)
+        button_layout.addWidget(self.cancel_button)
+        layout.addLayout(button_layout)
+        
+        self.setMinimumWidth(350)
+
+        if parent_app_ref and hasattr(parent_app_ref, 'current_theme') and parent_app_ref.current_theme == "dark":
+            if hasattr(parent_app_ref, 'get_dark_theme'):
+                self.setStyleSheet(parent_app_ref.get_dark_theme())
+
+    def _handle_export(self):
+        self.selected_option = self.radio_group.checkedId()
+        self.accept()
+
+    def get_selected_option(self):
+        return self.selected_option
+
 class ErrorFilesDialog (QDialog ):
     """Dialog to display files that were skipped due to errors."""
     retry_selected_signal =pyqtSignal (list )
@@ -396,6 +455,8 @@ class ErrorFilesDialog (QDialog ):
 
         self .retry_button =QPushButton ("Retry Selected")
         self .retry_button .clicked .connect (self ._handle_retry_selected )
+        self .export_button = QPushButton("Export URLs to .txt")
+        self .export_button.clicked.connect(self._handle_export_errors_to_txt)
         buttons_layout .addWidget (self .retry_button )
 
         buttons_layout .addStretch (1 )
@@ -403,9 +464,11 @@ class ErrorFilesDialog (QDialog ):
         self .ok_button .clicked .connect (self .accept )
         buttons_layout .addWidget (self .ok_button )
         main_layout .addLayout (buttons_layout )
+        buttons_layout.insertWidget(2, self.export_button) # Insert before stretch
 
         self .select_all_button .setEnabled (bool (self .error_files ))
         self .retry_button .setEnabled (bool (self .error_files ))
+        self .export_button.setEnabled(bool(self.error_files))
 
         self .setMinimumWidth (500 )
         self .setMinimumHeight (300 )
@@ -424,6 +487,55 @@ class ErrorFilesDialog (QDialog ):
             self .accept ()
         else :
             QMessageBox .information (self ,"No Selection","Please select at least one file to retry.")
+
+    def _handle_export_errors_to_txt(self):
+        if not self.error_files:
+            QMessageBox.information(self, "No Errors", "There are no error file URLs to export.")
+            return
+
+        # Show export options dialog
+        options_dialog = ExportOptionsDialog(parent_app_ref=self.parent(), parent=self)
+        if not options_dialog.exec_() == QDialog.Accepted:
+            # User cancelled the options dialog
+            return
+
+        export_option = options_dialog.get_selected_option()
+
+        lines_to_export = []
+        for error_item in self.error_files:
+            file_info = error_item.get('file_info', {})
+            url = file_info.get('url')
+
+            if url:
+                if export_option == ExportOptionsDialog.EXPORT_MODE_WITH_DETAILS:
+                    original_filename = file_info.get('name', 'Unknown Filename')
+                    post_title = error_item.get('post_title', 'Unknown Post')
+                    post_id = error_item.get('original_post_id_for_log', 'N/A')
+                    details_string = f" [Post: '{post_title}' (ID: {post_id}), File: '{original_filename}']"
+                    lines_to_export.append(f"{url}{details_string}")
+                else: # EXPORT_MODE_LINK_ONLY or default
+                    lines_to_export.append(url)
+
+        if not lines_to_export:
+            QMessageBox.information(self, "No URLs Found", "Could not extract any URLs from the error file list to export.")
+            return
+
+        default_filename = "error_file_links.txt"
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Error File URLs", default_filename, "Text Files (*.txt);;All Files (*)"
+        )
+
+        if filepath:
+            try:
+                with open(filepath, 'w', encoding='utf-8') as f:
+                    for line in lines_to_export:
+                        f.write(f"{line}\n")
+                QMessageBox.information(self, "Export Successful", f"Successfully exported {len(lines_to_export)} entries to:\n{filepath}")
+            except Exception as e:
+                QMessageBox.critical(self, "Export Error", f"Could not export file links: {e}")
+        else:
+            # User cancelled the dialog
+            pass
 class FutureSettingsDialog (QDialog ):
     """A simple dialog as a placeholder for future settings."""
     def __init__ (self ,parent_app_ref ,parent =None ):
@@ -3861,8 +3973,20 @@ class DownloaderApp (QWidget ):
         single_thread_active =self .download_thread and self .download_thread .isRunning ()
         fetcher_active =hasattr (self ,'is_fetcher_thread_running')and self .is_fetcher_thread_running 
         pool_has_active_tasks =self .thread_pool is not None and any (not f .done ()for f in self .active_futures if f is not None )
-        multi_thread_active =fetcher_active or pool_has_active_tasks 
-        return single_thread_active or multi_thread_active 
+        retry_pool_active = hasattr(self, 'retry_thread_pool') and self.retry_thread_pool is not None and \
+                            hasattr(self, 'active_retry_futures') and \
+                            any(not f.done() for f in self.active_retry_futures if f is not None)
+                            
+        # Check for external link download thread
+        external_dl_thread_active = hasattr(self, 'external_link_download_thread') and \
+                                    self.external_link_download_thread is not None and \
+                                    self.external_link_download_thread.isRunning()
+
+        return single_thread_active or \
+               fetcher_active or \
+               pool_has_active_tasks or \
+               retry_pool_active or \
+               external_dl_thread_active
 
     def handle_external_link_signal (self ,post_title ,link_text ,link_url ,platform ,decryption_key ):
         link_data =(post_title ,link_text ,link_url ,platform ,decryption_key )
@@ -5050,7 +5174,7 @@ class DownloaderApp (QWidget ):
                 if self .is_processing_favorites_queue :
                     self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory invalid.")
                 return False 
-            effective_output_dir_for_run =override_output_dir 
+            effective_output_dir_for_run = os.path.normpath(override_output_dir)
         else :
             if not extract_links_only and not main_ui_download_dir :
                 QMessageBox .critical (self ,"Input Error","Download Directory is required when not in 'Only Links' mode.")
@@ -5070,7 +5194,7 @@ class DownloaderApp (QWidget ):
                 else :
                     self .log_signal .emit ("❌ Download cancelled: Output directory does not exist and was not created.")
                     return False 
-            effective_output_dir_for_run =main_ui_download_dir 
+            effective_output_dir_for_run = os.path.normpath(main_ui_download_dir)
 
         service ,user_id ,post_id_from_url =extract_post_info (api_url )
         if not service or not user_id :
@@ -6148,7 +6272,7 @@ class DownloaderApp (QWidget ):
             if not self .favorite_download_queue :
                 self .is_processing_favorites_queue =False 
                 self .log_signal .emit (f"✅ All {self .current_processing_favorite_item_info .get ('type','item')} downloads from favorite queue have been processed.")
-                self .set_ui_enabled (True )
+                self .set_ui_enabled (not self ._is_download_active ())
             else :
                 self ._process_next_favorite_download ()
         else :
@@ -6269,7 +6393,13 @@ class DownloaderApp (QWidget ):
         num_files_in_this_post =job_details ['num_files_in_this_post'],
         forced_filename_override =job_details .get ('forced_filename_override')
         )
-        return dl_count >0 
+        # A retry is successful if the file is actually downloaded (dl_count > 0 and status is SUCCESS)
+        # OR if the file was skipped because it's now recognized as a duplicate or other skippable condition
+        # (status is SKIPPED). This means the original error (like IncompleteRead) is resolved.
+        is_successful_download = (status == FILE_DOWNLOAD_STATUS_SUCCESS) # dl_count will be 1
+        is_resolved_as_skipped = (status == FILE_DOWNLOAD_STATUS_SKIPPED) # dl_count will be 0, skip_count will be 1
+
+        return is_successful_download or is_resolved_as_skipped
 
     def _handle_retry_future_result (self ,future ):
         self .processed_retry_count +=1 
@@ -6318,7 +6448,7 @@ class DownloaderApp (QWidget ):
         if self .permanently_failed_files_for_dialog :
             self .log_signal .emit (f"🆘 Error button enabled. {len (self .permanently_failed_files_for_dialog )} file(s) ultimately failed and can be viewed.")
 
-        self .set_ui_enabled (True )
+        self .set_ui_enabled (not self ._is_download_active ())
         if self .cancel_btn :self .cancel_btn .setText ("❌ Cancel & Reset UI")
         self .progress_label .setText (f"Retry Finished. Succeeded: {self .succeeded_retry_count }, Failed: {self .failed_retry_count_in_session }. Ready for new task.")
         self .file_progress_label .setText ("")
@@ -7124,7 +7254,7 @@ class DownloaderApp (QWidget ):
                     item_type_log =self .current_processing_favorite_item_info .get ('type','item')
                 self .log_signal .emit (f"✅ All {item_type_log } downloads from favorite queue have been processed.")
                 self .set_ui_enabled (True )
-            return 
+            return
         if not self .is_processing_favorites_queue :
             self .is_processing_favorites_queue =True 
         self .current_processing_favorite_item_info =self .favorite_download_queue .popleft ()
@@ -7142,7 +7272,7 @@ class DownloaderApp (QWidget ):
         if item_scope ==EmptyPopupDialog .SCOPE_CREATORS or (item_scope ==FAVORITE_SCOPE_ARTIST_FOLDERS and main_download_dir ):
             folder_name_key =self .current_processing_favorite_item_info .get ('name_for_folder','Unknown_Folder')
             item_specific_folder_name =clean_folder_name (folder_name_key )
-            override_dir =os .path .join (main_download_dir ,item_specific_folder_name )
+            override_dir =os .path .normpath(os .path .join (main_download_dir ,item_specific_folder_name ))
             self .log_signal .emit (f"    Favorite Scope: Artist Folders. Target directory: '{override_dir }'")
 
         success_starting_download =self .start_download (direct_api_url =next_url ,override_output_dir =override_dir )
