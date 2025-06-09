@@ -1093,15 +1093,35 @@ class PostProcessorWorker :
                             if os .path .exists (current_single_stream_part_path ):os .remove (current_single_stream_part_path )
                             break 
 
-                        if current_attempt_downloaded_bytes >0 or (total_size_bytes ==0 and response .status_code ==200 ):
-                            calculated_file_hash =md5_hasher .hexdigest ()
-                            downloaded_size_bytes =current_attempt_downloaded_bytes 
-                            downloaded_part_file_path =current_single_stream_part_path 
-                            was_multipart_download =False 
-                            download_successful_flag =True 
-                            break 
-                        else :
+                        # Determine if this single-stream download attempt was complete
+                        attempt_is_complete = False
+                        if response.status_code == 200: # Ensure basic success
+                            if total_size_bytes > 0: # Content-Length was provided
+                                if current_attempt_downloaded_bytes == total_size_bytes:
+                                    attempt_is_complete = True
+                                else:
+                                    self.logger(f"   ⚠️ Single-stream attempt for '{api_original_filename}' incomplete: received {current_attempt_downloaded_bytes} of {total_size_bytes} bytes.")
+                            elif total_size_bytes == 0: # Server reported 0-byte file (Content-Length: 0)
+                                if current_attempt_downloaded_bytes == 0: # And we got 0 bytes
+                                    attempt_is_complete = True
+                                else: # Server said 0 bytes, but we got some.
+                                    self.logger(f"   ⚠️ Mismatch for '{api_original_filename}': Server reported 0 bytes, but received {current_attempt_downloaded_bytes} bytes this attempt.")
+                            # Case: No Content-Length header, so total_size_bytes became 0 from int(headers.get('Content-Length',0)).
+                            # And we actually received some bytes.
+                            elif current_attempt_downloaded_bytes > 0 : # Implicitly total_size_bytes == 0 here due to previous conditions
+                                attempt_is_complete = True
+                                self.logger(f"   ⚠️ Single-stream for '{api_original_filename}' received {current_attempt_downloaded_bytes} bytes (no Content-Length from server). Assuming complete for this attempt as stream ended.")
+
+                        if attempt_is_complete:
+                            calculated_file_hash = md5_hasher.hexdigest()
+                            downloaded_size_bytes = current_attempt_downloaded_bytes
+                            downloaded_part_file_path = current_single_stream_part_path
+                            was_multipart_download = False # Ensure this is set for single stream success
+                            download_successful_flag = True # Mark THE ENTIRE DOWNLOAD as successful
+                            break # Break from the RETRY loop (attempt_num_single_stream)
+                        else: # This attempt was not successful (e.g., incomplete or 0 bytes when not expected)
                             if os .path .exists (current_single_stream_part_path ):os .remove (current_single_stream_part_path )
+                            # Let the retry loop continue if more attempts are left; download_successful_flag remains False for this attempt.
                     except Exception as e_write :
                         self .logger (f"   ❌ Error writing single-stream to disk for '{api_original_filename }': {e_write }")
                         if os .path .exists (current_single_stream_part_path ):os .remove (current_single_stream_part_path )
