@@ -304,6 +304,24 @@ Download directly from your favorited artists and posts on Kemono.su.
         -   Summary statistics at the end of a session (total downloaded, skipped, failed).
 
 ---
+## Error Handling & Retries
+
+-   **🆘 Error Button (Main UI):**
+    -   **Location:** Typically near the main action buttons (e.g., Start, Pause, Cancel).
+    -   **Purpose:** Becomes active if files failed to download during the last session (and were not successfully retried). Clicking it opens the "Files Skipped Due to Errors" dialog.
+    -   **"Files Skipped Due to Errors" Dialog:**
+        -   **File List:** Displays a list of files that encountered download errors. Each entry shows the filename, the post it was from (title and ID).
+        -   **Checkboxes:** Allows selection of individual files from the list.
+        -   **"Select All" Button:** Checks all files in the list.
+        -   **"Retry Selected" Button:** Attempts to re-download all checked files.
+        -   **"Export URLs to .txt" Button:**
+            -   Opens an "Export Options" dialog.
+            -   **"Link per line (URL only)":** Exports only the direct download URL for each failed file, one URL per line.
+            -   **"Export with details (URL [Post, File info])":** Exports the URL followed by details like Post Title, Post ID, and Original Filename in brackets.
+            -   Prompts the user to save the generated `.txt` file.
+        -   **"OK" Button:** Closes the dialog.
+    -   **Note:** Files successfully retried or skipped due to hash match during a retry attempt are removed from this error list.
+---
 
 ## Other UI Elements
 

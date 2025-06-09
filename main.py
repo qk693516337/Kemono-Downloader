@@ -2045,7 +2045,7 @@ class TourDialog (QDialog ):
 
     CONFIG_ORGANIZATION_NAME ="KemonoDownloader"
     CONFIG_APP_NAME_TOUR ="ApplicationTour"
-    TOUR_SHOWN_KEY ="neverShowTourAgainV16"
+    TOUR_SHOWN_KEY ="neverShowTourAgainV17"
 
     def __init__ (self ,parent =None ):
         super ().__init__ (parent )

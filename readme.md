@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v5.0.0</h1>
+<h1 align="center">Kemono Downloader v5.1.0</h1>
 
 <table align="center">
   <tr>
@@ -34,7 +34,7 @@ A powerful, feature-rich GUI application for downloading content from **[Kemono.
 Built with PyQt5, this tool is designed for users who want deep filtering capabilities, customizable folder structures, efficient downloads, and intelligent automation, all within a modern and user-friendly graphical interface.
 
 *This v5.0.0 release marks a significant feature milestone. Future updates are expected to be less frequent, focusing on maintenance and minor refinements.*
-
+*Update v5.1.0 enhances error handling and UI responsiveness.*
 <p align="center">
   <a href="features.md"><strong>📚 Full Feature List</strong></a> • 
   <a href="LICENSE"><strong>📝 License</strong></a>
@@ -76,6 +76,14 @@ Kemono Downloader offers a range of features to streamline your content download
 -   **Logging:**
     -   A detailed progress log displays download activity, errors, and summaries.
 
+---
+
+## ✨ What's New in v5.1.0
+-   **Enhanced Error File Management**: The "Error" button now opens a dialog listing files that failed to download. This dialog includes:
+    -   An option to **retry selected** failed downloads.
+    -   A new **"Export URLs to .txt"** button, allowing users to save links of failed downloads either as "URL only" or "URL with details" (including post title, ID, and original filename).
+    -   Fixed a bug where files skipped during retry (due to existing hash match) were not correctly removed from the error list.
+-   **Improved UI Stability**: Addressed issues with UI state management to more accurately reflect ongoing download activities (including retries and external link downloads). This prevents the "Cancel" button from becoming inactive prematurely while operations are still running.
 ---
 
 ## Installation
