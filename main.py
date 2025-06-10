@@ -23,13 +23,13 @@ QDesktopServices
 )
 from PyQt5 .QtWidgets import (
 QApplication ,QWidget ,QLabel ,QLineEdit ,QTextEdit ,QPushButton ,
-QVBoxLayout ,QHBoxLayout ,QFileDialog ,QMessageBox ,QListWidget ,QRadioButton ,QButtonGroup ,QCheckBox ,QSplitter ,
+QVBoxLayout ,QHBoxLayout ,QFileDialog ,QMessageBox ,QListWidget ,QRadioButton ,QButtonGroup ,QCheckBox ,QSplitter ,QComboBox, QGroupBox,
 QDialog ,QStackedWidget ,QScrollArea ,QListWidgetItem ,QSizePolicy ,QProgressBar ,
 QAbstractItemView ,
 QFrame ,
 QAbstractButton 
 )
-from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize 
+from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize, QProcess
 from urllib .parse import urlparse 
 
 try :
@@ -111,6 +111,12 @@ except Exception as e :
     traceback .print_exc ()
     print (f"-----------------------------",file =sys .stderr )
     sys .exit (1 )
+try:
+    from languages import get_translation
+except ImportError:
+    print("Failed to import get_translation from languages.py. Dialog translations will not work.")   
+    print (f"-----------------------------",file =sys .stderr )
+    sys .exit (1 )
 
 
 MAX_THREADS =200 
@@ -139,6 +145,7 @@ COOKIE_TEXT_KEY ="cookieTextV1"
 CHAR_FILTER_SCOPE_KEY ="charFilterScopeV1"
 THEME_KEY ="currentThemeV2"
 SCAN_CONTENT_IMAGES_KEY ="scanContentForImagesV1"
+LANGUAGE_KEY = "currentLanguageV1" # New key for language
 
 CONFIRM_ADD_ALL_ACCEPTED =1 
 FAVORITE_SCOPE_SELECTED_LOCATION ="selected_location"
@@ -154,12 +161,12 @@ class DownloadExtractedLinksDialog (QDialog ):
 
     download_requested =pyqtSignal (list )
 
-    def __init__ (self ,links_data ,parent =None ):
+    # Added parent_app for translation access
+    def __init__ (self ,links_data ,parent_app ,parent =None ):
 
 
         super ().__init__ (parent )
         self .links_data =links_data 
-        self .setWindowTitle ("Download Selected External Links")
 
 
         if parent :
@@ -175,10 +182,10 @@ class DownloadExtractedLinksDialog (QDialog ):
 
 
         layout =QVBoxLayout (self )
-        label =QLabel (f"Found {len (self .links_data )} supported link(s) (Mega, GDrive, Dropbox). Select to download:")
-        label .setAlignment (Qt .AlignCenter )
-        label .setWordWrap (True )
-        layout .addWidget (label )
+        self.main_info_label =QLabel () # Changed to instance variable for retranslation
+        self.main_info_label .setAlignment (Qt .AlignHCenter | Qt.AlignTop) # Center horizontally, align top
+        self.main_info_label .setWordWrap (True )
+        layout .addWidget (self.main_info_label )
 
         self .links_list_widget =QListWidget ()
         self .links_list_widget .setSelectionMode (QAbstractItemView .NoSelection )
@@ -220,27 +227,45 @@ class DownloadExtractedLinksDialog (QDialog ):
         layout .addWidget (self .links_list_widget )
 
         button_layout =QHBoxLayout ()
-        self .select_all_button =QPushButton ("Select All")
+        self .select_all_button =QPushButton () # Text set in _retranslate_ui
         self .select_all_button .clicked .connect (lambda :self ._set_all_items_checked (Qt .Checked ))
         button_layout .addWidget (self .select_all_button )
 
-        self .deselect_all_button =QPushButton ("Deselect All")
+        self .deselect_all_button =QPushButton () # Text set in _retranslate_ui
         self .deselect_all_button .clicked .connect (lambda :self ._set_all_items_checked (Qt .Unchecked ))
         button_layout .addWidget (self .deselect_all_button )
         button_layout .addStretch ()
 
-        self .download_button =QPushButton ("Download Selected")
+        self .download_button =QPushButton () # Text set in _retranslate_ui
         self .download_button .clicked .connect (self ._handle_download_selected )
         self .download_button .setDefault (True )
         button_layout .addWidget (self .download_button )
 
-        self .cancel_button =QPushButton ("Cancel")
+        self .cancel_button =QPushButton () # Text set in _retranslate_ui
         self .cancel_button .clicked .connect (self .reject )
         button_layout .addWidget (self .cancel_button )
         layout .addLayout (button_layout )
 
+        self.parent_app = parent_app # Store reference for translations
+        self._retranslate_ui() # Initial translation
+
         if parent and hasattr (parent ,'get_dark_theme')and parent .current_theme =="dark":
             self .setStyleSheet (parent .get_dark_theme ())
+
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("download_external_links_dialog_title", "Download Selected External Links"))
+        # Set the main label text, formatting with the count
+        self.main_info_label.setText(self._tr("download_external_links_dialog_main_label", "Found {count} supported link(s)...").format(count=len(self.links_data)))
+        self.select_all_button.setText(self._tr("select_all_button_text", "Select All"))
+        self.deselect_all_button.setText(self._tr("deselect_all_button_text", "Deselect All"))
+        self.download_button.setText(self._tr("download_selected_button_text", "Download Selected"))
+        self.cancel_button.setText(self._tr("fav_posts_cancel_button", "Cancel")) # Reusing existing key
 
     def _set_all_items_checked (self ,check_state ):
         for i in range (self .links_list_widget .count ()):
@@ -259,26 +284,27 @@ class DownloadExtractedLinksDialog (QDialog ):
             self .download_requested .emit (selected_links )
             self .accept ()
         else :
-            QMessageBox .information (self ,"No Selection","Please select at least one link to download.")
+            QMessageBox.information(
+                self, 
+                self._tr("no_selection_title", "No Selection"),
+                self._tr("no_selection_message_links", "Please select at least one link to download."))
 
 class ConfirmAddAllDialog (QDialog ):
     """A dialog to confirm adding multiple new names to Known.txt."""
-    def __init__ (self ,new_filter_objects_list ,parent =None ):
+    def __init__ (self ,new_filter_objects_list ,parent_app ,parent =None ): # Added parent_app
         super ().__init__ (parent )
-        self .setWindowTitle ("Confirm Adding New Names")
+        self.parent_app = parent_app # Store for translations
         self .setModal (True )
         self .new_filter_objects_list =new_filter_objects_list 
         self .user_choice =CONFIRM_ADD_ALL_CANCEL_DOWNLOAD 
+        self.setWindowTitle(self._tr("confirm_add_all_dialog_title", "Confirm Adding New Names"))
 
         main_layout =QVBoxLayout (self )
 
         info_label =QLabel (
         "The following new names/groups from your 'Filter by Character(s)' input are not in 'Known.txt'.\n"
         "Adding them can improve folder organization for future downloads.\n\n"
-        "Review the list and choose an action:"
-        )
-        info_label .setWordWrap (True )
-        main_layout .addWidget (info_label )
+        "Review the list and choose an action:") # Text set in _retranslate_ui
 
         self .names_list_widget =QListWidget ()
         for filter_obj in self .new_filter_objects_list :
@@ -289,14 +315,18 @@ class ConfirmAddAllDialog (QDialog ):
             list_item .setData (Qt .UserRole ,filter_obj )
             self .names_list_widget .addItem (list_item )
 
+        self.info_label = QLabel() # Made instance var for retranslation
+        self.info_label.setWordWrap(True)
+        main_layout.addWidget(self.info_label)
+
         main_layout .addWidget (self .names_list_widget )
 
         selection_buttons_layout =QHBoxLayout ()
-        self .select_all_button =QPushButton ("Select All")
+        self .select_all_button =QPushButton () # Text set in _retranslate_ui
         self .select_all_button .clicked .connect (self ._select_all_items )
         selection_buttons_layout .addWidget (self .select_all_button )
 
-        self .deselect_all_button =QPushButton ("Deselect All")
+        self .deselect_all_button =QPushButton () # Text set in _retranslate_ui
         self .deselect_all_button .clicked .connect (self ._deselect_all_items )
         selection_buttons_layout .addWidget (self .deselect_all_button )
         selection_buttons_layout .addStretch ()
@@ -305,26 +335,41 @@ class ConfirmAddAllDialog (QDialog ):
 
         buttons_layout =QHBoxLayout ()
 
-        self .add_selected_button =QPushButton ("Add Selected to Known.txt")
+        self .add_selected_button =QPushButton () # Text set in _retranslate_ui
         self .add_selected_button .clicked .connect (self ._accept_add_selected )
         buttons_layout .addWidget (self .add_selected_button )
 
-        self .skip_adding_button =QPushButton ("Skip Adding These")
+        self .skip_adding_button =QPushButton () # Text set in _retranslate_ui
         self .skip_adding_button .clicked .connect (self ._reject_skip_adding )
         buttons_layout .addWidget (self .skip_adding_button )
         buttons_layout .addStretch ()
 
-        self .cancel_download_button =QPushButton ("Cancel Download")
+        self .cancel_download_button =QPushButton () # Text set in _retranslate_ui
         self .cancel_download_button .clicked .connect (self ._reject_cancel_download )
         buttons_layout .addWidget (self .cancel_download_button )
 
         main_layout .addLayout (buttons_layout )
+        self._retranslate_ui() # Initial translation
 
         self .setMinimumWidth (480 )
         self .setMinimumHeight (350 )
-        if parent and hasattr (parent ,'get_dark_theme'):
+        if self.parent_app and hasattr (self.parent_app ,'get_dark_theme') and self.parent_app.current_theme == "dark":
             self .setStyleSheet (parent .get_dark_theme ())
         self .add_selected_button .setDefault (True )
+
+    def _tr(self, key, default_text=""):
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("confirm_add_all_dialog_title", "Confirm Adding New Names"))
+        self.info_label.setText(self._tr("confirm_add_all_info_label", "The following new names/groups..."))
+        self.select_all_button.setText(self._tr("confirm_add_all_select_all_button", "Select All"))
+        self.deselect_all_button.setText(self._tr("confirm_add_all_deselect_all_button", "Deselect All"))
+        self.add_selected_button.setText(self._tr("confirm_add_all_add_selected_button", "Add Selected to Known.txt"))
+        self.skip_adding_button.setText(self._tr("confirm_add_all_skip_adding_button", "Skip Adding These"))
+        self.cancel_download_button.setText(self._tr("confirm_add_all_cancel_download_button", "Cancel Download"))
 
     def _select_all_items (self ):
         for i in range (self .names_list_widget .count ()):
@@ -365,48 +410,66 @@ class ExportOptionsDialog(QDialog):
     EXPORT_MODE_LINK_ONLY = 1
     EXPORT_MODE_WITH_DETAILS = 2
 
-    def __init__(self, parent_app_ref, parent=None):
+    def __init__(self, parent_app, parent=None): # Changed parent_app_ref to parent_app
         super().__init__(parent)
-        self.setWindowTitle("Export Options")
+        self.parent_app = parent_app # Store for translations
         self.setModal(True)
         self.selected_option = self.EXPORT_MODE_LINK_ONLY  # Default
 
         layout = QVBoxLayout(self)
 
-        description_label = QLabel("Choose the format for exporting error file links:")
-        layout.addWidget(description_label)
+        self.description_label = QLabel() # Text set in _retranslate_ui
+        layout.addWidget(self.description_label)
 
         self.radio_group = QButtonGroup(self)
 
-        self.radio_link_only = QRadioButton("Link per line (URL only)")
-        self.radio_link_only.setToolTip("Exports only the direct download URL for each failed file, one URL per line.")
+        self.radio_link_only = QRadioButton() # Text set in _retranslate_ui
+        # Tooltip set in _retranslate_ui
         self.radio_link_only.setChecked(True)
         self.radio_group.addButton(self.radio_link_only, self.EXPORT_MODE_LINK_ONLY)
         layout.addWidget(self.radio_link_only)
 
-        self.radio_with_details = QRadioButton("Export with details (URL [Post, File info])")
-        self.radio_with_details.setToolTip("Exports the URL followed by details like Post Title, Post ID, and Original Filename in brackets.")
+        self.radio_with_details = QRadioButton() # Text set in _retranslate_ui
+        # Tooltip set in _retranslate_ui
         self.radio_group.addButton(self.radio_with_details, self.EXPORT_MODE_WITH_DETAILS)
         layout.addWidget(self.radio_with_details)
 
         button_layout = QHBoxLayout()
-        self.export_button = QPushButton("Export")
+        self.export_button = QPushButton() # Text set in _retranslate_ui
         self.export_button.clicked.connect(self._handle_export)
         self.export_button.setDefault(True)
 
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = QPushButton() # Text set in _retranslate_ui
         self.cancel_button.clicked.connect(self.reject)
 
         button_layout.addStretch(1)
         button_layout.addWidget(self.export_button)
         button_layout.addWidget(self.cancel_button)
         layout.addLayout(button_layout)
-        
+
+        self._retranslate_ui() # Initial translation
+
         self.setMinimumWidth(350)
 
-        if parent_app_ref and hasattr(parent_app_ref, 'current_theme') and parent_app_ref.current_theme == "dark":
-            if hasattr(parent_app_ref, 'get_dark_theme'):
-                self.setStyleSheet(parent_app_ref.get_dark_theme())
+        if self.parent_app and hasattr(self.parent_app, 'current_theme') and self.parent_app.current_theme == "dark":
+            if hasattr(self.parent_app, 'get_dark_theme'):
+                self.setStyleSheet(self.parent_app.get_dark_theme())
+
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("export_options_dialog_title", "Export Options"))
+        self.description_label.setText(self._tr("export_options_description_label", "Choose the format for exporting error file links:"))
+        self.radio_link_only.setText(self._tr("export_options_radio_link_only", "Link per line (URL only)"))
+        self.radio_link_only.setToolTip(self._tr("export_options_radio_link_only_tooltip", "Exports only the direct download URL..."))
+        self.radio_with_details.setText(self._tr("export_options_radio_with_details", "Export with details (URL [Post, File info])"))
+        self.radio_with_details.setToolTip(self._tr("export_options_radio_with_details_tooltip", "Exports the URL followed by details..."))
+        self.export_button.setText(self._tr("export_options_export_button", "Export"))
+        self.cancel_button.setText(self._tr("fav_posts_cancel_button", "Cancel")) # Reusing cancel button
 
     def _handle_export(self):
         self.selected_option = self.radio_group.checkedId()
@@ -418,21 +481,21 @@ class ExportOptionsDialog(QDialog):
 class ErrorFilesDialog (QDialog ):
     """Dialog to display files that were skipped due to errors."""
     retry_selected_signal =pyqtSignal (list )
-    def __init__ (self ,error_files_info_list ,parent =None ):
+    def __init__ (self ,error_files_info_list ,parent_app ,parent =None ): # parent_app is DownloaderApp
         super ().__init__ (parent )
-        self .setWindowTitle ("Files Skipped Due to Errors")
+        self.parent_app = parent_app # Store for translations
         self .setModal (True )
         self .error_files =error_files_info_list 
 
         main_layout =QVBoxLayout (self )
 
         if not self .error_files :
-            info_label =QLabel ("No files were recorded as skipped due to errors in the last session or after retries.")
-            main_layout .addWidget (info_label )
+            self.info_label =QLabel () # Text set in _retranslate_ui
+            main_layout .addWidget (self.info_label )
         else :
-            info_label =QLabel (f"The following {len (self .error_files )} file(s) were skipped due to download errors:")
-            info_label .setWordWrap (True )
-            main_layout .addWidget (info_label )
+            self.info_label =QLabel () # Text set in _retranslate_ui
+            self.info_label .setWordWrap (True )
+            main_layout .addWidget (self.info_label )
 
             self .files_list_widget =QListWidget ()
             self .files_list_widget .setSelectionMode (QAbstractItemView .NoSelection )
@@ -449,22 +512,24 @@ class ErrorFilesDialog (QDialog ):
             main_layout .addWidget (self .files_list_widget )
 
         buttons_layout =QHBoxLayout ()
-        self .select_all_button =QPushButton ("Select All")
+        self .select_all_button =QPushButton () # Text set in _retranslate_ui
         self .select_all_button .clicked .connect (self ._select_all_items )
         buttons_layout .addWidget (self .select_all_button )
 
-        self .retry_button =QPushButton ("Retry Selected")
+        self .retry_button =QPushButton () # Text set in _retranslate_ui
         self .retry_button .clicked .connect (self ._handle_retry_selected )
-        self .export_button = QPushButton("Export URLs to .txt")
+        self .export_button = QPushButton() # Text set in _retranslate_ui
         self .export_button.clicked.connect(self._handle_export_errors_to_txt)
         buttons_layout .addWidget (self .retry_button )
 
         buttons_layout .addStretch (1 )
-        self .ok_button =QPushButton ("OK")
+        self .ok_button =QPushButton () # Text set in _retranslate_ui
         self .ok_button .clicked .connect (self .accept )
         buttons_layout .addWidget (self .ok_button )
         main_layout .addLayout (buttons_layout )
         buttons_layout.insertWidget(2, self.export_button) # Insert before stretch
+
+        self._retranslate_ui() # Initial translation
 
         self .select_all_button .setEnabled (bool (self .error_files ))
         self .retry_button .setEnabled (bool (self .error_files ))
@@ -472,9 +537,26 @@ class ErrorFilesDialog (QDialog ):
 
         self .setMinimumWidth (500 )
         self .setMinimumHeight (300 )
-        if parent and hasattr (parent ,'get_dark_theme'):
-            self .setStyleSheet (parent .get_dark_theme ())
+        if self.parent_app and hasattr (self.parent_app ,'get_dark_theme') and self.parent_app.current_theme == "dark":
+            self .setStyleSheet (self.parent_app .get_dark_theme ())
         self .ok_button .setDefault (True )
+
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("error_files_dialog_title", "Files Skipped Due to Errors"))
+        if not self.error_files:
+            self.info_label.setText(self._tr("error_files_no_errors_label", "No files were recorded..."))
+        else:
+            self.info_label.setText(self._tr("error_files_found_label", "The following {count} file(s)...").format(count=len(self.error_files)))
+        self.select_all_button.setText(self._tr("error_files_select_all_button", "Select All"))
+        self.retry_button.setText(self._tr("error_files_retry_selected_button", "Retry Selected"))
+        self.export_button.setText(self._tr("error_files_export_urls_button", "Export URLs to .txt"))
+        self.ok_button.setText(self._tr("ok_button", "OK"))
 
     def _select_all_items (self ):
         for i in range (self .files_list_widget .count ()):
@@ -486,15 +568,15 @@ class ErrorFilesDialog (QDialog ):
             self .retry_selected_signal .emit (selected_files_for_retry )
             self .accept ()
         else :
-            QMessageBox .information (self ,"No Selection","Please select at least one file to retry.")
+            QMessageBox.information(self, self._tr("fav_artists_no_selection_title", "No Selection"), self._tr("error_files_no_selection_retry_message", "Please select at least one file to retry."))
 
     def _handle_export_errors_to_txt(self):
         if not self.error_files:
-            QMessageBox.information(self, "No Errors", "There are no error file URLs to export.")
+            QMessageBox.information(self, self._tr("error_files_no_errors_export_title", "No Errors"), self._tr("error_files_no_errors_export_message", "There are no error file URLs to export."))
             return
 
         # Show export options dialog
-        options_dialog = ExportOptionsDialog(parent_app_ref=self.parent(), parent=self)
+        options_dialog = ExportOptionsDialog(parent_app=self.parent_app, parent=self)
         if not options_dialog.exec_() == QDialog.Accepted:
             # User cancelled the options dialog
             return
@@ -517,12 +599,12 @@ class ErrorFilesDialog (QDialog ):
                     lines_to_export.append(url)
 
         if not lines_to_export:
-            QMessageBox.information(self, "No URLs Found", "Could not extract any URLs from the error file list to export.")
+            QMessageBox.information(self, self._tr("error_files_no_urls_found_export_title", "No URLs Found"), self._tr("error_files_no_urls_found_export_message", "Could not extract any URLs..."))
             return
 
         default_filename = "error_file_links.txt"
         filepath, _ = QFileDialog.getSaveFileName(
-            self, "Save Error File URLs", default_filename, "Text Files (*.txt);;All Files (*)"
+            self, self._tr("error_files_save_dialog_title", "Save Error File URLs"), default_filename, "Text Files (*.txt);;All Files (*)"
         )
 
         if filepath:
@@ -530,53 +612,84 @@ class ErrorFilesDialog (QDialog ):
                 with open(filepath, 'w', encoding='utf-8') as f:
                     for line in lines_to_export:
                         f.write(f"{line}\n")
-                QMessageBox.information(self, "Export Successful", f"Successfully exported {len(lines_to_export)} entries to:\n{filepath}")
+                QMessageBox.information(self, self._tr("error_files_export_success_title", "Export Successful"), self._tr("error_files_export_success_message", "Successfully exported...").format(count=len(lines_to_export), filepath=filepath))
             except Exception as e:
-                QMessageBox.critical(self, "Export Error", f"Could not export file links: {e}")
+                QMessageBox.critical(self, self._tr("error_files_export_error_title", "Export Error"), self._tr("error_files_export_error_message", "Could not export...").format(error=str(e)))
         else:
             # User cancelled the dialog
             pass
 class FutureSettingsDialog (QDialog ):
     """A simple dialog as a placeholder for future settings."""
     def __init__ (self ,parent_app_ref ,parent =None ):
-        super ().__init__ (parent )
+        super().__init__(parent)
         self .parent_app =parent_app_ref 
-        self .setWindowTitle ("Settings")
         self .setModal (True )
 
         layout =QVBoxLayout (self )
 
-        label =QLabel ("Application Settings:")
-        label .setAlignment (Qt .AlignCenter )
-        layout .addWidget (label )
+        # Appearance Group
+        self.appearance_group_box = QGroupBox()
+        appearance_layout = QVBoxLayout(self.appearance_group_box)
+
         self .theme_toggle_button =QPushButton ()
         self ._update_theme_toggle_button_text ()
         self .theme_toggle_button .clicked .connect (self ._toggle_theme )
-        layout .addWidget (self .theme_toggle_button )
+        appearance_layout.addWidget(self.theme_toggle_button)
+        layout.addWidget(self.appearance_group_box)
+
+        # Language Group
+        self.language_group_box = QGroupBox()
+        language_group_layout = QVBoxLayout(self.language_group_box)
+
+        self.language_selection_layout = QHBoxLayout() # Renamed for clarity
+        self.language_label = QLabel() # Text set in _retranslate_ui
+        self.language_selection_layout.addWidget(self.language_label)
+
+        self.language_combo_box = QComboBox()
+        self.language_combo_box.currentIndexChanged.connect(self._language_selection_changed)
+        self.language_selection_layout.addWidget(self.language_combo_box, 1) # Add stretch factor
+        language_group_layout.addLayout(self.language_selection_layout)
+        layout.addWidget(self.language_group_box)
+
 
         layout .addStretch (1 )
 
-        ok_button =QPushButton ("OK")
-        ok_button .clicked .connect (self .accept )
-        layout .addWidget (ok_button ,0 ,Qt .AlignRight )
+        self.ok_button =QPushButton () # Made it an instance variable for retranslate
+        self.ok_button .clicked .connect (self .accept )
+        layout .addWidget (self.ok_button ,0 ,Qt .AlignRight | Qt.AlignBottom)
 
-        self .setMinimumSize (350 ,150 )
+        self .setMinimumSize (380 ,250 ) # Increased size
+        self._retranslate_ui() 
         self ._apply_dialog_theme ()
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation):
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text # Fallback if get_translation itself failed to import
 
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("settings_dialog_title", "Settings"))
+        self.appearance_group_box.setTitle(self._tr("appearance_group_title", "Appearance"))
+        self.language_group_box.setTitle(self._tr("language_group_title", "Language Settings"))
+        self.language_label.setText(self._tr("language_label", "Language:"))
+        self._update_theme_toggle_button_text()
+        self._populate_language_combo_box() # This will also use translations
+        self.ok_button.setText(self._tr("ok_button", "OK"))
     def _update_theme_toggle_button_text (self ):
         if self .parent_app .current_theme =="dark":
-            self .theme_toggle_button .setText ("Switch to Light Mode")
-            self .theme_toggle_button .setToolTip ("Change the application appearance to light.")
+            self .theme_toggle_button .setText (self._tr("theme_toggle_light", "Switch to Light Mode"))
+            self .theme_toggle_button .setToolTip (self._tr("theme_tooltip_light", "Change the application appearance to light."))
         else :
-            self .theme_toggle_button .setText ("Switch to Dark Mode")
-            self .theme_toggle_button .setToolTip ("Change the application appearance to dark.")
+            self .theme_toggle_button .setText (self._tr("theme_toggle_dark", "Switch to Dark Mode"))
+            self .theme_toggle_button .setToolTip (self._tr("theme_tooltip_dark", "Change the application appearance to dark."))
 
     def _toggle_theme (self ):
         if self .parent_app .current_theme =="dark":
             self .parent_app .apply_theme ("light")
         else :
             self .parent_app .apply_theme ("dark")
-        self ._update_theme_toggle_button_text ()
+        # self ._update_theme_toggle_button_text () # Now part of _retranslate_ui
+        self._retranslate_ui() # Retranslate to update button text correctly
         self ._apply_dialog_theme ()
 
     def _apply_dialog_theme (self ):
@@ -585,16 +698,64 @@ class FutureSettingsDialog (QDialog ):
         else :
             self .setStyleSheet ("")
 
+    def _populate_language_combo_box(self):
+        self.language_combo_box.blockSignals(True)
+        self.language_combo_box.clear()
+        languages = [ # Use native names directly, not translated ones
+            ("en", "English"),
+            ("ja", "日本語 (Japanese)"),
+            ("fr", "Français (French)"),
+            ("de", "Deutsch (German)"),
+            ("es", "Español (Spanish)"),
+            ("pt", "Português (Portuguese)"),
+            ("ru", "Русский (Russian)"),
+            ("zh_CN", "简体中文 (Simplified Chinese)"),
+            ("zh_TW", "繁體中文 (Traditional Chinese)"),
+            ("ko", "한국어 (Korean)")
+        ]
+        for lang_code, lang_name in languages:
+            self.language_combo_box.addItem(lang_name, lang_code)
+            if self.parent_app.current_selected_language == lang_code:
+                self.language_combo_box.setCurrentIndex(self.language_combo_box.count() - 1)
+        self.language_combo_box.blockSignals(False)
+
+    def _language_selection_changed(self, index):
+        selected_lang_code = self.language_combo_box.itemData(index)
+        if selected_lang_code and selected_lang_code != self.parent_app.current_selected_language:
+            self.parent_app.current_selected_language = selected_lang_code
+            self.parent_app.settings.setValue(LANGUAGE_KEY, self.parent_app.current_selected_language)
+            self.parent_app.settings.sync()
+            self._retranslate_ui() # Retranslate the dialog with the new language         
+            # log_msg = (f"🌐 Language preference changed to: {self.parent_app.current_selected_language.upper()}. "
+            #            f"Settings dialog updated. Main window elements will update. "
+            #            f"A restart may be needed for other parts of the app to fully reflect the change.")
+            # self.parent_app.log_signal.emit(log_msg)
+
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Information)
+            msg_box.setWindowTitle(self._tr("language_change_title", "Language Changed"))
+            msg_box.setText(self._tr("language_change_message", "The language has been changed. A restart is required for all changes to take full effect."))
+            msg_box.setInformativeText(self._tr("language_change_informative", "Would you like to restart the application now?"))
+            
+            restart_button = msg_box.addButton(self._tr("restart_now_button", "Restart Now"), QMessageBox.ApplyRole)
+            ok_button = msg_box.addButton(self._tr("ok_button", "OK"), QMessageBox.AcceptRole)
+            
+            msg_box.setDefaultButton(ok_button)
+            msg_box.exec_()
+
+            if msg_box.clickedButton() == restart_button:
+                self.parent_app._request_restart_application()
+        
 class EmptyPopupDialog (QDialog ):
     """A simple empty popup dialog."""
     SCOPE_CHARACTERS ="Characters"
     INITIAL_LOAD_LIMIT =200 
     SCOPE_CREATORS ="Creators"
 
-    def __init__ (self ,app_base_dir ,parent =None ):
+    def __init__ (self ,app_base_dir ,parent_app_ref ,parent =None ):
         super ().__init__ (parent )
-        self .setWindowTitle ("Creator Selection")
         self .setMinimumSize (400 ,300 )
+        self.parent_app = parent_app_ref # Store reference to main app for language
         self .current_scope_mode =self .SCOPE_CHARACTERS 
         self .app_base_dir =app_base_dir 
         self .all_creators_data =[]
@@ -603,7 +764,6 @@ class EmptyPopupDialog (QDialog ):
 
         layout =QVBoxLayout (self )
         self .search_input =QLineEdit ()
-        self .search_input .setPlaceholderText ("Search by name, service, or paste creator URL...")
         self .search_input .textChanged .connect (self ._filter_list )
         layout .addWidget (self .search_input )
 
@@ -617,29 +777,40 @@ class EmptyPopupDialog (QDialog ):
         self .list_widget .itemChanged .connect (self ._handle_item_check_changed )
         layout .addWidget (self .list_widget )
         button_layout =QHBoxLayout ()
-        self .add_selected_button =QPushButton ("Add Selected")
+        self .add_selected_button =QPushButton () # Text set in _retranslate_ui
         self .add_selected_button .setToolTip (
         "Add Selected Creators to URL Input\n\n"
         "Adds the names of all checked creators to the main URL input field,\n"
         "comma-separated, and closes this dialog."
         )
         self .add_selected_button .clicked .connect (self ._handle_add_selected )
+        self.add_selected_button.setDefault(True)
         button_layout .addWidget (self .add_selected_button )
 
-        self .scope_button =QPushButton (f"Scope: {self .current_scope_mode }")
-        self .scope_button .setToolTip (
-        f"Current Download Scope: {self .current_scope_mode }\n\n"
-        f"Click to toggle between '{self .SCOPE_CHARACTERS }' and '{self .SCOPE_CREATORS }' scopes.\n"
-        f"This setting (when implemented for downloads from this popup) will determine the folder structure."
-        )
+        self .scope_button =QPushButton () # Text set in _retranslate_ui
         self .scope_button .clicked .connect (self ._toggle_scope_mode )
         button_layout .addWidget (self .scope_button )
         layout .addLayout (button_layout )
-        if parent and hasattr (parent ,'get_dark_theme'):
-            self .setStyleSheet (parent .get_dark_theme ())
+
+        self._retranslate_ui() # Set initial texts
+
+        if self.parent_app and hasattr (self.parent_app ,'get_dark_theme') and self.parent_app.current_theme == "dark":
+            self .setStyleSheet (self.parent_app .get_dark_theme ())
 
 
         QTimer .singleShot (0 ,self ._perform_initial_load )
+
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("creator_popup_title", "Creator Selection"))
+        self.search_input.setPlaceholderText(self._tr("creator_popup_search_placeholder", "Search by name, service, or paste creator URL..."))
+        self.add_selected_button.setText(self._tr("creator_popup_add_selected_button", "Add Selected"))
+        self._update_scope_button_text_and_tooltip()
 
     def _perform_initial_load (self ):
         """Called by QTimer to load data after dialog is shown."""
@@ -881,13 +1052,19 @@ class EmptyPopupDialog (QDialog ):
             self .current_scope_mode =self .SCOPE_CREATORS 
         else :
             self .current_scope_mode =self .SCOPE_CHARACTERS 
-        self .scope_button .setText (f"Scope: {self .current_scope_mode }")
+        self._update_scope_button_text_and_tooltip()
+
+    def _update_scope_button_text_and_tooltip(self):
+        if self.current_scope_mode == self.SCOPE_CHARACTERS:
+            self.scope_button.setText(self._tr("creator_popup_scope_characters_button", "Scope: Characters"))
+        else:
+            self.scope_button.setText(self._tr("creator_popup_scope_creators_button", "Scope: Creators"))
+        
         self .scope_button .setToolTip (
         f"Current Download Scope: {self .current_scope_mode }\n\n"
         f"Click to toggle between '{self .SCOPE_CHARACTERS }' and '{self .SCOPE_CREATORS }' scopes.\n"
         f"'{self .SCOPE_CHARACTERS }': (Planned) Downloads into character-named folders directly in the main Download Location (artists mixed).\n"
         f"'{self .SCOPE_CREATORS }': (Planned) Downloads into artist-named subfolders within the main Download Location, then character folders inside those.")
-
     def _get_domain_for_service (self ,service_name ):
         """Determines the base domain for a given service."""
         service_lower =service_name .lower ()
@@ -940,62 +1117,74 @@ class CookieHelpDialog (QDialog ):
     CHOICE_CANCEL_DOWNLOAD =2 
     CHOICE_OK_INFO_ONLY =3 
 
-    def __init__ (self ,parent =None ,offer_download_without_option =False ):
+    def __init__ (self ,parent_app ,parent =None ,offer_download_without_option =False ): # Added parent_app
         super ().__init__ (parent )
-        self .setWindowTitle ("Cookie File Instructions")
+        self.parent_app = parent_app # Store for translations
         self .setModal (True )
         self .offer_download_without_option =offer_download_without_option 
         self .user_choice =None 
         main_layout =QVBoxLayout (self )
 
-        instruction_text ="""
-        <p>To use cookies, you typically need a <b>cookies.txt</b> file from your browser.</p>
-        <p><b>How to get cookies.txt:</b></p>
-        <ol>
-            <li>Install the 'Get cookies.txt LOCALLY' extension for your Chrome-based browser:
-                <br><a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" style="color: #87CEEB;">Get cookies.txt LOCALLY on Chrome Web Store</a>
-            </li>
-            <li>Go to the website (e.g., kemono.su or coomer.su) and log in if necessary.</li>
-            <li>Click the extension's icon in your browser toolbar.</li>
-            <li>Click an 'Export' button (e.g., "Export As", "Export cookies.txt" - the exact wording might vary depending on the extension version).</li>
-            <li>Save the downloaded <code>cookies.txt</code> file to your computer.</li>
-            <li>In this application:
-                <ul>
-                    <li>Ensure the 'Use Cookie' checkbox is checked.</li>
-                    <li>Click the 'Browse...' button next to the cookie text field.</li>
-                    <li>Select the <code>cookies.txt</code> file you just saved.</li>
-                </ul>
-            </li>
-        </ol>
-        <p>Alternatively, some extensions might allow you to copy the cookie string directly. If so, you can paste it into the text field instead of browsing for a file.</p>
-        """
-        info_label =QLabel (instruction_text )
-        info_label .setTextFormat (Qt .RichText )
-        info_label .setOpenExternalLinks (True )
-        info_label .setWordWrap (True )
-        main_layout .addWidget (info_label )
+        self.info_label = QLabel() # Text set in _retranslate_ui
+        self.info_label.setTextFormat(Qt.RichText)
+        self.info_label.setOpenExternalLinks(True)
+        self.info_label.setWordWrap(True)
+        main_layout.addWidget(self.info_label)
         button_layout =QHBoxLayout ()
         if self .offer_download_without_option :
             button_layout .addStretch (1 )
 
-            self .download_without_button =QPushButton ("Download without Cookies")
+            self .download_without_button =QPushButton () # Text set in _retranslate_ui
             self .download_without_button .clicked .connect (self ._proceed_without_cookies )
             button_layout .addWidget (self .download_without_button )
 
-            self .cancel_button =QPushButton ("Cancel Download")
+            self .cancel_button =QPushButton () # Text set in _retranslate_ui
             self .cancel_button .clicked .connect (self ._cancel_download )
             button_layout .addWidget (self .cancel_button )
         else :
             button_layout .addStretch (1 )
-            self .ok_button =QPushButton ("OK")
+            self .ok_button =QPushButton () # Text set in _retranslate_ui
             self .ok_button .clicked .connect (self ._ok_info_only )
             button_layout .addWidget (self .ok_button )
 
         main_layout .addLayout (button_layout )
 
-        if parent and hasattr (parent ,'get_dark_theme'):
-            self .setStyleSheet (parent .get_dark_theme ())
+        self._retranslate_ui() # Initial translation
+
+        if self.parent_app and hasattr(self.parent_app, 'get_dark_theme') and self.parent_app.current_theme == "dark":
+            self.setStyleSheet(self.parent_app.get_dark_theme())
         self .setMinimumWidth (500 )
+
+    def _tr(self, key, default_text=""):
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("cookie_help_dialog_title", "Cookie File Instructions"))
+        instruction_html = f"""
+        {self._tr("cookie_help_instruction_intro", "<p>To use cookies...</p>")}
+        {self._tr("cookie_help_how_to_get_title", "<p><b>How to get cookies.txt:</b></p>")}
+        <ol>
+            {self._tr("cookie_help_step1_extension_intro", "<li>Install extension...</li>")}
+            {self._tr("cookie_help_step2_login", "<li>Go to website...</li>")}
+            {self._tr("cookie_help_step3_click_icon", "<li>Click icon...</li>")}
+            {self._tr("cookie_help_step4_export", "<li>Click export...</li>")}
+            {self._tr("cookie_help_step5_save_file", "<li>Save file...</li>")}
+            {self._tr("cookie_help_step6_app_intro", "<li>In this application:<ul>")}
+            {self._tr("cookie_help_step6a_checkbox", "<li>Ensure checkbox...</li>")}
+            {self._tr("cookie_help_step6b_browse", "<li>Click browse...</li>")}
+            {self._tr("cookie_help_step6c_select", "<li>Select file...</li></ul></li>")}
+        </ol>
+        {self._tr("cookie_help_alternative_paste", "<p>Alternatively, paste...</p>")}
+        """
+        self.info_label.setText(instruction_html)
+
+        if self.offer_download_without_option:
+            self.download_without_button.setText(self._tr("cookie_help_proceed_without_button", "Download without Cookies"))
+            self.cancel_button.setText(self._tr("cookie_help_cancel_download_button", "Cancel Download"))
+        else:
+            self.ok_button.setText(self._tr("ok_button", "OK"))
 
     def _proceed_without_cookies (self ):
         self .user_choice =self .CHOICE_PROCEED_WITHOUT_COOKIES 
@@ -1011,49 +1200,64 @@ class CookieHelpDialog (QDialog ):
 
 class KnownNamesFilterDialog (QDialog ):
     """A dialog to select names from Known.txt to add to the filter input."""
-    def __init__ (self ,known_names_list ,parent =None ):
+    def __init__ (self ,known_names_list ,parent_app_ref ,parent =None ): # Added parent_app_ref
         super ().__init__ (parent )
-        self .setWindowTitle ("Add Known Names to Filter")
+        self.parent_app = parent_app_ref # Store reference for translations
         self .setModal (True )
         self .all_known_name_entries =sorted (known_names_list ,key =lambda x :x ['name'].lower ())
         self .selected_entries_to_return =[]
 
         main_layout =QVBoxLayout (self )
 
-        self .search_input =QLineEdit ()
-        self .search_input .setPlaceholderText ("Search names...")
+        self .search_input =QLineEdit () # Placeholder set in _retranslate_ui
         self .search_input .textChanged .connect (self ._filter_list_display )
         main_layout .addWidget (self .search_input )
 
         self .names_list_widget =QListWidget ()
-        self ._populate_list_widget ()
         main_layout .addWidget (self .names_list_widget )
 
         buttons_layout =QHBoxLayout ()
 
-        self .select_all_button =QPushButton ("Select All")
+        self .select_all_button =QPushButton () # Text set in _retranslate_ui
         self .select_all_button .clicked .connect (self ._select_all_items )
         buttons_layout .addWidget (self .select_all_button )
 
-        self .deselect_all_button =QPushButton ("Deselect All")
+        self .deselect_all_button =QPushButton () # Text set in _retranslate_ui
         self .deselect_all_button .clicked .connect (self ._deselect_all_items )
         buttons_layout .addWidget (self .deselect_all_button )
         buttons_layout .addStretch (1 )
 
-        self .add_button =QPushButton ("Add Selected")
+        self .add_button =QPushButton () # Text set in _retranslate_ui
         self .add_button .clicked .connect (self ._accept_selection_action )
         buttons_layout .addWidget (self .add_button )
 
-        self .cancel_button =QPushButton ("Cancel")
+        self .cancel_button =QPushButton () # Text set in _retranslate_ui (will use "ok_button" key for "Cancel")
         self .cancel_button .clicked .connect (self .reject )
         buttons_layout .addWidget (self .cancel_button )
         main_layout .addLayout (buttons_layout )
 
+        self._retranslate_ui() # Set initial texts
+        self ._populate_list_widget () # Populate after UI elements are created
+
         self .setMinimumWidth (350 )
         self .setMinimumHeight (400 )
-        if parent and hasattr (parent ,'get_dark_theme'):
-            self .setStyleSheet (parent .get_dark_theme ())
+        if self.parent_app and hasattr (self.parent_app ,'get_dark_theme') and self.parent_app.current_theme == "dark":
+            self .setStyleSheet (self.parent_app .get_dark_theme ())
         self .add_button .setDefault (True )
+
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("known_names_filter_dialog_title", "Add Known Names to Filter"))
+        self.search_input.setPlaceholderText(self._tr("known_names_filter_search_placeholder", "Search names..."))
+        self.select_all_button.setText(self._tr("known_names_filter_select_all_button", "Select All"))
+        self.deselect_all_button.setText(self._tr("known_names_filter_deselect_all_button", "Deselect All"))
+        self.add_button.setText(self._tr("known_names_filter_add_selected_button", "Add Selected"))
+        self.cancel_button.setText(self._tr("fav_posts_cancel_button", "Cancel")) # Reusing cancel from fav posts
 
     def _populate_list_widget (self ,names_to_display =None ):
         self .names_list_widget .clear ()
@@ -1105,11 +1309,8 @@ class FavoriteArtistsDialog (QDialog ):
         self .all_fetched_artists =[]
         self .selected_artist_urls =[]
 
-        self .setWindowTitle ("Favorite Artists")
         self .setModal (True )
         self .setMinimumSize (500 ,500 )
-        if hasattr (self .parent_app ,'get_dark_theme'):
-            self .setStyleSheet (self .parent_app .get_dark_theme ())
 
         self ._init_ui ()
         self ._fetch_favorite_artists ()
@@ -1122,15 +1323,29 @@ class FavoriteArtistsDialog (QDialog ):
         else :
             return "kemono.su"
 
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("fav_artists_dialog_title", "Favorite Artists"))
+        self.status_label.setText(self._tr("fav_artists_loading_status", "Loading favorite artists..."))
+        self.search_input.setPlaceholderText(self._tr("fav_artists_search_placeholder", "Search artists..."))
+        self.select_all_button.setText(self._tr("fav_artists_select_all_button", "Select All"))
+        self.deselect_all_button.setText(self._tr("fav_artists_deselect_all_button", "Deselect All"))
+        self.download_button.setText(self._tr("fav_artists_download_selected_button", "Download Selected"))
+        self.cancel_button.setText(self._tr("fav_artists_cancel_button", "Cancel"))
+
     def _init_ui (self ):
         main_layout =QVBoxLayout (self )
 
-        self .status_label =QLabel ("Loading favorite artists...")
+        self .status_label =QLabel () # Text set in _retranslate_ui
         self .status_label .setAlignment (Qt .AlignCenter )
         main_layout .addWidget (self .status_label )
 
-        self .search_input =QLineEdit ()
-        self .search_input .setPlaceholderText ("Search artists...")
+        self .search_input =QLineEdit () # Placeholder set in _retranslate_ui
         self .search_input .textChanged .connect (self ._filter_artist_list_display )
         main_layout .addWidget (self .search_input )
 
@@ -1147,32 +1362,34 @@ class FavoriteArtistsDialog (QDialog ):
         self .search_input .setVisible (False )
         self .artist_list_widget .setVisible (False )
 
-        self .status_label .setText ("⏳ Loading favorite artists...")
-        self .status_label .setAlignment (Qt .AlignCenter )
         combined_buttons_layout =QHBoxLayout ()
 
-        self .select_all_button =QPushButton ("Select All")
+        self .select_all_button =QPushButton () # Text set in _retranslate_ui
         self .select_all_button .clicked .connect (self ._select_all_items )
         combined_buttons_layout .addWidget (self .select_all_button )
 
-        self .deselect_all_button =QPushButton ("Deselect All")
+        self .deselect_all_button =QPushButton () # Text set in _retranslate_ui
         self .deselect_all_button .clicked .connect (self ._deselect_all_items )
         combined_buttons_layout .addWidget (self .deselect_all_button )
 
 
-        self .download_button =QPushButton ("Download Selected")
+        self .download_button =QPushButton () # Text set in _retranslate_ui
         self .download_button .clicked .connect (self ._accept_selection_action )
         self .download_button .setEnabled (False )
         self .download_button .setDefault (True )
         combined_buttons_layout .addWidget (self .download_button )
 
-        self .cancel_button =QPushButton ("Cancel")
+        self .cancel_button =QPushButton () # Text set in _retranslate_ui
         self .cancel_button .clicked .connect (self .reject )
         combined_buttons_layout .addWidget (self .cancel_button )
 
         combined_buttons_layout .addStretch (1 )
-
         main_layout .addLayout (combined_buttons_layout )
+
+        self._retranslate_ui() # Set initial texts
+        if hasattr (self .parent_app ,'get_dark_theme') and self.parent_app.current_theme == "dark":
+            self .setStyleSheet (self .parent_app .get_dark_theme ())
+
 
     def _logger (self ,message ):
         """Helper to log messages, either to parent app or console."""
@@ -1202,7 +1419,7 @@ class FavoriteArtistsDialog (QDialog ):
 
         for source in api_sources :
             self ._logger (f"Attempting to fetch favorite artists from: {source ['name']} ({source ['url']})")
-            self .status_label .setText (f"⏳ Loading favorites from {source ['name']}...")
+            self.status_label.setText(self._tr("fav_artists_loading_from_source_status", "⏳ Loading favorites from {source_name}...").format(source_name=source['name']))
             QCoreApplication .processEvents ()
 
             cookies_dict_for_source =None 
@@ -1267,7 +1484,7 @@ class FavoriteArtistsDialog (QDialog ):
 
 
         if self .cookies_config ['use_cookie']and not any_cookies_loaded_successfully_for_any_source :
-            self .status_label .setText ("Error: Cookies enabled but could not be loaded for any source.")
+            self.status_label.setText(self._tr("fav_artists_cookies_required_status", "Error: Cookies enabled but could not be loaded for any source."))
             self ._logger ("Error: Cookies enabled but no cookies loaded for any source. Showing help dialog.")
             cookie_help_dialog =CookieHelpDialog (self )
             cookie_help_dialog .exec_ ()
@@ -1286,22 +1503,22 @@ class FavoriteArtistsDialog (QDialog ):
         self ._populate_artist_list_widget ()
 
         if fetched_any_successfully and self .all_fetched_artists :
-            self .status_label .setText (f"Found {len (self .all_fetched_artists )} total favorite artist(s).")
+            self.status_label.setText(self._tr("fav_artists_found_status", "Found {count} total favorite artist(s).").format(count=len(self.all_fetched_artists)))
             self ._show_content_elements (True )
             self .download_button .setEnabled (True )
         elif not fetched_any_successfully and not errors_occurred :
-             self .status_label .setText ("No favorite artists found on Kemono.su or Coomer.su.")
+             self.status_label.setText(self._tr("fav_artists_none_found_status", "No favorite artists found on Kemono.su or Coomer.su."))
              self ._show_content_elements (False )
              self .download_button .setEnabled (False )
         else :
-            final_error_message ="Failed to fetch favorites."
+            final_error_message = self._tr("fav_artists_failed_status", "Failed to fetch favorites.")
             if errors_occurred :
                 final_error_message +=" Errors: "+"; ".join (errors_occurred )
             self .status_label .setText (final_error_message )
             self ._show_content_elements (False )
             self .download_button .setEnabled (False )
             if fetched_any_successfully and not self .all_fetched_artists :
-                 self .status_label .setText ("No favorite artists found after processing.")
+                 self.status_label.setText(self._tr("fav_artists_no_favorites_after_processing", "No favorite artists found after processing."))
 
     def _populate_artist_list_widget (self ,artists_to_display =None ):
         self .artist_list_widget .clear ()
@@ -1351,7 +1568,16 @@ class FavoriteArtistsDialog (QDialog ):
 class FavoritePostsFetcherThread (QThread ):
     """Worker thread to fetch favorite posts and creator names."""
     status_update =pyqtSignal (str )
-    progress_bar_update =pyqtSignal (int ,int )
+    progress_bar_update =pyqtSignal (int ,int ) # (value, max_val)
+    # finished signal: list of posts, error_key (str or None), error_details (dict or None)
+    # error_key can be used for translation, error_details for formatting the message
+    # Example error_keys:
+    #   "KEY_FETCH_SUCCESS"
+    #   "KEY_FETCH_CANCELLED_DURING"
+    #   "KEY_FETCH_CANCELLED_AFTER"
+    #   "KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_DOMAIN" (details: {'domain': 'kemono.su'})
+    #   "KEY_AUTH_FAILED" (details: {'source_name': 'Kemono.su', 'original_error': str(e)})
+    #   "KEY_FETCH_FAILED_GENERIC" (details: {'error_summary': '...'})
     finished =pyqtSignal (list ,str )
 
     def __init__ (self ,cookies_config ,parent_logger_func ,target_domain_preference =None ):
@@ -1360,25 +1586,29 @@ class FavoritePostsFetcherThread (QThread ):
         self .parent_logger_func =parent_logger_func 
         self .target_domain_preference =target_domain_preference 
         self .cancellation_event =threading .Event ()
+        self.error_key_map = { # For cleaner key generation
+            "Kemono.su": "kemono_su",
+            "Coomer.su": "coomer_su"
+        }
 
     def _logger (self ,message ):
         self .parent_logger_func (f"[FavPostsFetcherThread] {message }")
 
     def run (self ):
-        kemono_fav_posts_url ="https://kemono.su/api/v1/account/favorites?type=post"
-        coomer_fav_posts_url ="https://coomer.su/api/v1/account/favorites?type=post"
+        kemono_fav_posts_url = "https://kemono.su/api/v1/account/favorites?type=post"
+        coomer_fav_posts_url = "https://coomer.su/api/v1/account/favorites?type=post"
 
         all_fetched_posts_temp =[]
-        errors_occurred =[]
+        error_messages_for_summary = [] # Store raw error messages for summary if needed
         fetched_any_successfully =False 
         any_cookies_loaded_successfully_for_any_source =False 
 
-        self .status_update .emit ("Fetching list of favorite posts...")
+        self.status_update.emit("key_fetching_fav_post_list_init")
         self .progress_bar_update .emit (0 ,0 )
 
         api_sources =[
-        {"name":"Kemono.su","url":kemono_fav_posts_url ,"domain":"kemono.su"},
-        {"name":"Coomer.su","url":coomer_fav_posts_url ,"domain":"coomer.su"}
+            {"name": "Kemono.su", "url": kemono_fav_posts_url, "domain": "kemono.su"},
+            {"name": "Coomer.su", "url": coomer_fav_posts_url, "domain": "coomer.su"}
         ]
 
         api_sources_to_try =[]
@@ -1397,7 +1627,7 @@ class FavoritePostsFetcherThread (QThread ):
 
         for source in api_sources_to_try :
             if self .cancellation_event .is_set ():
-                self .finished .emit ([],"Cancelled by user during fetch.")
+                self.finished.emit([], "KEY_FETCH_CANCELLED_DURING")
                 return 
             cookies_dict_for_source =None 
             if self .cookies_config ['use_cookie']:
@@ -1415,7 +1645,8 @@ class FavoritePostsFetcherThread (QThread ):
                     self ._logger (f"Warning ({source ['name']}): Cookies enabled but could not be loaded for this domain. Fetch might fail if cookies are required.")
 
             self ._logger (f"Attempting to fetch favorite posts from: {source ['name']} ({source ['url']})")
-            self .status_update .emit (f"Fetching favorites from {source ['name']}...")
+            source_key_part = self.error_key_map.get(source['name'], source['name'].lower().replace('.', '_'))
+            self.status_update.emit(f"key_fetching_from_source_{source_key_part}")
             QCoreApplication .processEvents ()
 
             try :
@@ -1425,9 +1656,9 @@ class FavoritePostsFetcherThread (QThread ):
                 posts_data_from_api =response .json ()
 
                 if not isinstance (posts_data_from_api ,list ):
-                    error_msg =f"Error ({source ['name']}): API did not return a list of posts (got {type (posts_data_from_api )})."
-                    self ._logger (error_msg )
-                    errors_occurred .append (error_msg )
+                    err_detail = f"Error ({source['name']}): API did not return a list of posts (got {type(posts_data_from_api)})."
+                    self._logger(err_detail)
+                    error_messages_for_summary.append(err_detail)
                     continue 
 
                 processed_posts_from_source =0 
@@ -1453,26 +1684,33 @@ class FavoritePostsFetcherThread (QThread ):
                 self ._logger (f"Fetched {processed_posts_from_source } posts from {source ['name']}.")
 
             except requests .exceptions .RequestException as e :
-                error_msg =f"Error fetching favorite posts from {source ['name']}: {e }"
-                self ._logger (error_msg )
-                errors_occurred .append (error_msg )
+                err_detail = f"Error fetching favorite posts from {source['name']}: {e}"
+                self._logger(err_detail)
+                error_messages_for_summary.append(err_detail)
+                if e.response is not None and e.response.status_code == 401:
+                    self.finished.emit([], "KEY_AUTH_FAILED") # Dialog can show generic auth error
+                    self._logger(f"Authorization failed for {source['name']}, emitting KEY_AUTH_FAILED.")
+                    return
             except Exception as e :
-                error_msg =f"An unexpected error occurred with {source ['name']}: {e }"
-                self ._logger (error_msg )
-                errors_occurred .append (error_msg )
+                err_detail = f"An unexpected error occurred with {source['name']}: {e}" # Changed from error_msg to err_detail
+                self._logger(err_detail)
+                error_messages_for_summary.append(err_detail) # Use err_detail
 
         if self .cancellation_event .is_set ():
-            self .finished .emit ([],"Cancelled by user after fetch attempts.")
+            self.finished.emit([], "KEY_FETCH_CANCELLED_AFTER")         
             return 
 
 
         if self .cookies_config ['use_cookie']and not any_cookies_loaded_successfully_for_any_source :
 
             if self .target_domain_preference and not any_cookies_loaded_successfully_for_any_source :
-                 self .finished .emit ([],f"COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_{self .target_domain_preference .upper ()}")
+                 # Specific domain was targeted, but cookies failed for it
+                 domain_key_part = self.error_key_map.get(self.target_domain_preference, self.target_domain_preference.lower().replace('.', '_'))
+                 self.finished.emit([], f"KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_DOMAIN_{domain_key_part}")
                  return 
 
-            self .finished .emit ([],"COOKIES_REQUIRED_BUT_NOT_FOUND")
+            # Generic case: cookies enabled, but none loaded for any attempted source
+            self.finished.emit([], "KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_GENERIC")
             return 
 
         unique_posts_map ={}
@@ -1484,16 +1722,16 @@ class FavoritePostsFetcherThread (QThread ):
 
         all_fetched_posts_temp .sort (key =lambda x :(x .get ('_source_api','').lower (),x .get ('service','').lower (),str (x .get ('creator_id','')).lower (),(x .get ('added_date')or '')),reverse =False )
 
-        if errors_occurred :
-            error_summary ="; ".join (errors_occurred )
+        if error_messages_for_summary:
+            error_summary_str = "; ".join(error_messages_for_summary)
             if not fetched_any_successfully :
-                self .finished .emit ([],f"Failed to fetch favorites. Errors: {error_summary }")
+                self.finished.emit([], f"KEY_FETCH_FAILED_GENERIC_{error_summary_str[:50]}") # Truncate for key
             else :
-                 self .finished .emit (all_fetched_posts_temp ,f"Fetched some favorites, but errors occurred with other sources: {error_summary }")
+                 self.finished.emit(all_fetched_posts_temp, f"KEY_FETCH_PARTIAL_SUCCESS_{error_summary_str[:50]}")
         elif not all_fetched_posts_temp and not fetched_any_successfully and not self .target_domain_preference :
-            self .finished .emit ([],"No favorite posts found on any platform.")
-        else :
-            self .finished .emit (all_fetched_posts_temp ,None )
+            self.finished.emit([], "KEY_NO_FAVORITES_FOUND_ALL_PLATFORMS")
+        else : # Success or partial success with no specific error key needed beyond what's logged
+            self.finished.emit(all_fetched_posts_temp, "KEY_FETCH_SUCCESS")
 
 class PostListItemWidget (QWidget ):
     """Custom widget for displaying a single post in the FavoritePostsDialog list."""
@@ -1549,7 +1787,6 @@ class FavoritePostsDialog (QDialog ):
         self .displayable_grouped_posts ={}
         self .fetcher_thread =None 
 
-        self .setWindowTitle ("Favorite Posts")
         self .setModal (True )
         self .setMinimumSize (600 ,600 )
         if hasattr (self .parent_app ,'get_dark_theme'):
@@ -1557,12 +1794,19 @@ class FavoritePostsDialog (QDialog ):
 
         self ._init_ui ()
         self ._load_creator_names_from_file ()
+        self._retranslate_ui() # Initial translation    
         self ._start_fetching_favorite_posts ()
+
+    def _update_status_label_from_key(self, status_key):
+        """Translates a status key and updates the status label."""
+        # Assuming keys in languages.py are lowercase
+        translated_status = self._tr(status_key.lower(), status_key) # Fallback to key itself
+        self.status_label.setText(translated_status)
 
     def _init_ui (self ):
         main_layout =QVBoxLayout (self )
 
-        self .status_label =QLabel ("Loading favorite posts...")
+        self .status_label =QLabel () # Text set in _retranslate_ui
         self .status_label .setAlignment (Qt .AlignCenter )
         main_layout .addWidget (self .status_label )
 
@@ -1572,7 +1816,7 @@ class FavoritePostsDialog (QDialog ):
         main_layout .addWidget (self .progress_bar )
 
         self .search_input =QLineEdit ()
-        self .search_input .setPlaceholderText ("Search posts (title, creator name, ID, service)...")
+        # Placeholder set in _retranslate_ui
         self .search_input .textChanged .connect (self ._filter_post_list_display )
         main_layout .addWidget (self .search_input )
 
@@ -1587,25 +1831,40 @@ class FavoritePostsDialog (QDialog ):
         main_layout .addWidget (self .post_list_widget )
 
         combined_buttons_layout =QHBoxLayout ()
-        self .select_all_button =QPushButton ("Select All")
+        self .select_all_button =QPushButton () # Text set in _retranslate_ui
         self .select_all_button .clicked .connect (self ._select_all_items )
         combined_buttons_layout .addWidget (self .select_all_button )
 
-        self .deselect_all_button =QPushButton ("Deselect All")
+        self .deselect_all_button =QPushButton () # Text set in _retranslate_ui
         self .deselect_all_button .clicked .connect (self ._deselect_all_items )
         combined_buttons_layout .addWidget (self .deselect_all_button )
 
-        self .download_button =QPushButton ("Download Selected")
+        self .download_button =QPushButton () # Text set in _retranslate_ui
         self .download_button .clicked .connect (self ._accept_selection_action )
         self .download_button .setEnabled (False )
         self .download_button .setDefault (True )
         combined_buttons_layout .addWidget (self .download_button )
 
-        self .cancel_button =QPushButton ("Cancel")
+        self .cancel_button =QPushButton () # Text set in _retranslate_ui
         self .cancel_button .clicked .connect (self .reject )
         combined_buttons_layout .addWidget (self .cancel_button )
         combined_buttons_layout .addStretch (1 )
         main_layout .addLayout (combined_buttons_layout )
+
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    def _retranslate_ui(self):
+        self.setWindowTitle(self._tr("fav_posts_dialog_title", "Favorite Posts"))
+        self.status_label.setText(self._tr("fav_posts_loading_status", "Loading favorite posts..."))
+        self.search_input.setPlaceholderText(self._tr("fav_posts_search_placeholder", "Search posts (title, creator name, ID, service)..."))
+        self.select_all_button.setText(self._tr("fav_posts_select_all_button", "Select All"))
+        self.deselect_all_button.setText(self._tr("fav_posts_deselect_all_button", "Deselect All"))
+        self.download_button.setText(self._tr("fav_posts_download_selected_button", "Download Selected"))
+        self.cancel_button.setText(self._tr("fav_posts_cancel_button", "Cancel"))
 
     def _logger (self ,message ):
         if hasattr (self .parent_app ,'log_signal')and self .parent_app .log_signal :
@@ -1657,12 +1916,12 @@ class FavoritePostsDialog (QDialog ):
         self .download_button .setEnabled (False )
         self .status_label .setText ("Initializing favorite posts fetch...")
 
-        self .fetcher_thread =FavoritePostsFetcherThread (
+        self.fetcher_thread = FavoritePostsFetcherThread(
         self .cookies_config ,
         self .parent_app .log_signal .emit ,
         target_domain_preference =self .target_domain_preference_for_this_fetch 
         )
-        self .fetcher_thread .status_update .connect (self .status_label .setText )
+        self.fetcher_thread.status_update.connect(self._update_status_label_from_key)
         self .fetcher_thread .finished .connect (self ._on_fetch_completed )
         self .fetcher_thread .progress_bar_update .connect (self ._set_progress_bar_value )
         self .progress_bar .setVisible (True )
@@ -1676,41 +1935,72 @@ class FavoritePostsDialog (QDialog ):
             self .progress_bar .setRange (0 ,maximum )
             self .progress_bar .setValue (value )
 
-    def _on_fetch_completed (self ,fetched_posts_list ,error_msg ):
-        if error_msg :
-            specific_domain_msg_part =""
-            if self .target_domain_preference_for_this_fetch :
-                specific_domain_msg_part =f" for {self .target_domain_preference_for_this_fetch }"
+    def _on_fetch_completed(self, fetched_posts_list, status_key):
+        self.progress_bar.setVisible(False)
 
-            if error_msg .startswith ("COOKIES_REQUIRED_BUT_NOT_FOUND"):
-                self .status_label .setText ("Error: Cookies are required for favorite posts but could not be loaded.")
-                self ._logger (f"Error: Cookies required for favorite posts{specific_domain_msg_part } but not found. Showing help dialog.")
-                cookie_help_dialog =CookieHelpDialog (self )
-                cookie_help_dialog .exec_ ()
-                self .download_button .setEnabled (False )
-            elif "401"in error_msg and ("UNAUTHORIZED"in error_msg .upper ()or "Client Error"in error_msg ):
-                self .status_label .setText ("Error: Authorization failed. Check your cookies.")
-                self ._logger (f"Error: 401 Unauthorized fetching favorites{specific_domain_msg_part }. Suggesting cookie check.")
-                QMessageBox .warning (self ,"Authorization Failed (401)",
-                f"Could not fetch favorites{specific_domain_msg_part } due to an authorization error:\n\n{error_msg }\n\n"
-                "This usually means your cookies are missing, invalid, or expired for the site. Please check your cookie setup.")
-                cookie_help_dialog =CookieHelpDialog (self )
-                cookie_help_dialog .exec_ ()
-                self .download_button .setEnabled (False )
-            else :
-                self .status_label .setText (error_msg )
-                self ._logger (error_msg )
-                if self .target_domain_preference_for_this_fetch :
-                    QMessageBox .critical (self ,"Fetch Error",
-                    f"Error fetching favorites from {self .target_domain_preference_for_this_fetch }:\n\n{error_msg }")
-                else :
-                    QMessageBox .critical (self ,"Fetch Error",error_msg )
+        proceed_to_display_posts = False
+        show_error_message_box = False
+        message_box_title_key = "fav_posts_fetch_error_title" # Default
+        message_box_text_key = "fav_posts_fetch_error_message" # Default
+        message_box_params = {'domain': self.target_domain_preference_for_this_fetch or "platform", 'error_message_part': ""}
+        status_label_text_key = None # Will be set if not displaying posts
 
+        if status_key == "KEY_FETCH_SUCCESS":
+            proceed_to_display_posts = True
+        elif status_key and status_key.startswith("KEY_FETCH_PARTIAL_SUCCESS_") and fetched_posts_list:
+            displayable_detail = status_key.replace("KEY_FETCH_PARTIAL_SUCCESS_", "").replace("_", " ")
+            self._logger(f"Partial success with posts: {status_key} -> {displayable_detail}")
+            # Optionally, you could set a specific status label here before proceeding
+            # self.status_label.setText(self._tr("fav_posts_partial_success_status", "Fetched some posts, but encountered issues: {details}").format(details=displayable_detail))
+            proceed_to_display_posts = True
+        elif status_key: # Handle actual error or non-success states
+            specific_domain_msg_part = f" for {self.target_domain_preference_for_this_fetch}" if self.target_domain_preference_for_this_fetch else ""
+
+            if status_key.startswith("KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_DOMAIN_") or \
+               status_key == "KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_GENERIC":
+                status_label_text_key = "fav_posts_cookies_required_error"
+                self._logger(f"Cookie error: {status_key}. Showing help dialog.")
+                cookie_help_dialog = CookieHelpDialog(self)
+                cookie_help_dialog.exec_()
+            elif status_key == "KEY_AUTH_FAILED":
+                status_label_text_key = "fav_posts_auth_failed_title" # Use title as status for brevity
+                self._logger(f"Auth error: {status_key}. Showing help dialog.")
+                QMessageBox.warning(self, self._tr("fav_posts_auth_failed_title", "Authorization Failed (Posts)"),
+                                    self._tr("fav_posts_auth_failed_message_generic", "...").format(domain_specific_part=specific_domain_msg_part))
+                cookie_help_dialog = CookieHelpDialog(self)
+                cookie_help_dialog.exec_()
+            elif status_key == "KEY_NO_FAVORITES_FOUND_ALL_PLATFORMS":
+                status_label_text_key = "fav_posts_no_posts_found_status"
+                self._logger(status_key)
+            elif status_key.startswith("KEY_FETCH_CANCELLED"):
+                status_label_text_key = "fav_posts_fetch_cancelled_status"
+                self._logger(status_key)
+            else: # Generic error (e.g., KEY_FETCH_FAILED_GENERIC_..., or unhandled KEY_FETCH_PARTIAL_SUCCESS_ without posts)
+                displayable_error_detail = status_key
+                if status_key.startswith("KEY_FETCH_FAILED_GENERIC_"):
+                    displayable_error_detail = status_key.replace("KEY_FETCH_FAILED_GENERIC_", "").replace("_", " ")
+                elif status_key.startswith("KEY_FETCH_PARTIAL_SUCCESS_"): # This implies no posts
+                    displayable_error_detail = status_key.replace("KEY_FETCH_PARTIAL_SUCCESS_", "Partial success but no posts: ").replace("_", " ")
+                
+                message_box_params['error_message_part'] = f":\n\n{displayable_error_detail}" if displayable_error_detail else ""
+                status_label_text_key = "fav_posts_fetch_error_message" # Use the generic fetch error for status label too
+                show_error_message_box = True
+                self._logger(f"Fetch error: {status_key} -> {displayable_error_detail}")
+
+            if status_label_text_key:
+                 self.status_label.setText(self._tr(status_label_text_key, status_label_text_key).format(**message_box_params))
+            if show_error_message_box:
+                 QMessageBox.critical(self, self._tr(message_box_title_key), self._tr(message_box_text_key).format(**message_box_params))
+            
+            self.download_button.setEnabled(False)
+            return
+        
+        # --- Success or Partial Success with posts path ---
+        if not proceed_to_display_posts: # Should not happen if logic above is correct, but as a safeguard
+            if not status_label_text_key: # If no specific status was set, means it's an unexpected state
+                self.status_label.setText(self._tr("fav_posts_cookies_required_error", "Error: Cookies are required for favorite posts but could not be loaded."))
             self .download_button .setEnabled (False )
-            self .progress_bar .setVisible (False )
             return 
-
-        self .progress_bar .setVisible (False )
 
         if not self .creator_name_cache :
             self ._logger ("Warning: Creator name cache is empty. Names will not be resolved from creators.json. Displaying IDs instead.")
@@ -1743,18 +2033,18 @@ class FavoritePostsDialog (QDialog ):
         self .all_fetched_posts =fetched_posts_list 
 
         if not self .all_fetched_posts :
-            self .status_label .setText ("No favorite posts found.")
+            self.status_label.setText(self._tr("fav_posts_no_posts_found_status", "No favorite posts found."))
             self .download_button .setEnabled (False )
             return 
 
         try :
             self ._populate_post_list_widget ()
-            self .status_label .setText (f"{len (self .all_fetched_posts )} favorite post(s) found.")
+            self.status_label.setText(self._tr("fav_posts_found_status", "{count} favorite post(s) found.").format(count=len(self.all_fetched_posts)))
             self .download_button .setEnabled (True )
         except Exception as e :
-            self .status_label .setText (f"Error displaying posts: {e }")
+            self.status_label.setText(self._tr("fav_posts_display_error_status", "Error displaying posts: {error}").format(error=str(e)))
             self ._logger (f"Error during _populate_post_list_widget: {e }\n{traceback .format_exc (limit =3 )}")
-            QMessageBox .critical (self ,"UI Error",f"Could not display favorite posts: {e }")
+            QMessageBox.critical(self, self._tr("fav_posts_ui_error_title", "UI Error"), self._tr("fav_posts_ui_error_message", "Could not display favorite posts: {error}").format(error=str(e)))
             self .download_button .setEnabled (False )
 
 
@@ -1876,7 +2166,7 @@ class FavoritePostsDialog (QDialog ):
                 self .selected_posts_data .append (post_data_for_download )
 
         if not self .selected_posts_data :
-            QMessageBox .information (self ,"No Selection","Please select at least one post to download.")
+            QMessageBox.information(self, self._tr("fav_posts_no_selection_title", "No Selection"), self._tr("fav_posts_no_selection_message", "Please select at least one post to download."))
             return 
         self .accept ()
 
@@ -1886,16 +2176,23 @@ class FavoritePostsDialog (QDialog ):
 
 class HelpGuideDialog (QDialog ):
     """A multi-page dialog for displaying the feature guide."""
-    def __init__ (self ,steps_data ,parent =None ):
+    def __init__ (self ,steps_data ,parent_app ,parent =None ): # Added parent_app
         super ().__init__ (parent )
         self .current_step =0 
         self .steps_data =steps_data 
+        self.parent_app = parent_app # Store for translations
 
-        self .setWindowTitle ("Kemono Downloader - Feature Guide")
         self .setModal (True )
         self .setFixedSize (650 ,600 )
 
-        self .setStyleSheet (parent .get_dark_theme ()if hasattr (parent ,'get_dark_theme')else """
+        # Apply theme based on parent_app's current theme
+        current_theme_style = ""
+        if hasattr(self.parent_app, 'current_theme') and self.parent_app.current_theme == "dark":
+            if hasattr(self.parent_app, 'get_dark_theme'):
+                current_theme_style = self.parent_app.get_dark_theme()
+        
+        # Fallback stylesheet if dark theme not found or not dark mode
+        self.setStyleSheet(current_theme_style if current_theme_style else """
             QDialog { background-color: #2E2E2E; border: 1px solid #5A5A5A; }
             QLabel { color: #E0E0E0; }
             QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 8px 15px; border-radius: 4px; min-height: 25px; font-size: 11pt; }
@@ -1903,9 +2200,16 @@ class HelpGuideDialog (QDialog ):
             QPushButton:pressed { background-color: #4A4A4A; }
         """)
         self ._init_ui ()
-        if parent :
-            self .move (parent .geometry ().center ()-self .rect ().center ())
+        if self.parent_app : # Use parent_app for centering
+            self .move (self.parent_app .geometry ().center ()-self .rect ().center ())
 
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+    # _retranslate_ui is not strictly needed here if all texts are set during _init_ui using _tr
     def _init_ui (self ):
         main_layout =QVBoxLayout (self )
         main_layout .setContentsMargins (0 ,0 ,0 ,0 )
@@ -1919,12 +2223,14 @@ class HelpGuideDialog (QDialog ):
             step_widget =TourStepWidget (title ,content )
             self .tour_steps_widgets .append (step_widget )
             self .stacked_widget .addWidget (step_widget )
+        
+        self.setWindowTitle(self._tr("help_guide_dialog_title", "Kemono Downloader - Feature Guide"))
 
         buttons_layout =QHBoxLayout ()
         buttons_layout .setContentsMargins (15 ,10 ,15 ,15 )
         buttons_layout .setSpacing (10 )
 
-        self .back_button =QPushButton ("Back")
+        self .back_button =QPushButton (self._tr("tour_dialog_back_button", "Back")) # Reusing tour key
         self .back_button .clicked .connect (self ._previous_step )
         self .back_button .setEnabled (False )
 
@@ -1946,15 +2252,15 @@ class HelpGuideDialog (QDialog ):
         self .instagram_button .setIconSize (icon_size )
         self .Discord_button .setIconSize (icon_size )
 
-        self .next_button =QPushButton ("Next")
+        self .next_button =QPushButton (self._tr("tour_dialog_next_button", "Next")) # Reusing tour key
         self .next_button .clicked .connect (self ._next_step_action )
         self .next_button .setDefault (True )
         self .github_button .clicked .connect (self ._open_github_link )
         self .instagram_button .clicked .connect (self ._open_instagram_link )
         self .Discord_button .clicked .connect (self ._open_Discord_link )
-        self .github_button .setToolTip ("Visit project's GitHub page (Opens in browser)")
-        self .instagram_button .setToolTip ("Visit our Instagram page (Opens in browser)")
-        self .Discord_button .setToolTip ("Visit our Discord community (Opens in browser)")
+        self .github_button .setToolTip (self._tr("help_guide_github_tooltip", "Visit project's GitHub page (Opens in browser)"))
+        self .instagram_button .setToolTip (self._tr("help_guide_instagram_tooltip", "Visit our Instagram page (Opens in browser)"))
+        self .Discord_button .setToolTip (self._tr("help_guide_discord_tooltip", "Visit our Discord community (Opens in browser)"))
 
 
         social_layout =QHBoxLayout ()
@@ -1992,9 +2298,9 @@ class HelpGuideDialog (QDialog ):
 
     def _update_button_states (self ):
         if self .current_step ==len (self .tour_steps_widgets )-1 :
-            self .next_button .setText ("Finish")
+            self .next_button .setText (self._tr("tour_dialog_finish_button", "Finish")) # Reusing tour key
         else :
-            self .next_button .setText ("Next")
+            self .next_button .setText (self._tr("tour_dialog_next_button", "Next")) # Reusing tour key
         self .back_button .setEnabled (self .current_step >0 )
 
     def _open_github_link (self ):
@@ -2045,14 +2351,14 @@ class TourDialog (QDialog ):
 
     CONFIG_ORGANIZATION_NAME ="KemonoDownloader"
     CONFIG_APP_NAME_TOUR ="ApplicationTour"
-    TOUR_SHOWN_KEY ="neverShowTourAgainV17"
+    TOUR_SHOWN_KEY ="neverShowTourAgainV18"
 
     def __init__ (self ,parent =None ):
         super ().__init__ (parent )
         self .settings =QSettings (self .CONFIG_ORGANIZATION_NAME ,self .CONFIG_APP_NAME_TOUR )
         self .current_step =0 
+        self.parent_app = parent # Store parent_app for translations
 
-        self .setWindowTitle ("Welcome to Kemono Downloader!")
         self .setModal (True )
         self .setFixedSize (600 ,620 )
         self .setStyleSheet ("""
@@ -2091,6 +2397,13 @@ class TourDialog (QDialog ):
         self ._init_ui ()
         self ._center_on_screen ()
 
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language."""
+        if callable(get_translation) and self.parent_app: # Use self.parent_app
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
+
+
     def _center_on_screen (self ):
         """Centers the dialog on the screen."""
         try :
@@ -2119,192 +2432,43 @@ class TourDialog (QDialog ):
         main_layout .addWidget (self .stacked_widget ,1 )
         step1_content =(
         "Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie management."
-        "<ul>"
-        "<li>My goal is to help you easily download content from <b>Kemono</b> and <b>Coomer</b>.</li><br>"
-        "<li><b>🎨 Creator Selection Button:</b> Next to the URL input, click the palette icon to open a dialog. Browse and select creators from your <code>creators.json</code> file to quickly add their names to the URL input.</li><br>"
-        "<li><b>Important Tip: App '(Not Responding)'?</b><br>"
-        "  After clicking 'Start Download', especially for large creator feeds or with many threads, the application might temporarily show as '(Not Responding)'. Your operating system (Windows, macOS, Linux) might even suggest you 'End Process' or 'Force Quit'.<br>"
-        "  <b>Please be patient!</b> The app is often still working hard in the background. Before force-closing, try checking your chosen 'Download Location' in your file explorer. If you see new folders being created or files appearing, it means the download is progressing correctly. Give it some time to become responsive again.</li><br>"
-        "<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li><br>"
-        "<li>Many options have tooltips if you hover over them for more details.</li><br>"
-        "<li>Click <b>Skip Tour</b> to close this guide at any time.</li><br>"
-        "<li>Check <b>'Never show this tour again'</b> if you don't want to see this on future startups.</li>"
-        "</ul>"
-        )
-        self .step1 =TourStepWidget ("👋 Welcome!",step1_content )
+        ) # This string will be replaced by a call to _tr
+        self .step1 =TourStepWidget (self._tr("tour_dialog_step1_title"), self._tr("tour_dialog_step1_content", step1_content) )
 
         step2_content =(
         "Let's start with the basics for downloading:"
-        "<ul>"
-        "<li><b>🔗 Kemono Creator/Post URL:</b><br>"
-        "  Paste the full web address (URL) of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) "
-        "or a specific post (e.g., <i>.../post/98765</i>).</li><br>"
-        "  or a Coomer creator (e.g., <i>https://coomer.su/onlyfans/user/artistname</i>) "
-        "<li><b>📁 Download Location:</b><br>"
-        "  Click 'Browse...' to choose a folder on your computer where all downloaded files will be saved. "
-        "This is required unless you are using 'Only Links' mode.</li><br>"
-        "<li><b>📄 Page Range (Creator URLs only):</b><br>"
-        "  If downloading from a creator's page, you can specify a range of pages to fetch (e.g., pages 2 to 5). "
-        "Leave blank for all pages. This is disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>"
-        "</ul>"
-        )
-        self .step2 =TourStepWidget ("① Getting Started",step2_content )
+        ) # Replaced
+        self .step2 =TourStepWidget (self._tr("tour_dialog_step2_title"), self._tr("tour_dialog_step2_content", step2_content) )
 
         step3_content =(
         "Refine what you download with these filters (most are disabled in 'Only Links' or 'Only Archives' modes):"
-        "<ul>"
-        "<li><b>🎯 Filter by Character(s):</b><br>"
-        "  Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3' (after cleaning). All names in the group are used as aliases for matching.<br>"
-        "  The <b>'Filter: [Type]'</b> button (next to this input) cycles how this filter applies:"
-        "  <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename (if 'Separate Folders' is on).</li><br>"
-        "    <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>"
-        "    <li><b>⤵️ Add to Filter Button (Known Names):</b> Next to the 'Add' button for Known Names (see Step 5), this opens a popup. Select names from your <code>Known.txt</code> list via checkboxes (with a search bar) to quickly add them to the 'Filter by Character(s)' field. Grouped names like <code>(Boa, Hancock)</code> from Known.txt will be added as <code>(Boa, Hancock)~</code> to the filter.</li><br>"
-        "    <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li><br>"
-        "    <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li></ul>"
-        "  This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled.</li><br>"
-        "<li><b>🚫 Skip with Words:</b><br>"
-        "  Enter words, comma-separated (e.g., <i>WIP, sketch, preview</i>). "
-        "  The <b>'Scope: [Type]'</b> button (next to this input) cycles how this filter applies:"
-        "  <ul><li><i>Scope: Files:</i> Skips files if their names contain any of these words.</li><br>"
-        "    <li><i>Scope: Posts:</i> Skips entire posts if their titles contain any of these words.</li><br>"
-        "    <li><i>Scope: Both:</i> Applies both file and post title skipping (post first, then files).</li></ul></li><br>"
-        "<li><b>Filter Files (Radio Buttons):</b> Choose what to download:"
-        "  <ul>"
-        "  <li><i>All:</i> Downloads all file types found.</li><br>"
-        "  <li><i>Images/GIFs:</i> Only common image formats and GIFs.</li><br>"
-        "  <li><i>Videos:</i> Only common video formats.</li><br>"
-        "  <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li><br>"
-        "  <li><i>🎧 Only Audio:</i> Only common audio formats (MP3, WAV, FLAC, etc.).</li><br>"
-        "  <li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled.</li>"
-        "  </ul></li>"
-        "</ul>"
-        )
-        self .step3_filtering =TourStepWidget ("② Filtering Downloads",step3_content )
+        ) # Replaced
+        self .step3_filtering =TourStepWidget (self._tr("tour_dialog_step3_title"), self._tr("tour_dialog_step3_content", step3_content) )
 
         step_favorite_mode_content =(
         "The application offers a 'Favorite Mode' for downloading content from artists you've favorited on Kemono.su."
-        "<ul>"
-        "<li><b>⭐ Favorite Mode Checkbox:</b><br>"
-        "  Located next to the '🔗 Only Links' radio button. Check this to activate Favorite Mode.</li><br>"
-        "<li><b>What Happens in Favorite Mode:</b>"
-        "  <ul><li>The '🔗 Kemono Creator/Post URL' input area is replaced with a message indicating Favorite Mode is active.</li><br>"
-        "    <li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with '🖼️ Favorite Artists' and '📄 Favorite Posts' buttons (Note: 'Favorite Posts' is planned for the future).</li><br>"
-        "    <li>The '🍪 Use Cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li></ul></li><br>"
-        "<li><b>🖼️ Favorite Artists Button:</b><br>"
-        "  Click this to open a dialog listing your favorited artists from Kemono.su. You can select one or more artists to download.</li><br>"
-        "<li><b>Favorite Download Scope (Button):</b><br>"
-        "  This button (next to 'Favorite Posts') controls where selected favorites are downloaded:"
-        "  <ul><li><i>Scope: Selected Location:</i> All selected artists are downloaded into the main 'Download Location' you've set. Filters apply globally.</li><br>"
-        "    <li><i>Scope: Artist Folders:</i> A subfolder (named after the artist) is created inside your main 'Download Location' for each selected artist. Content for that artist goes into their specific subfolder. Filters apply within each artist's folder.</li></ul></li><br>"
-        "<li><b>Filters in Favorite Mode:</b><br>"
-        "  The 'Filter by Character(s)', 'Skip with Words', and 'Filter Files' options still apply to the content downloaded from your selected favorite artists.</li>"
-        "</ul>"
-        )
-        self .step_favorite_mode =TourStepWidget ("③ Favorite Mode (Alternative Download)",step_favorite_mode_content )
+        ) # Replaced
+        self .step_favorite_mode =TourStepWidget (self._tr("tour_dialog_step4_title"), self._tr("tour_dialog_step4_content", step_favorite_mode_content) )
 
         step4_content =(
         "More options to customize your downloads:"
-        "<ul>"
-        "<li><b>Skip .zip / Skip .rar:</b> Check these to avoid downloading these archive file types. "
-        "  <i>(Note: These are disabled and ignored if '📦 Only Archives' filter mode is selected).</i></li><br>"
-        "<li><b>✂️ Remove Words from name:</b><br>"
-        "  Enter words, comma-separated (e.g., <i>patreon, [HD]</i>), to remove from downloaded filenames (case-insensitive).</li><br>"
-        "<li><b>Download Thumbnails Only:</b> Downloads small preview images instead of full-sized files (if available).</li><br>"
-        "<li><b>Compress Large Images:</b> If the 'Pillow' library is installed, images larger than 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li><br>"
-        "<li><b>🗄️ Custom Folder Name (Single Post Only):</b><br>"
-        "  If you are downloading a single specific post URL AND 'Separate Folders by Name/Title' is enabled, "
-        "you can enter a custom name here for that post's download folder.</li><br>"
-        "<li><b>🍪 Use Cookie:</b> Check this to use cookies for requests. You can either:"
-        "  <ul><li>Enter a cookie string directly into the text field (e.g., <i>name1=value1; name2=value2</i>).</li><br>"
-        "    <li>Click 'Browse...' to select a <i>cookies.txt</i> file (Netscape format). The path will appear in the text field.</li></ul>"
-        "  This is useful for accessing content that requires login. The text field takes precedence if filled. "
-        "If 'Use Cookie' is checked but both the text field and browsed file are empty, it will try to load 'cookies.txt' from the app's directory.</li>"
-        "</ul>"
-        )
-        self .step4_fine_tuning =TourStepWidget ("④ Fine-Tuning Downloads",step4_content )
+        ) # Replaced
+        self .step4_fine_tuning =TourStepWidget (self._tr("tour_dialog_step5_title"), self._tr("tour_dialog_step5_content", step4_content) )
 
         step5_content =(
         "Organize your downloads and manage performance:"
-        "<ul>"
-        "<li><b>⚙️ Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the <b>Known.txt</b> list as a fallback for folder names).</li><br>"
-        "<li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li><br>"
-        "<li><b>🚀 Use Multithreading (Threads):</b> Enables faster operations. The number in 'Threads' input means:"
-        "  <ul><li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li><br>"
-        "    <li>For <b>Single Post URLs:</b> Number of files to download concurrently from that single post.</li></ul>"
-        "  If unchecked, 1 thread is used. High thread counts (e.g., >40) may show an advisory.</li><br>"
-        "<li><b>Multi-part Download Toggle (Top-right of log area):</b><br>"
-        "  The <b>'Multi-part: [ON/OFF]'</b> button allows enabling/disabling multi-segment downloads for individual large files. "
-        "  <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling. If a multi-part download fails, it retries as single-stream.</li><br>"
-        "    <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li></ul>"
-        "  This is disabled if 'Only Links' or 'Only Archives' mode is active.</li><br>"
-        "<li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content."
-        "  <ul>"
-        "  <li>Downloads posts from <b>oldest to newest</b>.</li><br>"
-        "  <li>The 'Page Range' input is disabled as all posts are fetched.</li><br>"
-        "  <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:"
-        "    <ul>"
-        "    <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li><br>"
-        "    <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_OriginalFile.jpg'.</li><br>"
-        "    <li><b><i>Name: Title+G.Num (Post Title + Global Numbering):</i></b> All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. For example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li><br>"
-        "    <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>"
-        "    </ul>"
-        "  </li><br>"
-        "  <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>"
-        "  </ul></li><br>"
-        "<li><b>🎭 Known.txt for Smart Folder Organization:</b><br>"
-        "  <code>Known.txt</code> (in the app's directory) allows fine-grained control over automatic folder organization when 'Separate Folders by Name/Title' is active."
-        "  <ul>"
-        "    <li><b>How it Works:</b> Each line in <code>Known.txt</code> is an entry. "
-        "      <ul><li>A simple line like <code>My Awesome Series</code> means content matching this will go into a folder named \"My Awesome Series\".</li><br>"
-        "        <li>A grouped line like <code>(Character A, Char A, Alt Name A)</code> means content matching \"Character A\", \"Char A\", OR \"Alt Name A\" will ALL go into a single folder named \"Character A Char A Alt Name A\" (after cleaning). All terms in the parentheses become aliases for that folder.</li></ul></li>"
-        "    <li><b>Intelligent Fallback:</b> When 'Separate Folders by Name/Title' is active, and if a post doesn't match any specific 'Filter by Character(s)' input, the downloader consults <code>Known.txt</code> to find a matching primary name for folder creation.</li><br>"
-        "    <li><b>User-Friendly Management:</b> Add simple (non-grouped) names via the UI list below. For advanced editing (like creating/modifying grouped aliases), click <b>'Open Known.txt'</b> to edit the file in your text editor. The app reloads it on next use or startup.</li>"
-        "  </ul>"
-        "</li>"
-        "</ul>"
-        )
-        self .step5_organization =TourStepWidget ("⑤ Organization & Performance",step5_content )
+        ) # Replaced
+        self .step5_organization =TourStepWidget (self._tr("tour_dialog_step6_title"), self._tr("tour_dialog_step6_content", step5_content) )
 
         step6_errors_content =(
         "Sometimes, downloads might encounter issues. Here are a few common ones:"
-        "<ul>"
-        "<li><b>502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout:</b><br>"
-        "  These usually indicate temporary server-side problems with Kemono/Coomer. The site might be overloaded, down for maintenance, or experiencing issues. <br>"
-        "  <b>Solution:</b> Wait a while (e.g., 30 minutes to a few hours) and try again later. Check the site directly in your browser.</li><br>"
-        "<li><b>Connection Lost / Connection Refused / Timeout (during file download):</b><br>"
-        "  This can happen due to your internet connection, server instability, or if the server drops the connection for a large file. <br>"
-        "  <b>Solution:</b> Check your internet. Try reducing the number of 'Threads' if it's high. The app might prompt to retry some failed files at the end of a session.</li><br>"
-        "<li><b>IncompleteRead Error:</b><br>"
-        "  The server sent less data than expected. Often a temporary network hiccup or server issue. <br>"
-        "  <b>Solution:</b> The app will often mark these files for a retry attempt at the end of the download session.</li><br>"
-        "<li><b>403 Forbidden / 401 Unauthorized (less common for public posts):</b><br>"
-        "  You might not have permission to access the content. For some paywalled or private content, using the 'Use Cookie' option with valid cookies from your browser session might help. Ensure your cookies are fresh.</li><br>"
-        "<li><b>404 Not Found:</b><br>"
-        "  The post or file URL is incorrect, or the content has been removed from the site. Double-check the URL.</li><br>"
-        "<li><b>'No posts found' / 'Target post not found':</b><br>"
-        "  Ensure the URL is correct and the creator/post exists. If using page ranges, make sure they are valid for the creator. For very new posts, there might be a slight delay before they appear in the API.</li><br>"
-        "<li><b>General Slowness / App '(Not Responding)':</b><br>"
-        "  As mentioned in Step 1, if the app seems to hang after starting, especially with large creator feeds or many threads, please give it time. It's likely processing data in the background. Reducing thread count can sometimes improve responsiveness if this is frequent.</li>"
-        "</ul>"
-        )
-        self .step6_errors =TourStepWidget ("⑥ Common Errors & Troubleshooting",step6_errors_content )
+        ) # Replaced
+        self .step6_errors =TourStepWidget (self._tr("tour_dialog_step7_title"), self._tr("tour_dialog_step7_content", step6_errors_content) )
 
         step7_final_controls_content =(
         "Monitoring and Controls:"
-        "<ul>"
-        "<li><b>📜 Progress Log / Extracted Links Log:</b> Shows detailed download messages. If '🔗 Only Links' mode is active, this area displays the extracted links.</li><br>"
-        "<li><b>Show External Links in Log:</b> If checked, a secondary log panel appears below the main log to display any external links found in post descriptions. <i>(This is disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</i></li><br>"
-        "<li><b>Log View Toggle (👁️ / 🙈 Button):</b><br>"
-        "  This button (top-right of log area) switches the main log view:"
-        "  <ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li><br>"
-        "    <li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>"
-        "<li><b>🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li><br>"
-        "<li><b>⬇️ Start Download / 🔗 Extract Links / ⏸️ Pause / ❌ Cancel:</b> These buttons control the process. 'Cancel & Reset UI' stops the current operation and performs a soft UI reset, preserving your URL and Directory inputs. 'Pause/Resume' allows temporarily halting and continuing.</li><br>"
-        "<li>If some files fail with recoverable errors (like 'IncompleteRead'), you might be prompted to retry them at the end of a session.</li>"
-        "</ul>"
-        "<br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader."
-        )
-        self .step7_final_controls =TourStepWidget ("⑦ Logs & Final Controls",step7_final_controls_content )
+        ) # Replaced
+        self .step7_final_controls =TourStepWidget (self._tr("tour_dialog_step8_title"), self._tr("tour_dialog_step8_content", step7_final_controls_content) )
 
 
         self .tour_steps =[
@@ -2318,24 +2482,26 @@ class TourDialog (QDialog ):
         for step_widget in self .tour_steps :
             self .stacked_widget .addWidget (step_widget )
 
+        self.setWindowTitle(self._tr("tour_dialog_title", "Welcome to Kemono Downloader!"))
+
         bottom_controls_layout =QVBoxLayout ()
         bottom_controls_layout .setContentsMargins (15 ,10 ,15 ,15 )
         bottom_controls_layout .setSpacing (12 )
 
-        self .never_show_again_checkbox =QCheckBox ("Never show this tour again")
+        self .never_show_again_checkbox =QCheckBox (self._tr("tour_dialog_never_show_checkbox", "Never show this tour again"))
         bottom_controls_layout .addWidget (self .never_show_again_checkbox ,0 ,Qt .AlignLeft )
 
         buttons_layout =QHBoxLayout ()
         buttons_layout .setSpacing (10 )
 
-        self .skip_button =QPushButton ("Skip Tour")
+        self .skip_button =QPushButton (self._tr("tour_dialog_skip_button", "Skip Tour"))
         self .skip_button .clicked .connect (self ._skip_tour_action )
 
-        self .back_button =QPushButton ("Back")
+        self .back_button =QPushButton (self._tr("tour_dialog_back_button", "Back"))
         self .back_button .clicked .connect (self ._previous_step )
         self .back_button .setEnabled (False )
 
-        self .next_button =QPushButton ("Next")
+        self .next_button =QPushButton (self._tr("tour_dialog_next_button", "Next"))
         self .next_button .clicked .connect (self ._next_step_action )
         self .next_button .setDefault (True )
 
@@ -2368,9 +2534,9 @@ class TourDialog (QDialog ):
 
     def _update_button_states (self ):
         if self .current_step ==len (self .tour_steps )-1 :
-            self .next_button .setText ("Finish")
+            self .next_button .setText (self._tr("tour_dialog_finish_button", "Finish"))
         else :
-            self .next_button .setText ("Next")
+            self .next_button .setText (self._tr("tour_dialog_next_button", "Next"))
         self .back_button .setEnabled (self .current_step >0 )
 
     def _skip_tour_action (self ):
@@ -2544,9 +2710,11 @@ class DownloaderApp (QWidget ):
         self .permanently_failed_files_for_dialog =[]
         self .last_link_input_text_for_queue_sync =""
         self .is_fetcher_thread_running =False 
+        self._restart_pending = False
         self .is_processing_favorites_queue =False 
         self .skip_counter =0 
         self .all_kept_original_filenames =[]
+        self.cancellation_message_logged_this_session = False
         self .favorite_scope_toggle_button =None 
         self .favorite_download_scope =FAVORITE_SCOPE_SELECTED_LOCATION 
 
@@ -2623,8 +2791,15 @@ class DownloaderApp (QWidget ):
         self .use_cookie_setting =False 
         self .scan_content_images_setting =self .settings .value (SCAN_CONTENT_IMAGES_KEY ,False ,type =bool )
         self .cookie_text_setting =""
+        self .current_selected_language = self.settings.value(LANGUAGE_KEY, "en", type=str)
 
         print (f"ℹ️ Known.txt will be loaded/saved at: {self .config_file }")
+        # For main UI translations
+        self.url_label_widget = None # Will be assigned in init_ui
+        self.download_location_label_widget = None # Will be assigned in init_ui
+        # self.character_label is already an instance variable
+        self.remove_from_filename_label_widget = None # Will be assigned in init_ui
+        self.skip_words_label_widget = None # Will be assigned in init_ui
 
         self .setWindowTitle ("Kemono Downloader v5.0.0")
 
@@ -2633,19 +2808,7 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit ("ℹ️ Local API server functionality has been removed.")
         self .log_signal .emit ("ℹ️ 'Skip Current File' button has been removed.")
         if hasattr (self ,'character_input'):
-            self .character_input .setToolTip ("Enter character names (comma-separated). Supports advanced grouping and affects folder naming "
-            "if 'Separate Folders' is enabled.\n\n"
-            "Examples:\n"
-            "- Nami → Matches 'Nami', creates folder 'Nami'.\n"
-            "- (Ulti, Vivi) → Matches either, folder 'Ulti Vivi', adds both to Known.txt separately.\n"
-            "- (Boa, Hancock)~ → Matches either, folder 'Boa Hancock', adds as one group in Known.txt.\n\n"
-            "Names are treated as aliases for matching.\n\n"
-            "Filter Modes (button cycles):\n"
-            "- Files: Filters by filename.\n"
-            "- Title: Filters by post title.\n"
-            "- Both: Title first, then filename.\n"
-            "- Comments (Beta): Filename first, then post comments."
-            )
+            self.character_input.setToolTip(self._tr("character_input_tooltip", "Enter character names (comma-separated)...")) # Default text for safety
         self .log_signal .emit (f"ℹ️ Manga filename style loaded: '{self .manga_filename_style }'")
         self .log_signal .emit (f"ℹ️ Skip words scope loaded: '{self .skip_words_scope }'")
         self .log_signal .emit (f"ℹ️ Character filter scope set to default: '{self .char_filter_scope }'")
@@ -2653,7 +2816,152 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit (f"ℹ️ Cookie text defaults to: Empty on launch")
         self .log_signal .emit (f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
         self .log_signal .emit (f"ℹ️ Scan post content for images defaults to: {'Enabled'if self .scan_content_images_setting else 'Disabled'}")
+        self .log_signal.emit(f"ℹ️ Application language loaded: '{self.current_selected_language.upper()}' (UI may not reflect this yet).")
+        self._retranslate_main_ui() # Apply translations on startup
 
+    def _tr(self, key, default_text=""):
+        """Helper to get translation based on current app language for the main window."""
+        if callable(get_translation):
+            return get_translation(self.current_selected_language, key, default_text)
+        return default_text # Fallback if get_translation itself failed to import
+
+    def _retranslate_main_ui(self):
+        """Retranslates static text elements in the main UI."""
+        if self.url_label_widget:
+            self.url_label_widget.setText(self._tr("creator_post_url_label", "🔗 Kemono Creator/Post URL:"))
+        if self.download_location_label_widget:
+            self.download_location_label_widget.setText(self._tr("download_location_label", "📁 Download Location:"))
+        if hasattr(self, 'character_label') and self.character_label: # character_label is already self.
+            self.character_label.setText(self._tr("filter_by_character_label", "🎯 Filter by Character(s) (comma-separated):"))
+        if self.skip_words_label_widget:
+            self.skip_words_label_widget.setText(self._tr("skip_with_words_label", "🚫 Skip with Words (comma-separated):"))
+        if self.remove_from_filename_label_widget:
+            self.remove_from_filename_label_widget.setText(self._tr("remove_words_from_name_label", "✂️ Remove Words from name:"))
+        if hasattr(self, 'radio_all'): self.radio_all.setText(self._tr("filter_all_radio", "All"))
+        if hasattr(self, 'radio_images'): self.radio_images.setText(self._tr("filter_images_radio", "Images/GIFs"))
+        if hasattr(self, 'radio_videos'): self.radio_videos.setText(self._tr("filter_videos_radio", "Videos"))
+        if hasattr(self, 'radio_only_archives'): self.radio_only_archives.setText(self._tr("filter_archives_radio", "📦 Only Archives"))
+        if hasattr(self, 'radio_only_links'): self.radio_only_links.setText(self._tr("filter_links_radio", "🔗 Only Links"))
+        if hasattr(self, 'radio_only_audio'): self.radio_only_audio.setText(self._tr("filter_audio_radio", "🎧 Only Audio"))
+        if hasattr(self, 'favorite_mode_checkbox'): self.favorite_mode_checkbox.setText(self._tr("favorite_mode_checkbox_label", "⭐ Favorite Mode"))
+        if hasattr(self, 'dir_button'): self.dir_button.setText(self._tr("browse_button_text", "Browse..."))
+        self._update_char_filter_scope_button_text() # Ensure this is called to re-translate
+        self._update_skip_scope_button_text()      # Ensure this is called to re-translate
+
+        if hasattr(self, 'skip_zip_checkbox'): self.skip_zip_checkbox.setText(self._tr("skip_zip_checkbox_label", "Skip .zip"))
+        if hasattr(self, 'skip_rar_checkbox'): self.skip_rar_checkbox.setText(self._tr("skip_rar_checkbox_label", "Skip .rar"))
+        if hasattr(self, 'download_thumbnails_checkbox'): self.download_thumbnails_checkbox.setText(self._tr("download_thumbnails_checkbox_label", "Download Thumbnails Only"))
+        if hasattr(self, 'scan_content_images_checkbox'): self.scan_content_images_checkbox.setText(self._tr("scan_content_images_checkbox_label", "Scan Content for Images"))
+        if hasattr(self, 'compress_images_checkbox'): self.compress_images_checkbox.setText(self._tr("compress_images_checkbox_label", "Compress to WebP"))
+        if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setText(self._tr("separate_folders_checkbox_label", "Separate Folders by Name/Title"))
+        if hasattr(self, 'use_subfolder_per_post_checkbox'): self.use_subfolder_per_post_checkbox.setText(self._tr("subfolder_per_post_checkbox_label", "Subfolder per Post"))
+        if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setText(self._tr("use_cookie_checkbox_label", "Use Cookie"))
+        if hasattr(self, 'use_multithreading_checkbox'): self.update_multithreading_label(self.thread_count_input.text() if hasattr(self, 'thread_count_input') else "1") # This will use _tr
+        if hasattr(self, 'external_links_checkbox'): self.external_links_checkbox.setText(self._tr("show_external_links_checkbox_label", "Show External Links in Log"))
+        if hasattr(self, 'manga_mode_checkbox'): self.manga_mode_checkbox.setText(self._tr("manga_comic_mode_checkbox_label", "Manga/Comic Mode"))
+        if hasattr(self, 'thread_count_label'): self.thread_count_label.setText(self._tr("threads_label", "Threads:"))
+        # Initial setup for buttons that change text will be handled by set_ui_enabled or _handle_filter_mode_change
+        if hasattr(self, 'character_input'): # Retranslate the specific tooltip
+            self.character_input.setToolTip(self._tr("character_input_tooltip", "Enter character names (comma-separated)..."))
+        if hasattr(self, 'download_btn'): self.download_btn.setToolTip(self._tr("start_download_button_tooltip", "Click to start the download or link extraction process with the current settings."))
+        # Pause/Resume button text/tooltip is set dynamically in set_ui_enabled
+        # Cancel button text/tooltip is set dynamically in set_ui_enabled
+
+        # Explicitly call set_ui_enabled here to refresh state-dependent button texts
+        # after a language change.
+        current_download_is_active = self._is_download_active() if hasattr(self, '_is_download_active') else False
+        self.set_ui_enabled(not current_download_is_active)
+
+        if hasattr(self, 'known_chars_label'): self.known_chars_label.setText(self._tr("known_chars_label_text", "🎭 Known Shows/Characters (for Folder Names):"))
+        if hasattr(self, 'open_known_txt_button'): self.open_known_txt_button.setText(self._tr("open_known_txt_button_text", "Open Known.txt")); self.open_known_txt_button.setToolTip(self._tr("open_known_txt_button_tooltip", "Open the 'Known.txt' file..."))
+        if hasattr(self, 'add_char_button'): self.add_char_button.setText(self._tr("add_char_button_text", "➕ Add")); self.add_char_button.setToolTip(self._tr("add_char_button_tooltip", "Add the name from the input field..."))
+        if hasattr(self, 'add_to_filter_button'): self.add_to_filter_button.setText(self._tr("add_to_filter_button_text", "⤵️ Add to Filter")); self.add_to_filter_button.setToolTip(self._tr("add_to_filter_button_tooltip", "Select names from 'Known Shows/Characters' list..."))
+        if hasattr(self, 'character_list'): # Retranslate character list tooltip
+            self.character_list.setToolTip(self._tr("known_chars_list_tooltip", "This list contains names used for automatic folder creation..."))
+        if hasattr(self, 'delete_char_button'): self.delete_char_button.setText(self._tr("delete_char_button_text", "🗑️ Delete Selected")); self.delete_char_button.setToolTip(self._tr("delete_char_button_tooltip", "Delete the selected name(s)..."))
+
+        if hasattr(self, 'cancel_btn'): self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+        if hasattr(self, 'error_btn'): self.error_btn.setText(self._tr("error_button_text", "Error")); self.error_btn.setToolTip(self._tr("error_button_tooltip", "View files skipped due to errors and optionally retry them."))
+        if hasattr(self, 'progress_log_label'): self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:"))
+        if hasattr(self, 'reset_button'): self.reset_button.setText(self._tr("reset_button_text", "🔄 Reset")); self.reset_button.setToolTip(self._tr("reset_button_tooltip", "Reset all inputs and logs to default state (only when idle)."))
+        self._update_multipart_toggle_button_text() # Ensure this is called to re-translate
+        if hasattr(self, 'progress_label') and not self._is_download_active(): self.progress_label.setText(self._tr("progress_idle_text", "Progress: Idle"))
+        if hasattr(self, 'favorite_mode_artists_button'): self.favorite_mode_artists_button.setText(self._tr("favorite_artists_button_text", "🖼️ Favorite Artists")); self.favorite_mode_artists_button.setToolTip(self._tr("favorite_artists_button_tooltip", "Browse and download from your favorite artists..."))
+        if hasattr(self, 'favorite_mode_posts_button'): self.favorite_mode_posts_button.setText(self._tr("favorite_posts_button_text", "📄 Favorite Posts")); self.favorite_mode_posts_button.setToolTip(self._tr("favorite_posts_button_tooltip", "Browse and download your favorite posts..."))
+        self._update_favorite_scope_button_text() # Ensure this is called to re-translate
+        if hasattr(self, 'page_range_label'): self.page_range_label.setText(self._tr("page_range_label_text", "Page Range:"))
+        if hasattr(self, 'start_page_input'):
+            self.start_page_input.setPlaceholderText(self._tr("start_page_input_placeholder", "Start"))
+            self.start_page_input.setToolTip(self._tr("start_page_input_tooltip", "For creator URLs: Specify the starting page number..."))
+        if hasattr(self, 'to_label'): self.to_label.setText(self._tr("page_range_to_label_text", "to"))
+        if hasattr(self, 'end_page_input'):
+            self.end_page_input.setPlaceholderText(self._tr("end_page_input_placeholder", "End"))
+            self.end_page_input.setToolTip(self._tr("end_page_input_tooltip", "For creator URLs: Specify the ending page number..."))
+        if hasattr(self, 'fav_mode_active_label'): # Retranslate the favorite mode active label
+            self.fav_mode_active_label.setText(self._tr("fav_mode_active_label_text", "⭐ Favorite Mode is active..."))
+        if hasattr(self, 'cookie_browse_button'): # Retranslate cookie browse button tooltip
+            self.cookie_browse_button.setToolTip(self._tr("cookie_browse_button_tooltip", "Browse for a cookie file..."))
+        self._update_manga_filename_style_button_text() # Ensure this is called to re-translate
+        if hasattr(self, 'export_links_button'): self.export_links_button.setText(self._tr("export_links_button_text", "Export Links"))
+        if hasattr(self, 'download_extracted_links_button'): self.download_extracted_links_button.setText(self._tr("download_extracted_links_button_text", "Download"))
+        self._update_log_display_mode_button_text() # This will handle the toggle button's text
+
+        # Retranslate radio button tooltips
+        if hasattr(self, 'radio_all'): self.radio_all.setToolTip(self._tr("radio_all_tooltip", "Download all file types found in posts."))
+        if hasattr(self, 'radio_images'): self.radio_images.setToolTip(self._tr("radio_images_tooltip", "Download only common image formats (JPG, PNG, GIF, WEBP, etc.)."))
+        if hasattr(self, 'radio_videos'): self.radio_videos.setToolTip(self._tr("radio_videos_tooltip", "Download only common video formats (MP4, MKV, WEBM, MOV, etc.)."))
+        if hasattr(self, 'radio_only_archives'): self.radio_only_archives.setToolTip(self._tr("radio_only_archives_tooltip", "Exclusively download .zip and .rar files. Other file-specific options are disabled."))
+        if hasattr(self, 'radio_only_audio'): self.radio_only_audio.setToolTip(self._tr("radio_only_audio_tooltip", "Download only common audio formats (MP3, WAV, FLAC, etc.)."))
+        if hasattr(self, 'radio_only_links'): self.radio_only_links.setToolTip(self._tr("radio_only_links_tooltip", "Extract and display external links from post descriptions instead of downloading files.\nDownload-related options will be disabled."))
+        
+        # Retranslate Advanced Settings Checkbox Tooltips
+        if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setToolTip(self._tr("use_subfolders_checkbox_tooltip", "Create subfolders based on 'Filter by Character(s)' input..."))
+        if hasattr(self, 'use_subfolder_per_post_checkbox'): self.use_subfolder_per_post_checkbox.setToolTip(self._tr("use_subfolder_per_post_checkbox_tooltip", "Creates a subfolder for each post..."))
+        if hasattr(self, 'use_cookie_checkbox'): self.use_cookie_checkbox.setToolTip(self._tr("use_cookie_checkbox_tooltip", "If checked, will attempt to use cookies..."))
+        if hasattr(self, 'use_multithreading_checkbox'): self.use_multithreading_checkbox.setToolTip(self._tr("use_multithreading_checkbox_tooltip", "Enables concurrent operations..."))
+        if hasattr(self, 'thread_count_input'): self.thread_count_input.setToolTip(self._tr("thread_count_input_tooltip", "Number of concurrent operations..."))
+        if hasattr(self, 'external_links_checkbox'): self.external_links_checkbox.setToolTip(self._tr("external_links_checkbox_tooltip", "If checked, a secondary log panel appears..."))
+        if hasattr(self, 'manga_mode_checkbox'): self.manga_mode_checkbox.setToolTip(self._tr("manga_mode_checkbox_tooltip", "Downloads posts from oldest to newest..."))
+        # Retranslate tooltips for "Scan content for images" and "Download thumbnails only"
+        if hasattr(self, 'scan_content_images_checkbox'): self.scan_content_images_checkbox.setToolTip(self._tr("scan_content_images_checkbox_tooltip", self._original_scan_content_tooltip))
+        if hasattr(self, 'download_thumbnails_checkbox'): self.download_thumbnails_checkbox.setToolTip(self._tr("download_thumbnails_checkbox_tooltip", "Downloads small preview images..."))
+        if hasattr(self, 'remove_from_filename_input'):
+            self.remove_from_filename_input.setToolTip(self._tr("remove_words_input_tooltip",
+                                                                 ("Enter words, comma-separated, to remove from downloaded filenames (case-insensitive).\n"
+                                                                  "Useful for cleaning up common prefixes/suffixes.\nExample: patreon, kemono, [HD], _final")))
+        # Placeholders and tooltips for input fields
+        if hasattr(self, 'link_input'):
+            self.link_input.setPlaceholderText(self._tr("link_input_placeholder_text", "e.g., https://kemono.su/patreon/user/12345 or .../post/98765"))
+            self.link_input.setToolTip(self._tr("link_input_tooltip_text", "Enter the full URL..."))
+        if hasattr(self, 'dir_input'):
+            self.dir_input.setPlaceholderText(self._tr("dir_input_placeholder_text", "Select folder where downloads will be saved"))
+            self.dir_input.setToolTip(self._tr("dir_input_tooltip_text", "Enter or browse to the main folder..."))
+        if hasattr(self, 'character_input'):
+            self.character_input.setPlaceholderText(self._tr("character_input_placeholder_text", "e.g., Tifa, Aerith, (Cloud, Zack)"))
+        if hasattr(self, 'custom_folder_input'):
+            self.custom_folder_input.setPlaceholderText(self._tr("custom_folder_input_placeholder_text", "Optional: Save this post to specific folder"))
+            self.custom_folder_input.setToolTip(self._tr("custom_folder_input_tooltip_text", "If downloading a single post URL..."))
+        if hasattr(self, 'skip_words_input'):
+            self.skip_words_input.setPlaceholderText(self._tr("skip_words_input_placeholder_text", "e.g., WM, WIP, sketch, preview"))
+        if hasattr(self, 'remove_from_filename_input'):
+            self.remove_from_filename_input.setPlaceholderText(self._tr("remove_from_filename_input_placeholder_text", "e.g., patreon, HD"))
+        self._update_cookie_input_placeholders_and_tooltips() # Handles dynamic cookie input placeholder
+        if hasattr(self, 'character_search_input'):
+            self.character_search_input.setPlaceholderText(self._tr("character_search_input_placeholder_text", "Search characters..."))
+            self.character_search_input.setToolTip(self._tr("character_search_input_tooltip_text", "Type here to filter the list..."))
+        if hasattr(self, 'new_char_input'):
+            self.new_char_input.setPlaceholderText(self._tr("new_char_input_placeholder_text", "Add new show/character name"))
+            self.new_char_input.setToolTip(self._tr("new_char_input_tooltip_text", "Enter a new show, game, or character name..."))
+        if hasattr(self, 'link_search_input'):
+            self.link_search_input.setPlaceholderText(self._tr("link_search_input_placeholder_text", "Search Links..."))
+            self.link_search_input.setToolTip(self._tr("link_search_input_tooltip_text", "When in 'Only Links' mode..."))
+        if hasattr(self, 'manga_date_prefix_input'):
+            self.manga_date_prefix_input.setPlaceholderText(self._tr("manga_date_prefix_input_placeholder_text", "Prefix for Manga Filenames"))
+            self.manga_date_prefix_input.setToolTip(self._tr("manga_date_prefix_input_tooltip_text", "Optional prefix for 'Date Based'..."))
+        if hasattr(self, 'empty_popup_button'): self.empty_popup_button.setToolTip(self._tr("empty_popup_button_tooltip_text", "Open Creator Selection..."))
+        if hasattr(self, 'known_names_help_button'): self.known_names_help_button.setToolTip(self._tr("known_names_help_button_tooltip_text", "Open the application feature guide."))
+        if hasattr(self, 'future_settings_button'): self.future_settings_button.setToolTip(self._tr("future_settings_button_tooltip_text", "Open application settings..."))
+        if hasattr(self, 'link_search_button'): self.link_search_button.setToolTip(self._tr("link_search_button_tooltip_text", "Filter displayed links"))
     def apply_theme (self ,theme_name ,initial_load =False ):
         self .current_theme =theme_name 
         if not initial_load :
@@ -2672,11 +2980,7 @@ class DownloaderApp (QWidget ):
 
     def _get_tooltip_for_character_input (self ):
         return (
-        "Names, comma-separated.\n"
-        "- Individual names: `Tifa`, `Aerith` (separate folders, separate Known.txt entries).\n"
-        "- Group for shared folder, separate Known.txt: `(Vivi, Ulti, Uta)` -> creates folder 'Vivi Ulti Uta', but adds Vivi, Ulti, Uta as separate Known.txt entries.\n"
-        "- Group for a single shared folder: `(Yuffie, Sonon)~` (note the `~`) -> creates one Known.txt entry for folder 'Yuffie Sonon', with Yuffie and Sonon as aliases.\n"
-        "All names in any group type are used as aliases for matching content."
+            self._tr("character_input_tooltip", "Default tooltip if translation fails.")
         )
     def _connect_signals (self ):
         self .actual_gui_signals .progress_signal .connect (self .handle_main_log )
@@ -2930,6 +3234,7 @@ class DownloaderApp (QWidget ):
         self .settings .setValue (SCAN_CONTENT_IMAGES_KEY ,self .scan_content_images_checkbox .isChecked ()if hasattr (self ,'scan_content_images_checkbox')else False )
         self .settings .setValue (USE_COOKIE_KEY ,self .use_cookie_checkbox .isChecked ()if hasattr (self ,'use_cookie_checkbox')else False )
         self .settings .setValue (THEME_KEY ,self .current_theme )
+        self .settings.setValue(LANGUAGE_KEY, self.current_selected_language)
         self .settings .sync ()
 
         should_exit =True 
@@ -2974,6 +3279,35 @@ class DownloaderApp (QWidget ):
             event .accept ()
 
 
+    def _request_restart_application(self):
+        self.log_signal.emit("🔄 Application restart requested by user for language change.")
+        self._restart_pending = True
+        self.close() # This will trigger closeEvent
+
+    def _do_actual_restart(self):
+        try:
+            self.log_signal.emit("   Performing application restart...")
+            python_executable = sys.executable
+            script_args = sys.argv
+            
+            # For bundled executables (PyInstaller/cx_Freeze)
+            if getattr(sys, 'frozen', False):
+                # sys.executable is the path to the bundled .exe
+                # sys.argv[0] is often the executable itself.
+                # We pass sys.argv[1:] as arguments to the new process.
+                QProcess.startDetached(python_executable, script_args[1:])
+            else: # For scripts run with python interpreter
+                # sys.executable is the python interpreter
+                # sys.argv[0] is the script path, so pass all of sys.argv
+                QProcess.startDetached(python_executable, script_args)
+            
+            QCoreApplication.instance().quit() # Quit the current instance
+        except Exception as e:
+            self.log_signal.emit(f"❌ CRITICAL: Failed to start new application instance: {e}")
+            QMessageBox.critical(self, "Restart Failed",
+                                 f"Could not automatically restart the application: {e}\n\nPlease restart it manually.")
+
+
     def init_ui (self ):
         self .main_splitter =QSplitter (Qt .Horizontal )
         left_panel_widget =QWidget ()
@@ -2988,46 +3322,40 @@ class DownloaderApp (QWidget ):
         url_input_layout =QHBoxLayout (self .url_input_widget )
         url_input_layout .setContentsMargins (0 ,0 ,0 ,0 )
 
-        url_input_layout .addWidget (QLabel ("🔗 Kemono Creator/Post URL:"))
+        self.url_label_widget = QLabel() # Assign to instance variable
+        url_input_layout.addWidget(self.url_label_widget)
         self .link_input =QLineEdit ()
         self .link_input .setPlaceholderText ("e.g., https://kemono.su/patreon/user/12345 or .../post/98765")
-        self .link_input .setToolTip ("Enter the full URL of a Kemono/Coomer creator's page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765")
         self .link_input .textChanged .connect (self .update_custom_folder_visibility )
         url_input_layout .addWidget (self .link_input ,1 )
         self .empty_popup_button =QPushButton ("🎨")
-        self .empty_popup_button .setToolTip (
-        "Open Creator Selection\n\n"
-        "Browse and select creators from your 'creators.json' file.\n"
-        "Selected creator names will be added to the URL input field."
-        )
         self .empty_popup_button .setStyleSheet ("padding: 4px 6px;")
         self .empty_popup_button .clicked .connect (self ._show_empty_popup )
         url_input_layout .addWidget (self .empty_popup_button )
-
-        self .page_range_label =QLabel ("Page Range:")
+        
+        self.page_range_label = QLabel(self._tr("page_range_label_text", "Page Range:"))
         self .page_range_label .setStyleSheet ("font-weight: bold; padding-left: 10px;")
         url_input_layout .addWidget (self .page_range_label )
         self .start_page_input =QLineEdit ()
-        self .start_page_input .setPlaceholderText ("Start")
-        self .start_page_input .setFixedWidth (50 )
-        self .start_page_input .setToolTip ("For creator URLs: Specify the starting page number to download from (e.g., 1, 2, 3).\nLeave blank or set to 1 to start from the first page.\nDisabled for single post URLs or Manga/Comic Mode.")
+        self.start_page_input.setPlaceholderText(self._tr("start_page_input_placeholder", "Start"))
+        self .start_page_input .setFixedWidth (50 )        
         self .start_page_input .setValidator (QIntValidator (1 ,99999 ))
         url_input_layout .addWidget (self .start_page_input )
-        self .to_label =QLabel ("to")
+        self.to_label = QLabel(self._tr("page_range_to_label_text", "to"))
         url_input_layout .addWidget (self .to_label )
         self .end_page_input =QLineEdit ()
-        self .end_page_input .setPlaceholderText ("End")
+        self.end_page_input.setPlaceholderText(self._tr("end_page_input_placeholder", "End"))        
         self .end_page_input .setFixedWidth (50 )
-        self .end_page_input .setToolTip ("For creator URLs: Specify the ending page number to download up to (e.g., 5, 10).\nLeave blank to download all pages from the start page.\nDisabled for single post URLs or Manga/Comic Mode.")
+        self.end_page_input.setToolTip(self._tr("end_page_input_tooltip", "For creator URLs: Specify the ending page number..."))
         self .end_page_input .setValidator (QIntValidator (1 ,99999 ))
         url_input_layout .addWidget (self .end_page_input )
 
         self .url_placeholder_widget =QWidget ()
         placeholder_layout =QHBoxLayout (self .url_placeholder_widget )
         placeholder_layout .setContentsMargins (0 ,0 ,0 ,0 )
-        fav_mode_active_label =QLabel ("⭐ Favorite Mode is active. Please select filters below before choosing your favorite artists. Select action below.")
-        fav_mode_active_label .setAlignment (Qt .AlignCenter )
-        placeholder_layout .addWidget (fav_mode_active_label )
+        self.fav_mode_active_label = QLabel(self._tr("fav_mode_active_label_text", "⭐ Favorite Mode is active...")) # Assign to instance var and use _tr
+        self.fav_mode_active_label.setAlignment(Qt.AlignCenter)
+        placeholder_layout.addWidget(self.fav_mode_active_label)
 
         self .url_or_placeholder_stack =QStackedWidget ()
         self .url_or_placeholder_stack .addWidget (self .url_input_widget )
@@ -3055,14 +3383,13 @@ class DownloaderApp (QWidget ):
         favorite_buttons_layout .addWidget (self .favorite_scope_toggle_button )
 
 
-        left_layout .addWidget (QLabel ("📁 Download Location:"))
+        self.download_location_label_widget = QLabel() # Assign to instance variable
+        left_layout.addWidget(self.download_location_label_widget)
         self .dir_input =QLineEdit ()
-        self .dir_input .setPlaceholderText ("Select folder where downloads will be saved")
-        self .dir_input .setToolTip ("Enter or browse to the main folder where all downloaded content will be saved.\nThis is required unless 'Only Links' mode is selected.")
+        self .dir_input .setPlaceholderText ("Select folder where downloads will be saved")        
         self .dir_button =QPushButton ("Browse...")
         self .dir_button .setStyleSheet ("padding: 4px 10px;")
         self .dir_button .clicked .connect (self .browse_directory )
-        self .dir_button .setToolTip ("Click to open a dialog to select the main download folder.")
         dir_layout =QHBoxLayout ()
         dir_layout .addWidget (self .dir_input ,1 )
         dir_layout .addWidget (self .dir_button )
@@ -3087,18 +3414,7 @@ class DownloaderApp (QWidget ):
         char_input_and_button_layout .setSpacing (10 )
 
         self .character_input =QLineEdit ()
-        self .character_input .setPlaceholderText ("e.g., Tifa, Aerith, (Cloud, Zack)")
-        self .character_input .setToolTip (
-        "Enter character names, comma-separated (e.g., Tifa, Aerith).\n"
-        "Group aliases for a combined folder name: (alias1, alias2, alias3) becomes folder 'alias1 alias2 alias3'.\n"
-        "All names in the group are used as aliases for matching content.\n\n"
-        "The 'Filter: [Type]' button next to this input cycles how this filter applies:\n"
-        "- Filter: Files: Checks individual filenames. Only matching files are downloaded.\n"
-        "- Filter: Title: Checks post titles. All files from a matching post are downloaded.\n"
-        "- Filter: Both: Checks post title first. If no match, then checks filenames.\n"
-        "- Filter: Comments (Beta): Checks filenames first. If no match, then checks post comments.\n\n"
-        "This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled."
-        )
+        self .character_input .setPlaceholderText ("e.g., Tifa, Aerith, (Cloud, Zack)")        
         char_input_and_button_layout .addWidget (self .character_input ,3 )
 
 
@@ -3117,11 +3433,7 @@ class DownloaderApp (QWidget ):
         custom_folder_v_layout .setSpacing (2 )
         self .custom_folder_label =QLabel ("🗄️ Custom Folder Name (Single Post Only):")
         self .custom_folder_input =QLineEdit ()
-        self .custom_folder_input .setToolTip (
-        "If downloading a single post URL AND 'Separate Folders by Name/Title' is enabled,\n"
-        "you can enter a custom name here for that post's download folder.\n"
-        "Example: My Favorite Scene")
-        self .custom_folder_input .setPlaceholderText ("Optional: Save this post to specific folder")
+        self .custom_folder_input .setPlaceholderText ("Optional: Save this post to specific folder")        
         custom_folder_v_layout .addWidget (self .custom_folder_label )
         custom_folder_v_layout .addWidget (self .custom_folder_input )
         self .custom_folder_widget .setVisible (False )
@@ -3139,22 +3451,15 @@ class DownloaderApp (QWidget ):
         skip_words_vertical_layout .setContentsMargins (0 ,0 ,0 ,0 )
         skip_words_vertical_layout .setSpacing (2 )
 
-        skip_words_label =QLabel ("🚫 Skip with Words (comma-separated):")
-        skip_words_vertical_layout .addWidget (skip_words_label )
+        self.skip_words_label_widget = QLabel() # Assign to instance variable
+        skip_words_vertical_layout.addWidget(self.skip_words_label_widget)
 
         skip_input_and_button_layout =QHBoxLayout ()
         skip_input_and_button_layout =QHBoxLayout ()
         skip_input_and_button_layout .setContentsMargins (0 ,0 ,0 ,0 )
         skip_input_and_button_layout .setSpacing (10 )
         self .skip_words_input =QLineEdit ()
-        self .skip_words_input .setToolTip (
-        "Enter words, comma-separated, to skip downloading certain content (e.g., WIP, sketch, preview).\n\n"
-        "The 'Scope: [Type]' button next to this input cycles how this filter applies:\n"
-        "- Scope: Files: Skips individual files if their names contain any of these words.\n"
-        "- Scope: Posts: Skips entire posts if their titles contain any of these words.\n"
-        "- Scope: Both: Applies both (post title first, then individual files if post title is okay)."
-        )
-        self .skip_words_input .setPlaceholderText ("e.g., WM, WIP, sketch, preview")
+        self .skip_words_input .setPlaceholderText ("e.g., WM, WIP, sketch, preview")        
         skip_input_and_button_layout .addWidget (self .skip_words_input ,1 )
 
         self .skip_scope_toggle_button =QPushButton ()
@@ -3167,15 +3472,10 @@ class DownloaderApp (QWidget ):
         remove_words_widget =QWidget ()
         remove_words_vertical_layout =QVBoxLayout (remove_words_widget )
         remove_words_vertical_layout .setContentsMargins (0 ,0 ,0 ,0 )
-        remove_words_vertical_layout .setSpacing (2 )
-        self .remove_from_filename_label =QLabel ("✂️ Remove Words from name:")
-        remove_words_vertical_layout .addWidget (self .remove_from_filename_label )
-        self .remove_from_filename_input =QLineEdit ()
-        self .remove_from_filename_input .setToolTip (
-        "Enter words, comma-separated, to remove from downloaded filenames (case-insensitive).\n"
-        "Useful for cleaning up common prefixes/suffixes.\n"
-        "Example: patreon, kemono, [HD], _final"
-        )
+        remove_words_vertical_layout .setSpacing (2 ) # self.remove_from_filename_label
+        self.remove_from_filename_label_widget = QLabel() # Text will be set by _retranslate_main_ui
+        remove_words_vertical_layout.addWidget(self.remove_from_filename_label_widget)
+        self .remove_from_filename_input =QLineEdit ()        
         self .remove_from_filename_input .setPlaceholderText ("e.g., patreon, HD")
         remove_words_vertical_layout .addWidget (self .remove_from_filename_input )
         word_manipulation_outer_layout .addWidget (remove_words_widget ,3 )
@@ -3187,19 +3487,14 @@ class DownloaderApp (QWidget ):
         file_filter_layout .setContentsMargins (0 ,10 ,0 ,0 )
         file_filter_layout .addWidget (QLabel ("Filter Files:"))
         radio_button_layout =QHBoxLayout ()
-        radio_button_layout .setSpacing (10 )
+        radio_button_layout.setSpacing(10)
         self .radio_group =QButtonGroup (self )
         self .radio_all =QRadioButton ("All")
-        self .radio_all .setToolTip ("Download all file types found in posts.")
         self .radio_images =QRadioButton ("Images/GIFs")
-        self .radio_images .setToolTip ("Download only common image formats (JPG, PNG, GIF, WEBP, etc.).")
         self .radio_videos =QRadioButton ("Videos")
-        self .radio_videos .setToolTip ("Download only common video formats (MP4, MKV, WEBM, MOV, etc.).")
         self .radio_only_archives =QRadioButton ("📦 Only Archives")
         self .radio_only_audio =QRadioButton ("🎧 Only Audio")
-        self .radio_only_archives .setToolTip ("Exclusively download .zip and .rar files. Other file-specific options are disabled.")
         self .radio_only_links =QRadioButton ("🔗 Only Links")
-        self .radio_only_links .setToolTip ("Extract and display external links from post descriptions instead of downloading files.\nDownload-related options will be disabled.")
         self .radio_all .setChecked (True )
         self .radio_group .addButton (self .radio_all )
         self .radio_group .addButton (self .radio_images )
@@ -3215,8 +3510,7 @@ class DownloaderApp (QWidget ):
         file_filter_layout .addLayout (radio_button_layout )
         left_layout .addLayout (file_filter_layout )
 
-        self .favorite_mode_checkbox =QCheckBox ("⭐ Favorite Mode")
-        self .favorite_mode_checkbox .setToolTip ("Enable Favorite Mode to browse saved artists/posts.\nThis will replace the URL input with Favorite selection buttons (functionality TBD).")
+        self.favorite_mode_checkbox = QCheckBox() # Assign to instance variable
         self .favorite_mode_checkbox .setChecked (False )
         radio_button_layout .addWidget (self .radio_only_links )
         radio_button_layout .addWidget (self .favorite_mode_checkbox )
@@ -3227,24 +3521,16 @@ class DownloaderApp (QWidget ):
         row1_layout =QHBoxLayout ()
         row1_layout .setSpacing (10 )
         self .skip_zip_checkbox =QCheckBox ("Skip .zip")
-        self .skip_zip_checkbox .setToolTip ("If checked, .zip archive files will not be downloaded.\n(Disabled if 'Only Archives' is selected).")
         self .skip_zip_checkbox .setChecked (True )
         row1_layout .addWidget (self .skip_zip_checkbox )
         self .skip_rar_checkbox =QCheckBox ("Skip .rar")
-        self .skip_rar_checkbox .setToolTip ("If checked, .rar archive files will not be downloaded.\n(Disabled if 'Only Archives' is selected).")
         self .skip_rar_checkbox .setChecked (True )
         row1_layout .addWidget (self .skip_rar_checkbox )
         self .download_thumbnails_checkbox =QCheckBox ("Download Thumbnails Only")
         self .download_thumbnails_checkbox .setChecked (False )
-        self .download_thumbnails_checkbox .setToolTip (
-        "Downloads small preview images from the API instead of full-sized files (if available).\n"
-        "If 'Scan Post Content for Image URLs' is also checked, this mode will *only* download images found by the content scan (ignoring API thumbnails)."
-        )
         row1_layout .addWidget (self .download_thumbnails_checkbox )
 
         self .scan_content_images_checkbox =QCheckBox ("Scan Content for Images")
-        self .scan_content_images_checkbox .setToolTip (
-        self ._original_scan_content_tooltip )
         self .scan_content_images_checkbox .setChecked (self .scan_content_images_setting )
         row1_layout .addWidget (self .scan_content_images_checkbox )
 
@@ -3262,40 +3548,26 @@ class DownloaderApp (QWidget ):
         advanced_row1_layout =QHBoxLayout ()
         advanced_row1_layout .setSpacing (10 )
         self .use_subfolders_checkbox =QCheckBox ("Separate Folders by Name/Title")
-        self .use_subfolders_checkbox .setToolTip (
-        "Create subfolders based on 'Filter by Character(s)' input or post titles.\n"
-        "Uses 'Known Shows/Characters' list as a fallback for folder names if no specific filter matches.\n"
-        "Enables the 'Filter by Character(s)' input and 'Custom Folder Name' for single posts.")
         self .use_subfolders_checkbox .setChecked (True )
         self .use_subfolders_checkbox .toggled .connect (self .update_ui_for_subfolders )
         advanced_row1_layout .addWidget (self .use_subfolders_checkbox )
         self .use_subfolder_per_post_checkbox =QCheckBox ("Subfolder per Post")
         self .use_subfolder_per_post_checkbox .setChecked (False )
-        self .use_subfolder_per_post_checkbox .setToolTip (
-        "Creates a subfolder for each post. If 'Separate Folders' is also on, it's inside the character/title folder."
-        )
         self .use_subfolder_per_post_checkbox .toggled .connect (self .update_ui_for_subfolders )
         advanced_row1_layout .addWidget (self .use_subfolder_per_post_checkbox )
 
         self .use_cookie_checkbox =QCheckBox ("Use Cookie")
-        self .use_cookie_checkbox .setToolTip ("If checked, will attempt to use cookies from 'cookies.txt' (Netscape format)\n"
-        "in the application directory for requests.\n"
-        "Useful for accessing content that requires login on Kemono/Coomer.")
         self .use_cookie_checkbox .setChecked (self .use_cookie_setting )
 
         self .cookie_text_input =QLineEdit ()
         self .cookie_text_input .setPlaceholderText ("if no Select cookies.txt)")
         self .cookie_text_input .setMinimumHeight (28 )
-        self .cookie_text_input .setToolTip ("Enter your cookie string directly.\n"
-        "This will be used if 'Use Cookie' is checked AND 'cookies.txt' is not found or this field is not empty.\n"
-        "The format depends on how the backend will parse it (e.g., 'name1=value1; name2=value2').")
         self .cookie_text_input .setText (self .cookie_text_setting )
 
         advanced_row1_layout .addWidget (self .use_cookie_checkbox )
         advanced_row1_layout .addWidget (self .cookie_text_input ,2 )
 
         self .cookie_browse_button =QPushButton ("Browse...")
-        self .cookie_browse_button .setToolTip ("Browse for a cookie file (Netscape format, typically cookies.txt).\nThis will be used if 'Use Cookie' is checked and the text field above is empty.")
         self .cookie_browse_button .setFixedWidth (80 )
         self .cookie_browse_button .setStyleSheet ("padding: 4px 8px;")
         advanced_row1_layout .addWidget (self .cookie_browse_button )
@@ -3310,35 +3582,21 @@ class DownloaderApp (QWidget ):
         multithreading_layout .setContentsMargins (0 ,0 ,0 ,0 )
         self .use_multithreading_checkbox =QCheckBox ("Use Multithreading")
         self .use_multithreading_checkbox .setChecked (True )
-        self .use_multithreading_checkbox .setToolTip (
-        "Enables concurrent operations. See 'Threads' input for details."
-        )
         multithreading_layout .addWidget (self .use_multithreading_checkbox )
         self .thread_count_label =QLabel ("Threads:")
         multithreading_layout .addWidget (self .thread_count_label )
         self .thread_count_input =QLineEdit ()
         self .thread_count_input .setFixedWidth (40 )
         self .thread_count_input .setText ("4")
-        self .thread_count_input .setToolTip (
-        f"Number of concurrent operations.\n"
-        f"- Single Post: Concurrent file downloads (1-{MAX_FILE_THREADS_PER_POST_OR_WORKER } recommended).\n"
-        f"- Creator Feed URL: Number of posts to process simultaneously (1-{MAX_THREADS } recommended).\n"
-        f"  Files within each post are downloaded one by one by its worker.\n"
-        f"If 'Use Multithreading' is unchecked, 1 thread is used."
-        )
         self .thread_count_input .setValidator (QIntValidator (1 ,MAX_THREADS ))
         multithreading_layout .addWidget (self .thread_count_input )
         advanced_row2_layout .addLayout (multithreading_layout )
 
         self .external_links_checkbox =QCheckBox ("Show External Links in Log")
-        self .external_links_checkbox .setToolTip (
-        "If checked, a secondary log panel appears below the main log to display external links found in post descriptions.\n"
-        "(Disabled if 'Only Links' or 'Only Archives' mode is active).")
         self .external_links_checkbox .setChecked (False )
         advanced_row2_layout .addWidget (self .external_links_checkbox )
 
         self .manga_mode_checkbox =QCheckBox ("Manga/Comic Mode")
-        self .manga_mode_checkbox .setToolTip ("Downloads posts from oldest to newest and renames files based on post title (for creator feeds only).")
         self .manga_mode_checkbox .setChecked (False )
 
         advanced_row2_layout .addWidget (self .manga_mode_checkbox )
@@ -3353,12 +3611,10 @@ class DownloaderApp (QWidget ):
         btn_layout .setContentsMargins (0 ,0 ,0 ,0 )
         btn_layout .setSpacing (10 )
         self .download_btn =QPushButton ("⬇️ Start Download")
-        self .download_btn .setToolTip ("Click to start the download or link extraction process with the current settings.")
         self .download_btn .setStyleSheet ("padding: 4px 12px; font-weight: bold;")
         self .download_btn .clicked .connect (self .start_download )
 
         self .pause_btn =QPushButton ("⏸️ Pause Download")
-        self .pause_btn .setToolTip ("Click to pause the ongoing download process.")
         self .pause_btn .setEnabled (False )
         self .pause_btn .setStyleSheet ("padding: 4px 12px;")
         self .pause_btn .clicked .connect (self ._handle_pause_resume_action )
@@ -3366,7 +3622,6 @@ class DownloaderApp (QWidget ):
         self .cancel_btn =QPushButton ("❌ Cancel & Reset UI")
 
         self .cancel_btn .setEnabled (False )
-        self .cancel_btn .setToolTip ("Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).")
         self .cancel_btn .setStyleSheet ("padding: 4px 12px;")
         self .cancel_btn .clicked .connect (self .cancel_download_button_action )
 
@@ -3391,34 +3646,26 @@ class DownloaderApp (QWidget ):
         known_chars_label_layout .setSpacing (10 )
         self .known_chars_label =QLabel ("🎭 Known Shows/Characters (for Folder Names):")
         known_chars_label_layout .addWidget (self .known_chars_label )
-        self .open_known_txt_button =QPushButton ("Open Known.txt")
-        self .open_known_txt_button .setToolTip ("Open the 'Known.txt' file in your default text editor.\nThe file is located in the application's directory.")
+        self .open_known_txt_button =QPushButton ("Open Known.txt")        
         self .open_known_txt_button .setStyleSheet ("padding: 4px 8px;")
         self .open_known_txt_button .setFixedWidth (120 )
         known_chars_label_layout .addWidget (self .open_known_txt_button )
-        self .character_search_input =QLineEdit ()
-        self .character_search_input .setToolTip ("Type here to filter the list of known shows/characters below.")
+        self .character_search_input =QLineEdit ()        
         self .character_search_input .setPlaceholderText ("Search characters...")
         known_chars_label_layout .addWidget (self .character_search_input ,1 )
         left_layout .addLayout (known_chars_label_layout )
 
         self .character_list =QListWidget ()
-        self .character_list .setToolTip (
-        "This list contains names used for automatic folder creation when 'Separate Folders' is on\n"
-        "and no specific 'Filter by Character(s)' is provided or matches a post.\n"
-        "Add names of series, games, or characters you frequently download.")
         self .character_list .setSelectionMode (QListWidget .ExtendedSelection )
         left_layout .addWidget (self .character_list ,1 )
 
         char_manage_layout =QHBoxLayout ()
         char_manage_layout .setSpacing (10 )
-        self .new_char_input =QLineEdit ()
-        self .new_char_input .setToolTip ("Enter a new show, game, or character name to add to the list above.")
+        self .new_char_input =QLineEdit ()        
         self .new_char_input .setPlaceholderText ("Add new show/character name")
         self .new_char_input .setStyleSheet ("padding: 3px 5px;")
 
         self .add_char_button =QPushButton ("➕ Add")
-        self .add_char_button .setToolTip ("Add the name from the input field to the 'Known Shows/Characters' list.")
         self .add_char_button .setStyleSheet ("padding: 4px 10px;")
 
         self .add_to_filter_button =QPushButton ("⤵️ Add to Filter")
@@ -3438,14 +3685,12 @@ class DownloaderApp (QWidget ):
 
         self .known_names_help_button =QPushButton ("?")
         self .known_names_help_button .setFixedWidth (35 )
-        self .known_names_help_button .setStyleSheet ("padding: 4px 6px;")
-        self .known_names_help_button .setToolTip ("Open the application feature guide.")
+        self .known_names_help_button .setStyleSheet ("padding: 4px 6px;")        
         self .known_names_help_button .clicked .connect (self ._show_feature_guide )
 
         self .future_settings_button =QPushButton ("⚙️")
         self .future_settings_button .setFixedWidth (35 )
-        self .future_settings_button .setStyleSheet ("padding: 4px 6px;")
-        self .future_settings_button .setToolTip ("Open placeholder for future settings.")
+        self .future_settings_button .setStyleSheet ("padding: 4px 6px;")        
         self .future_settings_button .clicked .connect (self ._show_future_settings_dialog )
         char_manage_layout .addWidget (self .add_to_filter_button ,1 )
         char_manage_layout .addWidget (self .delete_char_button ,1 )
@@ -3460,13 +3705,11 @@ class DownloaderApp (QWidget ):
         log_title_layout .addStretch (1 )
 
         self .link_search_input =QLineEdit ()
-        self .link_search_input .setToolTip ("When in 'Only Links' mode, type here to filter the displayed links by text, URL, or platform.")
         self .link_search_input .setPlaceholderText ("Search Links...")
-        self .link_search_input .setVisible (False )
-        self .link_search_input .setFixedWidth (150 )
+        self .link_search_input .setVisible (False ) # Default to hidden
+        # self .link_search_input .setFixedWidth (150 ) # Removed to allow flexible width
         log_title_layout .addWidget (self .link_search_input )
         self .link_search_button =QPushButton ("🔍")
-        self .link_search_button .setToolTip ("Filter displayed links")
         self .link_search_button .setVisible (False )
         self .link_search_button .setFixedWidth (30 )
         self .link_search_button .setStyleSheet ("padding: 4px 4px;")
@@ -3479,10 +3722,9 @@ class DownloaderApp (QWidget ):
         self ._update_manga_filename_style_button_text ()
         log_title_layout .addWidget (self .manga_rename_toggle_button )
         self .manga_date_prefix_input =QLineEdit ()
-        self .manga_date_prefix_input .setPlaceholderText ("Prefix for Manga Filenames")
-        self .manga_date_prefix_input .setToolTip ("Optional prefix for 'Date Based' or 'Original File' manga filenames (e.g., 'Series Name').\nIf empty, files will be named based on the style without a prefix.")
+        self .manga_date_prefix_input .setPlaceholderText ("Prefix for Manga Filenames")        
         self .manga_date_prefix_input .setVisible (False )
-        self .manga_date_prefix_input .setFixedWidth (160 )
+        # self.manga_date_prefix_input.setFixedWidth(160) # Removed to allow flexible width
         log_title_layout .addWidget (self .manga_date_prefix_input )
 
         self .multipart_toggle_button =QPushButton ()
@@ -3495,13 +3737,11 @@ class DownloaderApp (QWidget ):
         self .EYE_ICON ="\U0001F441"
         self .CLOSED_EYE_ICON ="\U0001F648"
         self .log_verbosity_toggle_button =QPushButton (self .EYE_ICON )
-        self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
         self .log_verbosity_toggle_button .setFixedWidth (45 )
         self .log_verbosity_toggle_button .setStyleSheet ("font-size: 11pt; padding: 4px 2px;")
         log_title_layout .addWidget (self .log_verbosity_toggle_button )
 
         self .reset_button =QPushButton ("🔄 Reset")
-        self .reset_button .setToolTip ("Reset all inputs and logs to default state (only when idle).")
         self .reset_button .setFixedWidth (80 )
         self .reset_button .setStyleSheet ("padding: 4px 8px;")
         log_title_layout .addWidget (self .reset_button )
@@ -3512,19 +3752,16 @@ class DownloaderApp (QWidget ):
         self .log_view_stack =QStackedWidget ()
 
         self .main_log_output =QTextEdit ()
-        self .main_log_output .setToolTip ("Displays progress messages, errors, and summaries. In 'Only Links' mode, shows extracted links.")
         self .main_log_output .setReadOnly (True )
         self .main_log_output .setLineWrapMode (QTextEdit .NoWrap )
         self .log_view_stack .addWidget (self .main_log_output )
 
         self .missed_character_log_output =QTextEdit ()
-        self .missed_character_log_output .setToolTip ("Displays information about posts/files skipped due to character filters.")
         self .missed_character_log_output .setReadOnly (True )
         self .missed_character_log_output .setLineWrapMode (QTextEdit .NoWrap )
         self .log_view_stack .addWidget (self .missed_character_log_output )
 
         self .external_log_output =QTextEdit ()
-        self .external_log_output .setToolTip ("If 'Show External Links in Log' is checked, this panel displays external links found in post descriptions.")
         self .external_log_output .setReadOnly (True )
         self .external_log_output .setLineWrapMode (QTextEdit .NoWrap )
         self .external_log_output .hide ()
@@ -3536,23 +3773,20 @@ class DownloaderApp (QWidget ):
 
         export_button_layout =QHBoxLayout ()
         export_button_layout .addStretch (1 )
-        self .export_links_button =QPushButton ("Export Links")
-        self .export_links_button .setToolTip ("Export all extracted links to a .txt file.")
+        self .export_links_button =QPushButton (self._tr("export_links_button_text", "Export Links"))
         self .export_links_button .setFixedWidth (100 )
         self .export_links_button .setStyleSheet ("padding: 4px 8px; margin-top: 5px;")
         self .export_links_button .setEnabled (False )
         self .export_links_button .setVisible (False )
         export_button_layout .addWidget (self .export_links_button )
 
-        self .download_extracted_links_button =QPushButton ("Download")
-        self .download_extracted_links_button .setToolTip ("Download extracted links (placeholder).")
+        self .download_extracted_links_button =QPushButton (self._tr("download_extracted_links_button_text", "Download"))
         self .download_extracted_links_button .setFixedWidth (100 )
         self .download_extracted_links_button .setStyleSheet ("padding: 4px 8px; margin-top: 5px;")
         self .download_extracted_links_button .setEnabled (False )
         self .download_extracted_links_button .setVisible (False )
         export_button_layout .addWidget (self .download_extracted_links_button )
-        self .log_display_mode_toggle_button =QPushButton ("🔗 Links View")
-        self .log_display_mode_toggle_button .setToolTip ("Toggle log display mode for 'Only Links'")
+        self .log_display_mode_toggle_button =QPushButton () # Text set by _update_log_display_mode_button_text
         self .log_display_mode_toggle_button .setFixedWidth (120 )
         self .log_display_mode_toggle_button .setStyleSheet ("padding: 4px 8px; margin-top: 5px;")
         self .log_display_mode_toggle_button .setVisible (False )
@@ -3561,7 +3795,6 @@ class DownloaderApp (QWidget ):
 
 
         self .progress_label =QLabel ("Progress: Idle")
-        self .progress_label .setToolTip ("Shows the overall progress of the download or link extraction process (e.g., posts processed).")
         self .progress_label .setStyleSheet ("padding-top: 5px; font-style: italic;")
         right_layout .addWidget (self .progress_label )
         self .file_progress_label =QLabel ("")
@@ -3646,7 +3879,7 @@ class DownloaderApp (QWidget ):
             QMessageBox .information (self ,"No Supported Links","No Mega, Google Drive, or Dropbox links were found in the extracted links.")
             return 
 
-        dialog =DownloadExtractedLinksDialog (links_to_show_in_dialog ,self )
+        dialog =DownloadExtractedLinksDialog (links_to_show_in_dialog ,self, self ) # Pass self as parent_app
         dialog .download_requested .connect (self ._handle_extracted_links_download_request )
         dialog .exec_ ()
 
@@ -3668,7 +3901,7 @@ class DownloaderApp (QWidget ):
             download_dir_for_mega =current_main_dir 
             self .log_signal .emit (f"ℹ️ Using existing main download location for external links: {download_dir_for_mega }")
         else :
-            if not current_main_dir :
+            if not current_main_dir : # This is the 'if'
                 self .log_signal .emit ("ℹ️ Main download location is empty. Prompting for download folder.")
             else :
                 self .log_signal .emit (
@@ -3678,8 +3911,8 @@ class DownloaderApp (QWidget ):
             suggestion_path =current_main_dir if current_main_dir else QStandardPaths .writableLocation (QStandardPaths .DownloadLocation )
 
             chosen_dir =QFileDialog .getExistingDirectory (
-            self ,
-            "Select Download Folder for Mega Links",
+                self,
+                self._tr("select_download_folder_mega_dialog_title", "Select Download Folder for External Links"), # New key
             suggestion_path ,
             options =QFileDialog .ShowDirsOnly |QFileDialog .DontUseNativeDialog 
             )
@@ -3716,12 +3949,13 @@ class DownloaderApp (QWidget ):
 
 
         self .set_ui_enabled (False )
-        self .progress_label .setText (f"Downloading External Links (0/{len (tasks_for_thread )})...")
+        # Placeholder for a more specific translation key if needed for "Downloading External Links"
+        self.progress_label.setText(self._tr("progress_processing_post_text", "Progress: Processing post {processed_posts}...").format(processed_posts=f"External Links (0/{len(tasks_for_thread)})"))
         self .external_link_download_thread .start ()
 
     def _on_external_link_download_thread_finished (self ):
         self .log_signal .emit ("✅ External link download thread finished.")
-        self .progress_label .setText ("External link downloads complete. Ready for new task.")
+        self.progress_label.setText(f"{self._tr('status_completed', 'Completed')}: External link downloads. {self._tr('ready_for_new_task_text', 'Ready for new task.')}")
 
         self .mega_download_log_preserved_once =True 
         self .log_signal .emit ("INTERNAL: mega_download_log_preserved_once SET to True.")
@@ -3794,6 +4028,20 @@ class DownloaderApp (QWidget ):
             if hasattr (self ,'cookie_text_input'):
                 self .cookie_text_input .blockSignals (True )
                 self .cookie_text_input .setText (filepath )
+            self.cookie_text_input.setToolTip(self._tr("cookie_text_input_tooltip_file_selected", "Using selected cookie file: {filepath}").format(filepath=filepath))
+            self.cookie_text_input.setPlaceholderText(self._tr("cookie_text_input_placeholder_with_file_selected_text", "Using selected cookie file (see Browse...)"))
+            self .cookie_text_input .setReadOnly (True )
+            self .cookie_text_input .setPlaceholderText ("")
+            self .cookie_text_input .blockSignals (False )
+
+    def _update_cookie_input_placeholders_and_tooltips(self):
+        if hasattr(self, 'cookie_text_input'):
+            if self.selected_cookie_filepath:
+                self.cookie_text_input.setPlaceholderText(self._tr("cookie_text_input_placeholder_with_file_selected_text", "Using selected cookie file..."))
+                self.cookie_text_input.setToolTip(self._tr("cookie_text_input_tooltip_file_selected", "Using selected cookie file: {filepath}").format(filepath=self.selected_cookie_filepath))
+            else:
+                self.cookie_text_input.setPlaceholderText(self._tr("cookie_text_input_placeholder_no_file_selected_text", "Cookie string (if no cookies.txt selected)"))
+                self.cookie_text_input.setToolTip(self._tr("cookie_text_input_tooltip", "Enter your cookie string directly...")) # Generic tooltip              
                 self .cookie_text_input .setReadOnly (True )
                 self .cookie_text_input .setPlaceholderText ("")
                 self .cookie_text_input .blockSignals (False )
@@ -3822,8 +4070,8 @@ class DownloaderApp (QWidget ):
             return 
         if self .selected_cookie_filepath and not text .strip ()and self .use_cookie_checkbox .isChecked ():
             self .selected_cookie_filepath =None 
-            self .cookie_text_input .setReadOnly (False )
-            self .cookie_text_input .setPlaceholderText ("Cookie string (if no cookies.txt)")
+            self.cookie_text_input.setReadOnly(False)
+            self._update_cookie_input_placeholders_and_tooltips() # Update placeholder and tooltip
             self .log_signal .emit ("ℹ️ Browsed cookie file path cleared from input. Switched to manual cookie string mode.")
 
 
@@ -4086,7 +4334,7 @@ class DownloaderApp (QWidget ):
 
         if isinstance (progress_info ,list ):
             if not progress_info :
-                self .file_progress_label .setText (f"File: {filename } - Initializing parts...")
+                self.file_progress_label.setText(self._tr("downloading_multipart_initializing_text", "File: {filename} - Initializing parts...").format(filename=filename))
                 return 
 
             total_downloaded_overall =sum (cs .get ('downloaded',0 )for cs in progress_info )
@@ -4103,7 +4351,7 @@ class DownloaderApp (QWidget ):
             total_mb =total_file_size_overall /(1024 *1024 )
             speed_MBps =(combined_speed_bps /8 )/(1024 *1024 )
 
-            progress_text =f"DL '{filename [:20 ]}...': {dl_mb :.1f}/{total_mb :.1f} MB ({active_chunks_count } parts @ {speed_MBps :.2f} MB/s)"
+            progress_text = self._tr("downloading_multipart_text", "DL '{filename}...': {downloaded_mb:.1f}/{total_mb:.1f} MB ({parts} parts @ {speed:.2f} MB/s)").format(filename=filename[:20], downloaded_mb=dl_mb, total_mb=total_mb, parts=active_chunks_count, speed=speed_MBps)
             self .file_progress_label .setText (progress_text )
 
         elif isinstance (progress_info ,tuple )and len (progress_info )==2 :
@@ -4117,12 +4365,11 @@ class DownloaderApp (QWidget ):
             disp_fn =filename if len (filename )<=max_fn_len else filename [:max_fn_len -3 ].strip ()+"..."
 
             dl_mb =downloaded_bytes /(1024 *1024 )
-            prog_text_base =f"Downloading '{disp_fn }' ({dl_mb :.1f}MB"
             if total_bytes >0 :
                 tot_mb =total_bytes /(1024 *1024 )
-                prog_text_base +=f" / {tot_mb :.1f}MB)"
+                prog_text_base = self._tr("downloading_file_known_size_text", "Downloading '{filename}' ({downloaded_mb:.1f}MB / {total_mb:.1f}MB)").format(filename=disp_fn, downloaded_mb=dl_mb, total_mb=tot_mb)
             else :
-                prog_text_base +=")"
+                prog_text_base = self._tr("downloading_file_unknown_size_text", "Downloading '{filename}' ({downloaded_mb:.1f}MB)").format(filename=disp_fn, downloaded_mb=dl_mb)
 
             self .file_progress_label .setText (prog_text_base )
         elif filename and progress_info is None :
@@ -4164,10 +4411,10 @@ class DownloaderApp (QWidget ):
         if not button or not checked :
             return 
 
-        filter_mode_text =button .text ()
-        is_only_links =(filter_mode_text =="🔗 Only Links")
-        is_only_audio =(filter_mode_text =="🎧 Only Audio")
-        is_only_archives =(filter_mode_text =="📦 Only Archives")
+        # Compare button objects directly for language independence
+        is_only_links = (button == self.radio_only_links)
+        is_only_audio = (hasattr(self, 'radio_only_audio') and self.radio_only_audio is not None and button == self.radio_only_audio)
+        is_only_archives = (hasattr(self, 'radio_only_archives') and self.radio_only_archives is not None and button == self.radio_only_archives)
 
         if self .skip_scope_toggle_button :
             self .skip_scope_toggle_button .setVisible (not (is_only_links or is_only_archives or is_only_audio ))
@@ -4186,9 +4433,9 @@ class DownloaderApp (QWidget ):
 
         if self .download_btn :
             if is_only_links :
-                self .download_btn .setText ("🔗 Extract Links")
+                self .download_btn.setText(self._tr("extract_links_button_text", "🔗 Extract Links"))
             else :
-                self .download_btn .setText ("⬇️ Start Download")
+                self .download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
         if not is_only_links and self .link_search_input :self .link_search_input .clear ()
 
         file_download_mode_active =not is_only_links 
@@ -4248,15 +4495,15 @@ class DownloaderApp (QWidget ):
             if self .main_log_output :self .main_log_output .clear ()
             self .log_signal .emit ("="*20 +" Mode changed to: Only Archives "+"="*20 )
         elif is_only_audio :
-            self .progress_log_label .setText ("📜 Progress Log (Audio Only):")
+            self .progress_log_label .setText (self._tr("progress_log_label_text", "📜 Progress Log:") + f" ({self._tr('filter_audio_radio', '🎧 Only Audio')})") # More dynamic
             if self .external_log_output :self .external_log_output .hide ()
             if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
             if self .main_log_output :self .main_log_output .clear ()
-            self .log_signal .emit ("="*20 +" Mode changed to: Only Archives "+"="*20 )
+            self .log_signal .emit ("="*20 +f" Mode changed to: {self._tr('filter_audio_radio', '🎧 Only Audio')} "+"="*20 )
         else :
-            self .progress_log_label .setText ("📜 Progress Log:")
+            self .progress_log_label .setText (self._tr("progress_log_label_text", "📜 Progress Log:"))
             self .update_external_links_setting (self .external_links_checkbox .isChecked ()if self .external_links_checkbox else False )
-            self .log_signal .emit (f"="*20 +f" Mode changed to: {filter_mode_text } "+"="*20 )
+            self .log_signal .emit (f"="*20 +f" Mode changed to: {button.text()} "+"="*20 ) # Use button.text() for the log message
 
 
         if is_only_links :
@@ -4411,48 +4658,17 @@ class DownloaderApp (QWidget ):
     def _update_skip_scope_button_text (self ):
         if self .skip_scope_toggle_button :
             if self .skip_words_scope ==SKIP_SCOPE_FILES :
-                self .skip_scope_toggle_button .setText ("Scope: Files")
-                self .skip_scope_toggle_button .setToolTip (
-                "Current Skip Scope: Files\n\n"
-                "Skips individual files if their names contain any of the 'Skip with Words'.\n"
-                "Example: Skip words \"WIP, sketch\".\n"
-                "- File \"art_WIP.jpg\" -> SKIPPED.\n"
-                "- File \"final_art.png\" -> DOWNLOADED (if other conditions met).\n\n"
-                "Post is still processed for other non-skipped files.\n"
-                "Click to cycle to: Both"
-                )
+                self.skip_scope_toggle_button.setText(self._tr("skip_scope_files_text", "Scope: Files"))
+                self.skip_scope_toggle_button.setToolTip(self._tr("skip_scope_files_tooltip", "Tooltip for skip scope files"))
             elif self .skip_words_scope ==SKIP_SCOPE_POSTS :
-                self .skip_scope_toggle_button .setText ("Scope: Posts")
-                self .skip_scope_toggle_button .setToolTip (
-                "Current Skip Scope: Posts\n\n"
-                "Skips entire posts if their titles contain any of the 'Skip with Words'.\n"
-                "All files from a skipped post are ignored.\n"
-                "Example: Skip words \"preview, announcement\".\n"
-                "- Post \"Exciting Announcement!\" -> SKIPPED.\n"
-                "- Post \"Finished Artwork\" -> PROCESSED (if other conditions met).\n\n"
-                "Click to cycle to: Files"
-                )
+                self.skip_scope_toggle_button.setText(self._tr("skip_scope_posts_text", "Scope: Posts"))
+                self.skip_scope_toggle_button.setToolTip(self._tr("skip_scope_posts_tooltip", "Tooltip for skip scope posts"))
             elif self .skip_words_scope ==SKIP_SCOPE_BOTH :
-                self .skip_scope_toggle_button .setText ("Scope: Both")
-                self .skip_scope_toggle_button .setToolTip (
-                "Current Skip Scope: Both (Posts then Files)\n\n"
-                "1. Checks post title: If title contains a skip word, the entire post is SKIPPED.\n"
-                "2. If post title is OK, then checks individual filenames: If a filename contains a skip word, only that file is SKIPPED.\n"
-                "Example: Skip words \"WIP, sketch\".\n"
-                "- Post \"Sketches and WIPs\" (title match) -> ENTIRE POST SKIPPED.\n"
-                "- Post \"Art Update\" (title OK) with files:\n"
-                "    - \"character_WIP.jpg\" (file match) -> SKIPPED.\n"
-                "    - \"final_scene.png\" (file OK) -> DOWNLOADED.\n\n"
-                "Click to cycle to: Files"
-                "Click to cycle to: Posts"
-                )
+                self.skip_scope_toggle_button.setText(self._tr("skip_scope_both_text", "Scope: Both"))
+                self.skip_scope_toggle_button.setToolTip(self._tr("skip_scope_both_tooltip", "Tooltip for skip scope both"))
             else :
-                self .skip_scope_toggle_button .setText ("Scope: Unknown")
-                self .skip_scope_toggle_button .setToolTip (
-                "Current Skip Scope: Unknown\n\n"
-                "The skip words scope is in an unknown state. Please cycle or reset.\n\n"
-                "Click to cycle to: Posts"
-                )
+                self.skip_scope_toggle_button.setText(self._tr("skip_scope_unknown_text", "Scope: Unknown"))
+                self.skip_scope_toggle_button.setToolTip(self._tr("skip_scope_unknown_tooltip", "Tooltip for skip scope unknown"))
 
 
     def _cycle_skip_scope (self ):
@@ -4475,56 +4691,20 @@ class DownloaderApp (QWidget ):
     def _update_char_filter_scope_button_text (self ):
         if self .char_filter_scope_toggle_button :
             if self .char_filter_scope ==CHAR_SCOPE_FILES :
-                self .char_filter_scope_toggle_button .setText ("Filter: Files")
-                self .char_filter_scope_toggle_button .setToolTip (
-                "Current Scope: Files\n\n"
-                "Filters individual files by name. A post is kept if any file matches.\n"
-                "Only matching files from that post are downloaded.\n"
-                "Example: Filter 'Tifa'. File 'Tifa_artwork.jpg' matches and is downloaded.\n"
-                "Folder Naming: Uses character from matching filename.\n\n"
-                "Click to cycle to: Both"
-                )
+                self.char_filter_scope_toggle_button.setText(self._tr("char_filter_scope_files_text", "Filter: Files"))
+                self.char_filter_scope_toggle_button.setToolTip(self._tr("char_filter_scope_files_tooltip", "Tooltip for char filter files"))
             elif self .char_filter_scope ==CHAR_SCOPE_TITLE :
-                self .char_filter_scope_toggle_button .setText ("Filter: Title")
-                self .char_filter_scope_toggle_button .setToolTip (
-                "Current Scope: Title\n\n"
-                "Filters entire posts by their title. All files from a matching post are downloaded.\n"
-                "Example: Filter 'Aerith'. Post titled 'Aerith's Garden' matches; all its files are downloaded.\n"
-                "Folder Naming: Uses character from matching post title.\n\n"
-                "Click to cycle to: Files"
-                )
+                self.char_filter_scope_toggle_button.setText(self._tr("char_filter_scope_title_text", "Filter: Title"))
+                self.char_filter_scope_toggle_button.setToolTip(self._tr("char_filter_scope_title_tooltip", "Tooltip for char filter title"))
             elif self .char_filter_scope ==CHAR_SCOPE_BOTH :
-                self .char_filter_scope_toggle_button .setText ("Filter: Both")
-                self .char_filter_scope_toggle_button .setToolTip (
-                "Current Scope: Both (Title then Files)\n\n"
-                "1. Checks post title: If matches, all files from post are downloaded.\n"
-                "2. If title doesn't match, checks filenames: If any file matches, only that file is downloaded.\n"
-                "Example: Filter 'Cloud'.\n"
-                " - Post 'Cloud Strife' (title match) -> all files downloaded.\n"
-                " - Post 'Bike Chase' with 'Cloud_fenrir.jpg' (file match) -> only 'Cloud_fenrir.jpg' downloaded.\n"
-                "Folder Naming: Prioritizes title match, then file match.\n\n"
-                "Click to cycle to: Comments"
-                )
+                self.char_filter_scope_toggle_button.setText(self._tr("char_filter_scope_both_text", "Filter: Both"))
+                self.char_filter_scope_toggle_button.setToolTip(self._tr("char_filter_scope_both_tooltip", "Tooltip for char filter both"))
             elif self .char_filter_scope ==CHAR_SCOPE_COMMENTS :
-                self .char_filter_scope_toggle_button .setText ("Filter: Comments (Beta)")
-                self .char_filter_scope_toggle_button .setToolTip (
-                "Current Scope: Comments (Beta - Files first, then Comments as fallback)\n\n"
-                "1. Checks filenames: If any file in the post matches the filter, the entire post is downloaded. Comments are NOT checked for this filter term.\n"
-                "2. If no file matches, THEN checks post comments: If a comment matches, the entire post is downloaded.\n"
-                "Example: Filter 'Barret'.\n"
-                " - Post A: Files 'Barret_gunarm.jpg', 'other.png'. File 'Barret_gunarm.jpg' matches. All files from Post A downloaded. Comments not checked for 'Barret'.\n"
-                " - Post B: Files 'dyne.jpg', 'weapon.gif'. Comments: '...a drawing of Barret Wallace...'. No file match for 'Barret'. Comment matches. All files from Post B downloaded.\n"
-                "Folder Naming: Prioritizes character from file match, then from comment match.\n\n"
-                "Click to cycle to: Files"
-                "Click to cycle to: Title"
-                )
+                self.char_filter_scope_toggle_button.setText(self._tr("char_filter_scope_comments_text", "Filter: Comments (Beta)"))
+                self.char_filter_scope_toggle_button.setToolTip(self._tr("char_filter_scope_comments_tooltip", "Tooltip for char filter comments"))
             else :
-                self .char_filter_scope_toggle_button .setText ("Filter: Unknown")
-                self .char_filter_scope_toggle_button .setToolTip (
-                "Current Scope: Unknown\n\n"
-                "The character filter scope is in an unknown state. Please cycle or reset.\n\n"
-                "Click to cycle to: Title"
-                )
+                self.char_filter_scope_toggle_button.setText(self._tr("char_filter_scope_unknown_text", "Filter: Unknown"))
+                self.char_filter_scope_toggle_button.setToolTip(self._tr("char_filter_scope_unknown_tooltip", "Tooltip for char filter unknown"))
 
     def _cycle_char_filter_scope (self ):
         if self .char_filter_scope ==CHAR_SCOPE_TITLE :
@@ -4744,7 +4924,7 @@ class DownloaderApp (QWidget ):
                     self .cookie_text_input .setReadOnly (False )
                     self .cookie_text_input .setPlaceholderText ("Cookie string (if no cookies.txt)")
 
-            if cookie_browse_button_exists :self .cookie_browse_button .setEnabled (enable_state_for_fields )
+            if cookie_browse_button_exists : self .cookie_browse_button .setEnabled (enable_state_for_fields )
 
             if not checked :
                 self .selected_cookie_filepath =None 
@@ -4768,59 +4948,22 @@ class DownloaderApp (QWidget ):
     def _update_manga_filename_style_button_text (self ):
         if self .manga_rename_toggle_button :
             if self .manga_filename_style ==STYLE_POST_TITLE :
-                self .manga_rename_toggle_button .setText ("Name: Post Title")
-                self .manga_rename_toggle_button .setToolTip (
-                "Manga Filename Style: Post Title\n\n"
-                "When Manga/Comic Mode is active for a creator feed:\n"
-                "- The *first* file in a post is named after the post's title (e.g., \"MyMangaChapter1.jpg\").\n"
-                "- Any *subsequent* files within the *same post* will retain their original filenames (e.g., \"page_02.png\", \"bonus_art.jpg\").\n"
-                "- This is generally recommended for better organization of sequential content.\n"
-                "- Example: Post \"Chapter 1: The Beginning\" with files \"001.jpg\", \"002.jpg\".\n"
-                "  Downloads as: \"Chapter 1 The Beginning.jpg\", \"002.jpg\".\n\n"
-                "Click to change to: Original File Name"
-                )
+                self.manga_rename_toggle_button.setText(self._tr("manga_style_post_title_text", "Name: Post Title"))
+                # Tooltip will be updated later
             elif self .manga_filename_style ==STYLE_ORIGINAL_NAME :
-                self .manga_rename_toggle_button .setText ("Name: Original File")
-                self .manga_rename_toggle_button .setToolTip (
-                "Manga Filename Style: Original File Name\n\n"
-                "When Manga/Comic Mode is active for a creator feed:\n"
-                "- *All* files in a post will attempt to keep their original filenames as provided by the site (e.g., \"001.jpg\", \"page_02.png\").\n"
-                "- An optional prefix can be entered in the field next to this button (e.g., 'MySeries_001.jpg').\n"
-                "- If original names are inconsistent, using \"Post Title\" style is often better.\n"
-                "- Example: Post \"Chapter 1: The Beginning\" with files \"001.jpg\", \"002.jpg\".\n"
-                "  Downloads as: \"001.jpg\", \"002.jpg\".\n\n"
-                "Click to change to: Post Title"
-                )
+                self.manga_rename_toggle_button.setText(self._tr("manga_style_original_file_text", "Name: Original File"))
+                # Tooltip will be updated later
             elif self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
-                self .manga_rename_toggle_button .setText ("Name: Title+G.Num")
-                self .manga_rename_toggle_button .setToolTip (
-                "Manga Filename Style: Post Title + Global Numbering\n\n"
-                "When Manga/Comic Mode is active for a creator feed:\n"
-                "- All files across all posts in the current download session are named sequentially using the post's title as a prefix.\n"
-                "- Example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'.\n"
-                "           Next Post 'Chapter 2' (1 file) -> 'Chapter 2_003.jpg'.\n"
-                "- Multithreading for post processing is automatically disabled for this style.\n\n"
-                "Click to change to: Post Title"
-                )
-
+                self.manga_rename_toggle_button.setText(self._tr("manga_style_title_global_num_text", "Name: Title+G.Num"))
+                # Tooltip will be updated later
             elif self .manga_filename_style ==STYLE_DATE_BASED :
-                self .manga_rename_toggle_button .setText ("Name: Date Based")
-                self .manga_rename_toggle_button .setToolTip (
-                "Manga Filename Style: Date Based\n\n"
-                "When Manga/Comic Mode is active for a creator feed:\n"
-                "- Files will be named sequentially (001.ext, 002.ext, ...) based on post publication order.\n"
-                "- An optional prefix can be entered in the field next to this button (e.g., 'MySeries_001.jpg').\n"
-                "- To ensure correct numbering, multithreading for post processing is automatically disabled when this style is active.\n\n"
-                "Click to change to: Post Title"
-                )
-
+                self.manga_rename_toggle_button.setText(self._tr("manga_style_date_based_text", "Name: Date Based"))
+                # Tooltip will be updated later
             else :
-                self .manga_rename_toggle_button .setText ("Name: Unknown Style")
-                self .manga_rename_toggle_button .setToolTip (
-                "Manga Filename Style: Unknown\n\n"
-                "The manga filename style is in an unknown state. Please cycle or reset.\n\n"
-                "Click to change to: Post Title"
-                )
+                self.manga_rename_toggle_button.setText(self._tr("manga_style_unknown_text", "Name: Unknown Style"))
+                # Tooltip will be updated later
+            # Common tooltip part (or specific tooltips can be set here if desired for each state)
+            self.manga_rename_toggle_button.setToolTip("Click to cycle Manga Filename Style (when Manga Mode is active for a creator feed).")
 
 
     def _toggle_manga_filename_style (self ):
@@ -4937,12 +5080,19 @@ class DownloaderApp (QWidget ):
         )
         if hasattr (self ,'manga_date_prefix_input'):
             self .manga_date_prefix_input .setVisible (show_date_prefix_input )
-            if not show_date_prefix_input :
+            if show_date_prefix_input:
+                self.manga_date_prefix_input.setMaximumWidth(120) # Adjust this value as needed
+                self.manga_date_prefix_input.setMinimumWidth(60)  # Ensure it's still somewhat usable
+            else :
                 self .manga_date_prefix_input .clear ()
+                self.manga_date_prefix_input.setMaximumWidth(16777215) # Reset to default max width
+                self.manga_date_prefix_input.setMinimumWidth(0)      # Reset to default min width
 
         if hasattr (self ,'multipart_toggle_button'):
-            show_multipart_button =not (show_date_prefix_input or is_only_links_mode or is_only_archives_mode or is_only_audio_mode )
-            self .multipart_toggle_button .setVisible (show_multipart_button )
+            # Hide the multipart button if in restrictive modes OR if Manga Mode is active
+            hide_multipart_button_due_mode = is_only_links_mode or is_only_archives_mode or is_only_audio_mode
+            hide_multipart_button_due_manga_mode = manga_mode_effectively_on # Hide if Manga Mode is ON, regardless of style
+            self.multipart_toggle_button.setVisible(not (hide_multipart_button_due_mode or hide_multipart_button_due_manga_mode))
 
         self ._update_multithreading_for_date_mode ()
 
@@ -4956,14 +5106,15 @@ class DownloaderApp (QWidget ):
 
     def update_multithreading_label (self ,text ):
         if self .use_multithreading_checkbox .isChecked ():
+            base_text = self._tr("use_multithreading_checkbox_base_label", "Use Multithreading")
             try :
                 num_threads_val =int (text )
-                if num_threads_val >0 :self .use_multithreading_checkbox .setText (f"Use Multithreading ({num_threads_val } Threads)")
-                else :self .use_multithreading_checkbox .setText ("Use Multithreading (Invalid: >0)")
+                if num_threads_val >0 :self .use_multithreading_checkbox .setText (f"{base_text} ({num_threads_val } Threads)")
+                else :self .use_multithreading_checkbox .setText (f"{base_text} (Invalid: >0)")
             except ValueError :
-                self .use_multithreading_checkbox .setText ("Use Multithreading (Invalid Input)")
+                self .use_multithreading_checkbox .setText (f"{base_text} (Invalid Input)")
         else :
-            self .use_multithreading_checkbox .setText ("Use Multithreading (1 Thread)")
+            self .use_multithreading_checkbox .setText (f"{self._tr('use_multithreading_checkbox_base_label', 'Use Multithreading')} (1 Thread)")
 
 
     def _handle_multithreading_toggle (self ,checked ):
@@ -5003,12 +5154,12 @@ class DownloaderApp (QWidget ):
 
     def update_progress_display (self ,total_posts ,processed_posts ):
         if total_posts >0 :
-            progress_percent =(processed_posts /total_posts )*100 
-            self .progress_label .setText (f"Progress: {processed_posts } / {total_posts } posts ({progress_percent :.1f}%)")
+            progress_percent =(processed_posts /total_posts )*100
+            self.progress_label.setText(self._tr("progress_posts_text", "Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)").format(processed_posts=processed_posts, total_posts=total_posts, progress_percent=progress_percent))
         elif processed_posts >0 :
-            self .progress_label .setText (f"Progress: Processing post {processed_posts }...")
+            self.progress_label.setText(self._tr("progress_processing_post_text", "Progress: Processing post {processed_posts}...").format(processed_posts=processed_posts))
         else :
-            self .progress_label .setText ("Progress: Starting...")
+            self.progress_label.setText(self._tr("progress_starting_text", "Progress: Starting..."))
 
         if total_posts >0 or processed_posts >0 :
             self .file_progress_label .setText ("")
@@ -5023,6 +5174,7 @@ class DownloaderApp (QWidget ):
         if not direct_api_url and self .favorite_download_queue and not self .is_processing_favorites_queue :
             is_from_creator_popup =False 
             if self .favorite_download_queue :
+                self.cancellation_message_logged_this_session = False # Reset for new session
                 first_item_in_queue =self .favorite_download_queue [0 ]
                 if first_item_in_queue .get ('type')=='creator_popup_selection':
                     is_from_creator_popup =True 
@@ -5035,6 +5187,7 @@ class DownloaderApp (QWidget ):
 
         if self .favorite_mode_checkbox and self .favorite_mode_checkbox .isChecked ()and not direct_api_url :
             QMessageBox .information (self ,"Favorite Mode Active",
+            # Reset flag if download doesn't proceed
             "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
             self .set_ui_enabled (True )
             return 
@@ -5042,6 +5195,7 @@ class DownloaderApp (QWidget ):
         api_url =direct_api_url if direct_api_url else self .link_input .text ().strip ()
         main_ui_download_dir =self .dir_input .text ().strip ()
 
+        self.cancellation_message_logged_this_session = False # Reset for new download session
         use_subfolders =self .use_subfolders_checkbox .isChecked ()
         use_post_subfolders =self .use_subfolder_per_post_checkbox .isChecked ()
         compress_images =self .compress_images_checkbox .isChecked ()
@@ -5092,7 +5246,7 @@ class DownloaderApp (QWidget ):
                     self .log_signal .emit (f"ℹ️ User opted to change thread count from {num_threads_from_gui } after advisory.")
                     self .thread_count_input .setFocus ()
                     self .thread_count_input .selectAll ()
-                    return False 
+                    return False
 
         raw_skip_words =self .skip_words_input .text ().strip ()
         skip_words_list =[word .strip ().lower ()for word in raw_skip_words .split (',')if word .strip ()]
@@ -5117,7 +5271,7 @@ class DownloaderApp (QWidget ):
             lambda msg :self .log_signal .emit (f"[UI Cookie Check] {msg }")
             )
             if temp_cookies_for_check is None :
-                cookie_dialog =CookieHelpDialog (self ,offer_download_without_option =True )
+                cookie_dialog =CookieHelpDialog (self, self ,offer_download_without_option =True ) # Pass self as parent_app
                 dialog_exec_result =cookie_dialog .exec_ ()
 
                 if cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result ==QDialog .Accepted :
@@ -5315,7 +5469,7 @@ class DownloaderApp (QWidget ):
                         self .log_signal .emit (f"ℹ️ Manga Mode: Using filter '{item_primary_name }' for this session without adding to Known Names.")
 
                 if filter_objects_to_potentially_add_to_known_list :
-                    confirm_dialog =ConfirmAddAllDialog (filter_objects_to_potentially_add_to_known_list ,self )
+                    confirm_dialog =ConfirmAddAllDialog (filter_objects_to_potentially_add_to_known_list ,self, self ) # Pass self as parent_app
                     dialog_result =confirm_dialog .exec_ ()
 
                     if dialog_result ==CONFIRM_ADD_ALL_CANCEL_DOWNLOAD :
@@ -5395,7 +5549,7 @@ class DownloaderApp (QWidget ):
 
         self .file_progress_label .setText ("");self .cancellation_event .clear ();self .active_futures =[]
         self .total_posts_to_process =0 ;self .processed_posts_count =0 ;self .download_counter =0 ;self .skip_counter =0 
-        self .progress_label .setText ("Progress: Initializing...")
+        self.progress_label.setText(self._tr("progress_initializing_text", "Progress: Initializing..."))
 
         self .retryable_failed_files_info .clear ()
         self .permanently_failed_files_for_dialog .clear ()
@@ -5613,10 +5767,12 @@ class DownloaderApp (QWidget ):
     def _show_error_files_dialog (self ):
         """Shows the dialog with files that were skipped due to errors."""
         if not self .permanently_failed_files_for_dialog :
-            QMessageBox .information (self ,"No Errors Logged",
-            "No files were recorded as skipped due to errors in the last session or after retries.")
-            return 
-        dialog =ErrorFilesDialog (self .permanently_failed_files_for_dialog ,self )
+            QMessageBox.information(
+                self,
+                self._tr("no_errors_logged_title", "No Errors Logged"),
+                self._tr("no_errors_logged_message", "No files were recorded as skipped due to errors in the last session or after retries."))
+            return
+        dialog =ErrorFilesDialog (self .permanently_failed_files_for_dialog ,self, self ) # Pass self as parent_app
         dialog .retry_selected_signal .connect (self ._handle_retry_from_error_dialog )
         dialog .exec_ ()
     def _handle_retry_from_error_dialog (self ,selected_files_to_retry ):
@@ -5884,7 +6040,9 @@ class DownloaderApp (QWidget ):
         kept_originals_from_future =[]
         try :
             if future .cancelled ():
-                self .log_signal .emit ("    A post processing task was cancelled.")
+                if not self.cancellation_message_logged_this_session:
+                    self .log_signal .emit ("    A post processing task was cancelled.")
+                    self.cancellation_message_logged_this_session = True
             elif future .exception ():
                 self .log_signal .emit (f"❌ Post processing worker error: {future .exception ()}")
             else :
@@ -6023,13 +6181,13 @@ class DownloaderApp (QWidget ):
         if self .pause_btn :
             self .pause_btn .setEnabled (download_is_active_or_paused )
             if download_is_active_or_paused :
-                self .pause_btn .setText ("▶️ Resume Download"if self .is_paused else "⏸️ Pause Download")
-                self .pause_btn .setToolTip ("Click to resume the download."if self .is_paused else "Click to pause the download.")
+                self .pause_btn .setText (self._tr("resume_download_button_text", "▶️ Resume Download") if self .is_paused else self._tr("pause_download_button_text", "⏸️ Pause Download"))
+                self .pause_btn .setToolTip (self._tr("resume_download_button_tooltip", "Click to resume the download.") if self .is_paused else self._tr("pause_download_button_tooltip", "Click to pause the download."))
             else :
-                self .pause_btn .setText ("⏸️ Pause Download")
-                self .pause_btn .setToolTip ("Click to pause the ongoing download process.")
+                self .pause_btn .setText (self._tr("pause_download_button_text", "⏸️ Pause Download"))
+                self .pause_btn .setToolTip (self._tr("pause_download_button_tooltip", "Click to pause the ongoing download process."))
                 self .is_paused =False 
-
+        if self .cancel_btn: self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
         if enabled :
             if self .pause_event :self .pause_event .clear ()
         if enabled or self .is_paused :
@@ -6125,14 +6283,14 @@ class DownloaderApp (QWidget ):
     def _update_log_display_mode_button_text (self ):
         if hasattr (self ,'log_display_mode_toggle_button'):
             if self .only_links_log_display_mode ==LOG_DISPLAY_LINKS :
-                self .log_display_mode_toggle_button .setText ("🔗 Links View")
+                self .log_display_mode_toggle_button .setText (self._tr("log_display_mode_links_view_text", "🔗 Links View"))
                 self .log_display_mode_toggle_button .setToolTip (
                 "Current View: Extracted Links.\n"
                 "After Mega download, Mega log is shown THEN links are appended.\n"
                 "Click to switch to 'Download Progress View'."
                 )
             else :
-                self .log_display_mode_toggle_button .setText ("⬇️ Progress View")
+                self .log_display_mode_toggle_button .setText (self._tr("log_display_mode_progress_view_text", "⬇️ Progress View"))
                 self .log_display_mode_toggle_button .setToolTip (
                 "Current View: Mega Download Progress.\n"
                 "After Mega download, ONLY Mega log is shown (links hidden).\n"
@@ -6168,13 +6326,14 @@ class DownloaderApp (QWidget ):
 
         self ._perform_soft_ui_reset (preserve_url =current_url ,preserve_dir =current_dir )
 
-        self .progress_label .setText ("Progress: Cancelled. Ready for new task.")
+        self.progress_label.setText(f"{self._tr('status_cancelled_by_user', 'Cancelled by user')}. {self._tr('ready_for_new_task_text', 'Ready for new task.')}")
         self .file_progress_label .setText ("")
         if self .pause_event :self .pause_event .clear ()
         self .log_signal .emit ("ℹ️ UI reset. Ready for new operation. Background tasks are being terminated.")
         self .is_paused =False 
-        if self .retryable_failed_files_info :
+        if hasattr(self, 'retryable_failed_files_info') and self .retryable_failed_files_info :
             self .log_signal .emit (f"    Discarding {len (self .retryable_failed_files_info )} pending retryable file(s) due to cancellation.")
+            self.cancellation_message_logged_this_session = False # Reset for next potential operation
             self .retryable_failed_files_info .clear ()
         self .favorite_download_queue .clear ()
         self .permanently_failed_files_for_dialog .clear ()
@@ -6183,6 +6342,7 @@ class DownloaderApp (QWidget ):
         self ._update_favorite_scope_button_text ()
         if hasattr (self ,'link_input'):
             self .last_link_input_text_for_queue_sync =self .link_input .text ()
+        self.cancellation_message_logged_this_session = False # Ensure reset
 
     def download_finished (self ,total_downloaded ,total_skipped ,cancelled_by_user ,kept_original_names_list =None ):
         if kept_original_names_list is None :
@@ -6190,7 +6350,7 @@ class DownloaderApp (QWidget ):
         if kept_original_names_list is None :
             kept_original_names_list =[]
 
-        status_message ="Cancelled by user"if cancelled_by_user else "Completed"
+        status_message = self._tr("status_cancelled_by_user", "Cancelled by user") if cancelled_by_user else self._tr("status_completed", "Completed")
         if cancelled_by_user and self .retryable_failed_files_info :
             self .log_signal .emit (f"    Download cancelled, discarding {len (self .retryable_failed_files_info )} file(s) that were pending retry.")
             self .retryable_failed_files_info .clear ()
@@ -6237,7 +6397,11 @@ class DownloaderApp (QWidget ):
                     self .download_thread .deleteLater ()
                 self .download_thread =None 
 
-        self .progress_label .setText (f"{status_message }: {total_downloaded } downloaded, {total_skipped } skipped.")
+        self.progress_label.setText(
+            f"{status_message}: "
+            f"{total_downloaded} {self._tr('files_downloaded_label', 'downloaded')}, "
+            f"{total_skipped} {self._tr('files_skipped_label', 'skipped')}."
+        )
         self .file_progress_label .setText ("")
         if not cancelled_by_user :self ._try_process_next_external_link ()
 
@@ -6251,7 +6415,7 @@ class DownloaderApp (QWidget ):
         self .cancel_btn .setEnabled (False )
         self .is_paused =False 
         if not cancelled_by_user and self .retryable_failed_files_info :
-            num_failed =len (self .retryable_failed_files_info )
+            num_failed =len (self .retryable_failed_files_info ) # TODO: Translate this dialog
             reply =QMessageBox .question (self ,"Retry Failed Downloads?",
             f"{num_failed } file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
             "Would you like to attempt to download these failed files again?",
@@ -6264,6 +6428,7 @@ class DownloaderApp (QWidget ):
                 self .permanently_failed_files_for_dialog .extend (self .retryable_failed_files_info )
                 if self .permanently_failed_files_for_dialog :
                     self .log_signal .emit (f"🆘 Error button enabled. {len (self .permanently_failed_files_for_dialog )} file(s) can be viewed.")
+                self.cancellation_message_logged_this_session = False # Reset for next potential operation
                 self .retryable_failed_files_info .clear ()
 
         self .is_fetcher_thread_running =False 
@@ -6277,6 +6442,7 @@ class DownloaderApp (QWidget ):
                 self ._process_next_favorite_download ()
         else :
             self .set_ui_enabled (True )
+        self.cancellation_message_logged_this_session = False # Ensure reset at the very end of finishing
 
     def _handle_thumbnail_mode_change (self ,thumbnails_checked ):
         """Handles UI changes when 'Download Thumbnails Only' is toggled."""
@@ -6304,7 +6470,7 @@ class DownloaderApp (QWidget ):
             self .retryable_failed_files_info .clear ()
         self .log_signal .emit (f"🔄 Starting retry session for {len (self .files_for_current_retry_session )} file(s)...")
         self .set_ui_enabled (False )
-        if self .cancel_btn :self .cancel_btn .setText ("❌ Cancel Retry")
+        if self .cancel_btn :self .cancel_btn .setText (self._tr("cancel_retry_button_text", "❌ Cancel Retry"))
 
 
         self .active_retry_futures =[]
@@ -6314,7 +6480,7 @@ class DownloaderApp (QWidget ):
         self .total_files_for_retry =len (self .files_for_current_retry_session )
         self .active_retry_futures_map ={}
 
-        self .progress_label .setText (f"Retrying 0 / {self .total_files_for_retry } files...")
+        self.progress_label.setText(self._tr("progress_posts_text", "Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)").format(processed_posts=0, total_posts=self.total_files_for_retry, progress_percent=0.0).replace("posts", "files")) # Re-use and adapt
         self .cancellation_event .clear ()
 
         num_retry_threads =1 
@@ -6422,7 +6588,11 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit (f"❌ Error in _handle_retry_future_result: {e }")
             self .failed_retry_count_in_session +=1 
 
-        self .progress_label .setText (f"Retrying {self .processed_retry_count } / {self .total_files_for_retry } files... (Succeeded: {self .succeeded_retry_count }, Failed: {self .failed_retry_count_in_session })")
+        progress_percent_retry = (self.processed_retry_count / self.total_files_for_retry * 100) if self.total_files_for_retry > 0 else 0
+        self.progress_label.setText(
+            self._tr("progress_posts_text", "Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)").format(processed_posts=self.processed_retry_count, total_posts=self.total_files_for_retry, progress_percent=progress_percent_retry).replace("posts", "files") +
+            f" ({self._tr('succeeded_text', 'Succeeded')}: {self.succeeded_retry_count}, {self._tr('failed_text', 'Failed')}: {self.failed_retry_count_in_session})"
+        )
 
         if self .processed_retry_count >=self .total_files_for_retry :
             if all (f .done ()for f in self .active_retry_futures ):
@@ -6446,11 +6616,15 @@ class DownloaderApp (QWidget ):
         self .files_for_current_retry_session .clear ()
 
         if self .permanently_failed_files_for_dialog :
-            self .log_signal .emit (f"🆘 Error button enabled. {len (self .permanently_failed_files_for_dialog )} file(s) ultimately failed and can be viewed.")
+            self .log_signal .emit (f"🆘 {self._tr('error_button_text', 'Error')} button enabled. {len (self .permanently_failed_files_for_dialog )} file(s) ultimately failed and can be viewed.")
 
         self .set_ui_enabled (not self ._is_download_active ())
-        if self .cancel_btn :self .cancel_btn .setText ("❌ Cancel & Reset UI")
-        self .progress_label .setText (f"Retry Finished. Succeeded: {self .succeeded_retry_count }, Failed: {self .failed_retry_count_in_session }. Ready for new task.")
+        if self .cancel_btn :self .cancel_btn .setText (self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+        self.progress_label.setText(
+            f"{self._tr('retry_finished_text', 'Retry Finished')}. "
+            f"{self._tr('succeeded_text', 'Succeeded')}: {self.succeeded_retry_count}, "
+            f"{self._tr('failed_text', 'Failed')}: {self.failed_retry_count_in_session}. "
+            f"{self._tr('ready_for_new_task_text', 'Ready for new task.')}")
         self .file_progress_label .setText ("")
         if self .pause_event :self .pause_event .clear ()
         self .is_paused =False 
@@ -6462,14 +6636,14 @@ class DownloaderApp (QWidget ):
             if self .log_verbosity_toggle_button :
                 self .log_verbosity_toggle_button .setText (self .CLOSED_EYE_ICON )
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Missed Character Log. Click to switch to Progress Log.")
-            if self .progress_log_label :self .progress_log_label .setText ("🚫 Missed Character Log:")
+            if self .progress_log_label :self .progress_log_label .setText (self._tr("missed_character_log_label_text", "🚫 Missed Character Log:"))
         else :
             self .current_log_view ='progress'
             if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
             if self .log_verbosity_toggle_button :
                 self .log_verbosity_toggle_button .setText (self .EYE_ICON )
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
-            if self .progress_log_label :self .progress_log_label .setText ("📜 Progress Log:")
+            if self .progress_log_label :self .progress_log_label .setText (self._tr("progress_log_label_text", "📜 Progress Log:"))
 
     def reset_application_state (self ):
         if self ._is_download_active ():QMessageBox .warning (self ,"Reset Error","Cannot reset while a download is in progress. Please cancel first.");return 
@@ -6479,14 +6653,14 @@ class DownloaderApp (QWidget ):
 
         self .current_log_view ='progress'
         if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
-        if self .progress_log_label :self .progress_log_label .setText ("📜 Progress Log:")
+        if self .progress_log_label :self .progress_log_label .setText (self._tr("progress_log_label_text", "📜 Progress Log:"))
         if self .log_verbosity_toggle_button :
             self .log_verbosity_toggle_button .setText (self .EYE_ICON )
             self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
 
         if self .show_external_links and not (self .radio_only_links and self .radio_only_links .isChecked ()):self .external_log_output .append ("🔗 External Links Found:")
-        self .external_link_queue .clear ();self .extracted_links_cache =[];self ._is_processing_external_link_queue =False ;self ._current_link_post_title =None 
-        self .progress_label .setText ("Progress: Idle");self .file_progress_label .setText ("")
+        self .external_link_queue .clear ();self .extracted_links_cache =[];self ._is_processing_external_link_queue =False ;self ._current_link_post_title =None
+        self .progress_label .setText (self._tr("progress_idle_text", "Progress: Idle"));self .file_progress_label .setText ("")
         with self .downloaded_files_lock :count =len (self .downloaded_files );self .downloaded_files .clear ();
         self .missed_title_key_terms_count .clear ()
         self .missed_title_key_terms_examples .clear ()
@@ -6500,6 +6674,7 @@ class DownloaderApp (QWidget ):
         self .favorite_download_scope =FAVORITE_SCOPE_SELECTED_LOCATION 
         self ._update_favorite_scope_button_text ()
         self .retryable_failed_files_info .clear ()
+        self.cancellation_message_logged_this_session = False
         self .is_processing_favorites_queue =False 
 
         if count >0 :self .log_signal .emit (f"    Cleared {count } downloaded filename(s) from session memory.")
@@ -6539,10 +6714,10 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'use_cookie_checkbox'):self .use_cookie_checkbox .setChecked (False )
         self .selected_cookie_filepath =None 
 
-        if hasattr (self ,'cookie_text_input'):self .cookie_text_input .clear ()
+        if hasattr (self ,'cookie_text_input'): self .cookie_text_input .clear ()
         self .missed_title_key_terms_count .clear ()
         self .missed_title_key_terms_examples .clear ()
-        self .logged_summary_for_key_term .clear ()
+        self .logged_summary_for_key_term .clear ()        
         self .already_logged_bold_key_terms .clear ()
         if hasattr (self ,'manga_date_prefix_input'):self .manga_date_prefix_input .clear ()
         if self .pause_event :self .pause_event .clear ()
@@ -6550,6 +6725,7 @@ class DownloaderApp (QWidget ):
         self .missed_key_terms_buffer .clear ()
         if self .download_extracted_links_button :
             self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
+            self.cancellation_message_logged_this_session = False
             self .mega_download_log_preserved_once =False 
             self .download_extracted_links_button .setEnabled (False )
 
@@ -6565,16 +6741,16 @@ class DownloaderApp (QWidget ):
         self ._update_char_filter_scope_button_text ()
 
         self .current_log_view ='progress'
-        self ._update_cookie_input_visibility (False )
+        self ._update_cookie_input_visibility (False ); self._update_cookie_input_placeholders_and_tooltips()
         if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
         if self .progress_log_label :self .progress_log_label .setText ("📜 Progress Log:")
-
+        if self .progress_log_label :self .progress_log_label .setText (self._tr("progress_log_label_text", "📜 Progress Log:"))
         self ._handle_filter_mode_change (self .radio_all ,True )
         self ._handle_multithreading_toggle (self .use_multithreading_checkbox .isChecked ())
         self .filter_character_list ("")
 
         self .download_btn .setEnabled (True );self .cancel_btn .setEnabled (False )
-        if self .reset_button :self .reset_button .setEnabled (True )
+        if self .reset_button :self .reset_button .setEnabled (True ); self.reset_button.setText(self._tr("reset_button_text", "🔄 Reset")); self.reset_button.setToolTip(self._tr("reset_button_tooltip", "Reset all inputs and logs to default state (only when idle)."))
         if self .log_verbosity_toggle_button :
             self .log_verbosity_toggle_button .setText (self .EYE_ICON )
             self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
@@ -6588,344 +6764,25 @@ class DownloaderApp (QWidget ):
             self ._handle_thumbnail_mode_change (self .download_thumbnails_checkbox .isChecked ())
 
     def _show_feature_guide (self ):
-        page1_title ="① Introduction & Main Inputs"
-
-        page1_content ="""<html><head/><body>
-        <p>This guide provides an overview of the Kemono Downloader's features, fields, and buttons.</p>
-
-        <h3>Main Input Area (Top Left)</h3>
-        <ul>
-            <li><b>🔗 Kemono Creator/Post URL:</b>
-                <ul>
-                    <li>Enter the full web address of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) or a specific post (e.g., <i>.../post/98765</i>).</li>
-                    <li>Supports Kemono (kemono.su, kemono.party) and Coomer (coomer.su, coomer.party) URLs.</li>
-                </ul>
-            </li>
-            <li><b>Page Range (Start to End):</b>
-                <ul>
-                    <li>For creator URLs: Specify a range of pages to fetch (e.g., pages 2 to 5). Leave blank for all pages.</li>
-                    <li>Disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>
-                </ul>
-            </li>
-            <li><b>📁 Download Location:</b>
-                <ul>
-                    <li>Click <b>'Browse...'</b> to choose a main folder on your computer where all downloaded files will be saved.</li>
-                    <li>This field is required unless you are using <b>'🔗 Only Links'</b> mode.</li>
-                </ul>
-            </li>
-            <li><b>🎨 Creator Selection Button (Next to URL Input):</b>
-                <ul>
-                    <li>Click the palette icon (🎨) to open the 'Creator Selection' dialog.</li>
-                    <li>This dialog loads creators from your <code>creators.json</code> file (which should be in the application's directory).</li>
-                    <li><b>Inside the Dialog:</b>
-                        <ul>
-                            <li><b>Search Bar:</b> Type to filter the list of creators by name or service.</li>
-                            <li><b>Creator List:</b> Displays creators from your <code>creators.json</code>. Creators you have 'favorited' (in the JSON data) appear at the top.</li>
-                            <li><b>Checkboxes:</b> Select one or more creators by checking the box next to their name.</li>
-                            <li><b>'Scope' Button (e.g., 'Scope: Characters'):</b> This button toggles the download organization when initiating downloads from this popup:
-                                <ul><li><i>Scope: Characters:</i> Downloads will be organized into character-named folders directly within your main 'Download Location'. Art from different creators for the same character will be grouped together.</li>
-                                    <li><i>Scope: Creators:</i> Downloads will first create a folder named after the creator within your main 'Download Location'. Character-named subfolders will then be created inside each creator's folder.</li></ul>
-                            </li>
-                            <li><b>'Add Selected' Button:</b> Clicking this will take the names of all checked creators and add them to the main '🔗 Kemono Creator/Post URL' input field, separated by commas. The dialog will then close.</li>
-                        </ul>
-                    </li>
-                    <li>This feature provides a quick way to populate the URL field for multiple creators without manually typing or pasting each URL.</li>
-                </ul>
-            </li>
-        </ul></body></html>"""
-
-        page2_title ="② Filtering Downloads"
-        page2_content ="""<html><head/><body>
-        <h3>Filtering Downloads (Left Panel)</h3>
-        <ul>
-            <li><b>🎯 Filter by Character(s):</b>
-                <ul>
-                    <li>Enter names, comma-separated (e.g., <code>Tifa, Aerith</code>).</li>
-                    <li><b>Grouped Aliases for Shared Folder (Separate Known.txt Entries):</b> <code>(Vivi, Ulti, Uta)</code>.
-                        <ul><li>Content matching "Vivi", "Ulti", OR "Uta" will go into a shared folder named "Vivi Ulti Uta" (after cleaning).</li>
-                            <li>If these names are new, "Vivi", "Ulti", and "Uta" will be prompted to be added as <i>separate individual entries</i> to <code>Known.txt</code>.</li>
-                        </ul>
-                    </li>
-                    <li><b>Grouped Aliases for Shared Folder (Single Known.txt Entry):</b> <code>(Yuffie, Sonon)~</code> (note the tilde <code>~</code>).
-                        <ul><li>Content matching "Yuffie" OR "Sonon" will go into a shared folder named "Yuffie Sonon".</li>
-                            <li>If new, "Yuffie Sonon" (with aliases Yuffie, Sonon) will be prompted to be added as a <i>single group entry</i> to <code>Known.txt</code>.</li>
-                        </ul>
-                    </li>
-                    <li>This filter influences folder naming if 'Separate Folders by Name/Title' is enabled.</li>
-                </ul>
-            </li>
-            <li><b>Filter: [Type] Button (Character Filter Scope):</b> Cycles how the 'Filter by Character(s)' applies:
-                <ul>
-                    <li><code>Filter: Files</code>: Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename.</li>
-                    <li><code>Filter: Title</code>: Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>
-                    <li><code>Filter: Both</code>: Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li>
-                    <li><code>Filter: Comments (Beta)</code>: Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li>
-                </ul>
-            </li>
-            <li><b>🗄️ Custom Folder Name (Single Post Only):</b>
-                <ul>
-                    <li>Visible and usable only when downloading a single specific post URL AND 'Separate Folders by Name/Title' is enabled.</li>
-                    <li>Allows you to specify a custom name for that single post's download folder.</li>
-                </ul>
-            </li>
-            <li><b>🚫 Skip with Words:</b>
-                <ul><li>Enter words, comma-separated (e.g., <code>WIP, sketch, preview</code>) to skip certain content.</li></ul>
-            </li>
-            <li><b>Scope: [Type] Button (Skip Words Scope):</b> Cycles how 'Skip with Words' applies:
-                <ul>
-                    <li><code>Scope: Files</code>: Skips individual files if their names contain any of these words.</li>
-                    <li><code>Scope: Posts</code>: Skips entire posts if their titles contain any of these words.</li>
-                    <li><code>Scope: Both</code>: Applies both (post title first, then individual files).</li>
-                </ul>
-            </li>
-            <li><b>✂️ Remove Words from name:</b>
-                <ul><li>Enter words, comma-separated (e.g., <code>patreon, [HD]</code>), to remove from downloaded filenames (case-insensitive).</li></ul>
-            </li>
-            <li><b>Filter Files (Radio Buttons):</b> Choose what to download:
-                <ul>
-                    <li><code>All</code>: Downloads all file types found.</li>
-                    <li><code>Images/GIFs</code>: Only common image formats (JPG, PNG, GIF, WEBP, etc.) and GIFs.</li>
-                    <li><code>Videos</code>: Only common video formats (MP4, MKV, WEBM, MOV, etc.).</li>
-                    <li><code>📦 Only Archives</code>: Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li>
-                    <li><code>🎧 Only Audio</code>: Downloads only common audio formats (MP3, WAV, FLAC, M4A, OGG, etc.). Other file-specific options behave as with 'Images' or 'Videos' mode.</li>
-                    <li><code>🔗 Only Links</code>: Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled. The main download button changes to '🔗 Extract Links'.</li>                    
-                </ul>
-            </li>
-        </ul></body></html>"""
-
-        page3_title ="③ Download Options & Settings"
-        page3_content ="""<html><head/><body>
-        <h3>Download Options & Settings (Left Panel)</h3>
-        <ul>
-            <li><b>Skip .zip / Skip .rar:</b> Checkboxes to avoid downloading these archive file types. (Disabled and ignored if '📦 Only Archives' filter mode is selected).</li>
-            <li><b>Download Thumbnails Only:</b> Downloads small preview images instead of full-sized files (if available).</li>
-            <li><b>Compress Large Images (to WebP):</b> If the 'Pillow' (PIL) library is installed, images larger than 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li>
-            <li><b>⚙️ Advanced Settings:</b>
-                <ul>
-                    <li><b>Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles. Can use the <b>Known.txt</b> list as a fallback for folder names.</li></ul></li></ul></body></html>"""
-
-        page4_title ="④ Advanced Settings (Part 1)"
-        page4_content ="""<html><head/><body><h3>⚙️ Advanced Settings (Continued)</h3><ul><ul>
-                    <li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li>
-                    <li><b>Use Cookie:</b> Check this to use cookies for requests.
-                        <ul>
-                            <li><b>Text Field:</b> Enter a cookie string directly (e.g., <code>name1=value1; name2=value2</code>).</li>
-                            <li><b>Browse...:</b> Select a <code>cookies.txt</code> file (Netscape format). The path will appear in the text field.</li>
-                            <li><b>Precedence:</b> The text field (if filled) takes precedence over a browsed file. If 'Use Cookie' is checked but both are empty, it attempts to load <code>cookies.txt</code> from the app's directory.</li>
-                        </ul>
-                    </li>
-                    <li><b>Use Multithreading & Threads Input:</b>
-                        <ul>
-                            <li>Enables faster operations. The number in 'Threads' input means:
-                                <ul>
-                                    <li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li>
-                                    <li>For <b>Single Post URLs:</b> Number of files to download concurrently from that single post.</li>
-                                </ul>
-                            </li>
-                            <li>If unchecked, 1 thread is used. High thread counts (e.g., >40) may show an advisory.</li>
-                        </ul>
-                    </li></ul></ul></body></html>"""
-
-        page5_title ="⑤ Advanced Settings (Part 2) & Actions"
-        page5_content ="""<html><head/><body><h3>⚙️ Advanced Settings (Continued)</h3><ul><ul>
-                    <li><b>Show External Links in Log:</b> If checked, a secondary log panel appears below the main log to display any external links found in post descriptions. (Disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</li>
-                    <li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content.
-                        <ul>
-                            <li>Downloads posts from <b>oldest to newest</b>.</li>
-                            <li>The 'Page Range' input is disabled as all posts are fetched.</li>
-                            <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:
-                                <ul>
-                                    <li><code>Name: Post Title (Default)</code>: The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li>
-                                    <li><code>Name: Original File</code>: All files attempt to keep their original filenames.</li>
-                                    <li><code>Name: Original File</code>: All files attempt to keep their original filenames. When this style is active, an input field for an <b>optional filename prefix</b> (e.g., 'MySeries_') will appear next to this style button. Example: 'MySeries_OriginalFile.jpg'.</li>
-                                    <li><code>Name: Title+G.Num (Post Title + Global Numbering)</code>: All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. Example: Post 'Chapter 1' (2 files) -> 'Chapter 1 001.jpg', 'Chapter 1 002.png'. Next post 'Chapter 2' (1 file) -> 'Chapter 2 003.jpg'. Multithreading for post processing is automatically disabled for this style.</li>
-                                    <li><code>Name: Date Based</code>: Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. When this style is active, an input field for an <b>optional filename prefix</b> (e.g., 'MySeries_') will appear next to this style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>
-                                </ul>
-                            </li>
-                            <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>
-                        </ul>
-                    </li>
-                </ul></li></ul>
-        
-        <h3>Main Action Buttons (Left Panel)</h3>
-        <ul>
-            <li><b>⬇️ Start Download / 🔗 Extract Links:</b> This button's text and function change based on the 'Filter Files' radio button selection. It starts the primary operation.</li>
-            <li><b>⏸️ Pause Download / ▶️ Resume Download:</b> Allows you to temporarily halt the current download/extraction process and resume it later. Some UI settings can be changed while paused.</li>
-            <li><b>❌ Cancel & Reset UI:</b> Stops the current operation and performs a soft UI reset. Your URL and Download Directory inputs are preserved, but other settings and logs are cleared.</li>
-        </ul></body></html>"""
-
-        page6_title ="⑥ Known Shows/Characters List"
-        page6_content ="""<html><head/><body>
-        <h3>Known Shows/Characters List Management (Bottom Left)</h3>
-        <p>This section helps manage the <code>Known.txt</code> file, which is used for smart folder organization when 'Separate Folders by Name/Title' is enabled, especially as a fallback if a post doesn't match your active 'Filter by Character(s)' input.</p>
-        <ul>
-            <li><b>Open Known.txt:</b> Opens the <code>Known.txt</code> file (located in the app's directory) in your default text editor for advanced editing (like creating complex grouped aliases).</li>
-            <li><b>Search characters...:</b> Filters the list of known names displayed below.</li>
-            <li><b>List Widget:</b> Displays the primary names from your <code>Known.txt</code>. Select entries here to delete them.</li>
-            <li><b>Add new show/character name (Input Field):</b> Enter a name or group to add.
-                <ul>
-                    <li><b>Simple Name:</b> e.g., <code>My Awesome Series</code>. Adds as a single entry.</li>
-                    <li><b>Group for Separate Known.txt Entries:</b> e.g., <code>(Vivi, Ulti, Uta)</code>. Adds "Vivi", "Ulti", and "Uta" as three separate individual entries to <code>Known.txt</code>.</li>
-                    <li><b>Group for Shared Folder & Single Known.txt Entry (Tilde <code>~</code>):</b> e.g., <code>(Character A, Char A)~</code>. Adds one entry to <code>Known.txt</code> named "Character A Char A". "Character A" and "Char A" become aliases for this single folder/entry.</li>
-                </ul>
-            </li>
-            <li><b>➕ Add Button:</b> Adds the name/group from the input field above to the list and <code>Known.txt</code>.</li>
-            <li><b>⤵️ Add to Filter Button:</b>
-                <ul>
-                    <li>Located next to the '➕ Add' button for the 'Known Shows/Characters' list.</li>
-                    <li>Clicking this button opens a popup window displaying all names from your <code>Known.txt</code> file, each with a checkbox.</li>
-                    <li>The popup includes a search bar to quickly filter the list of names.</li>
-                    <li>You can select one or more names using the checkboxes.</li>
-                    <li>Click 'Add Selected' to insert the chosen names into the 'Filter by Character(s)' input field in the main window.</li>
-                    <li>If a selected name from <code>Known.txt</code> was originally a group (e.g., defined as <code>(Boa, Hancock)</code> in Known.txt), it will be added to the filter field as <code>(Boa, Hancock)~</code>. Simple names are added as-is.</li>
-                    <li>'Select All' and 'Deselect All' buttons are available in the popup for convenience.</li>
-                    <li>Click 'Cancel' to close the popup without any changes.</li>
-                </ul>
-            </li>
-            <li><b>🗑️ Delete Selected Button:</b> Deletes the selected name(s) from the list and <code>Known.txt</code>.</li>
-            <li><b>❓ Button (This one!):</b> Displays this comprehensive help guide.</li>
-        </ul></body></html>"""
-
-        page7_title ="⑦ Log Area & Controls"
-        page7_content ="""<html><head/><body>
-        <h3>Log Area & Controls (Right Panel)</h3>
-        <ul>
-            <li><b>📜 Progress Log / Extracted Links Log (Label):</b> Title for the main log area; changes if '🔗 Only Links' mode is active.</li>
-            <li><b>Search Links... / 🔍 Button (Link Search):</b>
-                <ul><li>Visible only when '🔗 Only Links' mode is active. Allows real-time filtering of the extracted links displayed in the main log by text, URL, or platform.</li></ul>
-            </li>
-            <li><b>Name: [Style] Button (Manga Filename Style):</b>
-                <ul><li>Visible only when <b>Manga/Comic Mode</b> is active for a creator feed and not in 'Only Links' or 'Only Archives' mode.</li>
-                    <li>Cycles through filename styles: <code>Post Title</code>, <code>Original File</code>, <code>Date Based</code>. (See Manga/Comic Mode section for details).</li>
-                    <li>When 'Original File' or 'Date Based' style is active, an input field for an <b>optional filename prefix</b> will appear next to this button.</li>
-                </ul>                
-            </li>
-            <li><b>Multi-part: [ON/OFF] Button:</b>
-                <ul><li>Toggles multi-segment downloads for individual large files.
-                    <ul><li><b>ON:</b> Can speed up large file downloads but may increase UI choppiness or log spam with many small files. An advisory appears when enabling. If a multi-part download fails, it retries as single-stream.</li>
-                        <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li>
-                    </ul>
-                    <li>Disabled if '🔗 Only Links' or '📦 Only Archives' mode is active.</li>
-                </ul>
-            </li>
-            <li><b>👁️ / 🙈 Button (Log View Toggle):</b> Switches the main log view:
-                <ul>
-                    <li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li>
-                    <li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles/content that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li>
-                </ul>
-            </li>
-            <li><b>🔄 Reset Button:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li>
-            <li><b>Main Log Output (Text Area):</b> Displays detailed progress messages, errors, and summaries. If '🔗 Only Links' mode is active, this area displays the extracted links.</li>
-            <li><b>Missed Character Log Output (Text Area):</b> (Viewable via 👁️ / 🙈 toggle) Displays posts/files skipped due to character filters.</li>
-            <li><b>External Log Output (Text Area):</b> Appears below the main log if 'Show External Links in Log' is checked. Displays external links found in post descriptions.</li>
-            <li><b>Export Links Button:</b>
-                <ul><li>Visible and enabled only when '🔗 Only Links' mode is active and links have been extracted.</li>
-                    <li>Allows you to save all extracted links to a <code>.txt</code> file.</li>
-                </ul>
-            </li>
-            <li><b>Progress: [Status] Label:</b> Shows the overall progress of the download or link extraction process (e.g., posts processed).</li>
-            <li><b>File Progress Label:</b> Shows the progress of individual file downloads, including speed and size, or multi-part download status.</li>
-        </ul></body></html>"""
-
-        page8_title ="⑧ Key Files & Tour"
-        page8_title ="⑧ Favorite Mode & Future Features"
-        page8_content_favorite_mode ="""<html><head/><body>
-        <h3>Favorite Mode (Downloading from Your Kemono.su Favorites)</h3>
-        <p>This mode allows you to download content directly from artists you've favorited on Kemono.su.</p>
-        <ul>
-            <li><b>⭐ How to Enable:</b>
-                <ul>
-                    <li>Check the <b>'⭐ Favorite Mode'</b> checkbox, located next to the '🔗 Only Links' radio button.</li>
-                </ul>
-            </li>
-            <li><b>UI Changes in Favorite Mode:</b>
-                <ul>
-                    <li>The '🔗 Kemono Creator/Post URL' input area is replaced with a message indicating Favorite Mode is active.</li>
-                    <li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with:
-                        <ul>
-                            <li><b>'🖼️ Favorite Artists'</b> button</li>
-                            <li><b>'📄 Favorite Posts'</b> button</li>
-                        </ul>
-                    </li>
-                    <li>The '🍪 Use Cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li>
-                </ul>
-            </li>
-            <li><b>🖼️ Favorite Artists Button:</b>
-                <ul>
-                    <li>Clicking this opens a dialog that lists all artists you have favorited on Kemono.su.</li>
-                    <li>You can select one or more artists from this list to download their content.</li>
-                </ul>
-            </li>
-            <li><b>📄 Favorite Posts Button (Future Feature):</b>
-                <ul>
-                    <li>Downloading specific favorited <i>posts</i> (especially in a manga-like sequential order if they are part of a series) is a feature currently under development.</li>
-                    <li>The best way to handle favorited posts, particularly for sequential reading like manga, is still being explored.</li>
-                    <li>If you have specific ideas or use cases for how you'd like to download and organize favorited posts (e.g., "manga-style" from favorites), please consider opening an issue or joining the discussion on the project's GitHub page. Your input is valuable!</li>
-                </ul>
-            </li>
-            <li><b>Favorite Download Scope (Button):</b>
-                <ul>
-                    <li>This button (next to 'Favorite Posts') controls where content from selected favorite artists is downloaded:
-                        <ul>
-                            <li><b><i>Scope: Selected Location:</i></b> All selected artists are downloaded into the main 'Download Location' you've set in the UI. Filters apply globally to all content.</li>
-                            <li><b><i>Scope: Artist Folders:</i></b> For each selected artist, a subfolder (named after the artist) is automatically created inside your main 'Download Location'. Content for that artist goes into their specific subfolder. Filters apply within each artist's dedicated folder.</li>
-                        </ul>
-                    </li>
-                </ul>
-            </li>
-            <li><b>Filters in Favorite Mode:</b>
-                <ul>
-                    <li>The '🎯 Filter by Character(s)', '🚫 Skip with Words', and 'Filter Files' options you've set in the UI will still apply to the content downloaded from your selected favorite artists.</li>
-                </ul>
-            </li>
-        </ul></body></html>"""
-
-        page9_title ="⑨ Key Files & Tour"
-        page9_content_key_files ="""<html><head/><body>
-        <h3>Key Files Used by the Application</h3>
-        <ul>
-            <li><b><code>Known.txt</code>:</b>
-                <ul>
-                    <li>Located in the application's directory (where the <code>.exe</code> or <code>main.py</code> is).</li>
-                    <li>Stores your list of known shows, characters, or series titles for automatic folder organization when 'Separate Folders by Name/Title' is enabled.</li>
-                    <li><b>Format:</b>
-                        <ul>
-                            <li>Each line is an entry.</li>
-                            <li><b>Simple Name:</b> e.g., <code>My Awesome Series</code>. Content matching this will go into a folder named "My Awesome Series".</li>
-                            <li><b>Grouped Aliases:</b> e.g., <code>(Character A, Char A, Alt Name A)</code>. Content matching "Character A", "Char A", OR "Alt Name A" will ALL go into a single folder named "Character A Char A Alt Name A" (after cleaning). All terms in the parentheses become aliases for that folder.</li>
-                        </ul>
-                    </li>
-                    <li><b>Usage:</b> Serves as a fallback for folder naming if a post doesn't match your active 'Filter by Character(s)' input. You can manage simple entries via the UI or edit the file directly for complex aliases. The app reloads it on startup or next use.</li>
-                </ul>
-            </li>
-            <li><b><code>cookies.txt</code> (Optional):</b>
-                <ul>
-                    <li>If you use the 'Use Cookie' feature and don't provide a direct cookie string or browse to a specific file, the application will look for a file named <code>cookies.txt</code> in its directory.</li>
-                    <li><b>Format:</b> Must be in Netscape cookie file format.</li>
-                    <li><b>Usage:</b> Allows the downloader to use your browser's login session for accessing content that might be behind a login on Kemono/Coomer.</li>
-                </ul>
-            </li>
-        </ul>
-
-        <h3>First-Time User Tour</h3>
-        <ul>
-            <li>On the first launch (or if reset), a welcome tour dialog appears, guiding you through the main features. You can skip it or choose to "Never show this tour again."</li>
-        </ul>
-        <p><em>Many UI elements also have tooltips that appear when you hover your mouse over them, providing quick hints.</em></p>
-        </body></html>
-        """
+        steps_content_keys = [
+            ("help_guide_step1_title", "help_guide_step1_content"),
+            ("help_guide_step2_title", "help_guide_step2_content"),
+            ("help_guide_step3_title", "help_guide_step3_content"),
+            ("help_guide_step4_title", "help_guide_step4_content"),
+            ("help_guide_step5_title", "help_guide_step5_content"),
+            ("help_guide_step6_title", "help_guide_step6_content"),
+            ("help_guide_step7_title", "help_guide_step7_content"),
+            ("help_guide_step8_title", "help_guide_step8_content"),
+            ("help_guide_step9_title", "help_guide_step9_content"),
+        ]
 
         steps =[
-        (page1_title ,page1_content ),
-        (page2_title ,page2_content ),
-        (page3_title ,page3_content ),
-        (page4_title ,page4_content ),
-        (page5_title ,page5_content ),
-        (page6_title ,page6_content ),
-        (page7_title ,page7_content ),
-        (page8_title ,page8_content_favorite_mode ),
-        (page9_title ,page9_content_key_files ),
         ]
+        for title_key, content_key in steps_content_keys:
+            title = self._tr(title_key, title_key) 
+            content = self._tr(content_key, f"Content for {content_key} not found.")
+            steps.append((title, content))
+            
         guide_dialog =HelpGuideDialog (steps ,self )
         guide_dialog .exec_ ()
 
@@ -6948,28 +6805,12 @@ class DownloaderApp (QWidget ):
 
     def _update_multipart_toggle_button_text (self ):
         if hasattr (self ,'multipart_toggle_button'):
-            text ="Multi-part: ON"if self .allow_multipart_download_setting else "Multi-part: OFF"
-            self .multipart_toggle_button .setText (text )
             if self .allow_multipart_download_setting :
-                self .multipart_toggle_button .setToolTip (
-                "Multi-part Download: ON\n\n"
-                "Enables downloading large files in multiple segments (parts) simultaneously.\n"
-                "- Can significantly speed up downloads for *single large files* (e.g., videos, large archives) if the server supports it.\n"
-                "- May increase CPU/network usage.\n"
-                "- For creator feeds with many *small files* (e.g., images), this might not offer speed benefits and could make the UI/log feel busy.\n"
-                "- If a multi-part download fails for a file, it will automatically retry with a single stream.\n"
-                "- Example: A 500MB video might be downloaded in 5 parts of 100MB each, concurrently.\n\n"
-                "Click to turn OFF (use single-stream for all files)."
-                )
+                self.multipart_toggle_button.setText(self._tr("multipart_on_button_text", "Multi-part: ON"))
+                self.multipart_toggle_button.setToolTip(self._tr("multipart_on_button_tooltip", "Tooltip for multipart ON"))
             else :
-                self .multipart_toggle_button .setToolTip (
-                "Multi-part Download: OFF\n\n"
-                "All files will be downloaded using a single connection (stream).\n"
-                "- This is generally stable and works well for most scenarios, especially for feeds with many smaller files.\n"
-                "- Large files will be downloaded sequentially in one go.\n"
-                "- Example: A 500MB video will be downloaded as one continuous stream.\n\n"
-                "Click to turn ON (enable multi-part for large files, see advisory on click)."
-                )
+                self.multipart_toggle_button.setText(self._tr("multipart_off_button_text", "Multi-part: OFF"))
+                self.multipart_toggle_button.setToolTip(self._tr("multipart_off_button_tooltip", "Tooltip for multipart OFF"))
 
     def _toggle_multipart_mode (self ):
         if not self .allow_multipart_download_setting :
@@ -7031,7 +6872,7 @@ class DownloaderApp (QWidget ):
             QMessageBox .information (self ,"No Known Names","Your 'Known.txt' list is empty. Add some names first.")
             return 
 
-        dialog =KnownNamesFilterDialog (KNOWN_NAMES ,self )
+        dialog =KnownNamesFilterDialog (KNOWN_NAMES ,self, self ) # Pass self as parent_app_ref
         if dialog .exec_ ()==QDialog .Accepted :
             selected_entries =dialog .get_selected_entries ()
             if selected_entries :
@@ -7067,25 +6908,14 @@ class DownloaderApp (QWidget ):
         if not hasattr (self ,'favorite_scope_toggle_button')or not self .favorite_scope_toggle_button :
             return 
         if self .favorite_download_scope ==FAVORITE_SCOPE_SELECTED_LOCATION :
-            self .favorite_scope_toggle_button .setText ("Scope: Selected Location")
-            self .favorite_scope_toggle_button .setToolTip (
-            "Current Favorite Download Scope: Selected Location\n\n"
-            "All selected favorite artists will be downloaded into the main 'Download Location' specified in the UI.\n"
-            "Filters (character, skip words, file type) will apply globally to all content from these artists.\n\n"
-            "Click to change to: Artist Folders"
-            )
+            self.favorite_scope_toggle_button.setText(self._tr("favorite_scope_selected_location_text", "Scope: Selected Location"))
+            # self.favorite_scope_toggle_button.setToolTip(self._tr("favorite_scope_selected_location_tooltip", "Tooltip for scope selected location")) # Tooltips later
         elif self .favorite_download_scope ==FAVORITE_SCOPE_ARTIST_FOLDERS :
-            self .favorite_scope_toggle_button .setText ("Scope: Artist Folders")
-            self .favorite_scope_toggle_button .setToolTip (
-            "Current Favorite Download Scope: Artist Folders\n\n"
-            "For each selected favorite artist, a new subfolder (named after the artist) will be created inside the main 'Download Location'.\n"
-            "Content for that artist will be downloaded into their specific subfolder.\n"
-            "Filters (character, skip words, file type) will apply *within* each artist's folder.\n\n"
-            "Click to change to: Selected Location"
-            )
+            self.favorite_scope_toggle_button.setText(self._tr("favorite_scope_artist_folders_text", "Scope: Artist Folders"))
+            # self.favorite_scope_toggle_button.setToolTip(self._tr("favorite_scope_artist_folders_tooltip", "Tooltip for scope artist folders")) # Tooltips later
         else :
-            self .favorite_scope_toggle_button .setText ("Scope: Unknown")
-            self .favorite_scope_toggle_button .setToolTip ("Favorite download scope is unknown. Click to cycle.")
+            self.favorite_scope_toggle_button.setText(self._tr("favorite_scope_unknown_text", "Scope: Unknown"))
+            # self.favorite_scope_toggle_button.setToolTip(self._tr("favorite_scope_unknown_tooltip", "Tooltip for scope unknown")) # Tooltips later
 
     def _cycle_favorite_scope (self ):
         if self .favorite_download_scope ==FAVORITE_SCOPE_SELECTED_LOCATION :
@@ -7097,7 +6927,7 @@ class DownloaderApp (QWidget ):
 
     def _show_empty_popup (self ):
         """Creates and shows the empty popup dialog."""
-        dialog =EmptyPopupDialog (self .app_base_dir ,self )
+        dialog =EmptyPopupDialog (self .app_base_dir ,self, self ) # Pass self (DownloaderApp) as parent_app_ref
         if dialog .exec_ ()==QDialog .Accepted :
             if hasattr (dialog ,'selected_creators_for_queue')and dialog .selected_creators_for_queue :
                 self .favorite_download_queue .clear ()
@@ -7140,7 +6970,7 @@ class DownloaderApp (QWidget ):
         if dialog .exec_ ()==QDialog .Accepted :
             selected_artists =dialog .get_selected_artists ()
             if selected_artists :
-                if len (selected_artists )>1 :
+                if len (selected_artists ) > 1 and self.link_input: # Check if link_input exists
                     display_names =", ".join ([artist ['name']for artist in selected_artists ])
                     if self .link_input :
                         self .link_input .clear ()
@@ -7148,7 +6978,7 @@ class DownloaderApp (QWidget ):
                     self .log_signal .emit (f"ℹ️ Multiple favorite artists selected. Displaying names: {display_names }")
                 elif len (selected_artists )==1 :
                     self .link_input .setText (selected_artists [0 ]['url'])
-                    self .log_signal .emit (f"ℹ️ Single favorite artist selected: {selected_artists [0 ]['name']}")
+                    self .log_signal .emit (f"ℹ️ Single favorite artist selected: {selected_artists [0]['name']}")
 
                 self .log_signal .emit (f"ℹ️ Queuing {len (selected_artists )} favorite artist(s) for download.")
                 for artist_data in selected_artists :
@@ -7158,8 +6988,11 @@ class DownloaderApp (QWidget ):
                     self ._process_next_favorite_download ()
             else :
                 self .log_signal .emit ("ℹ️ No favorite artists were selected for download.")
-        else :
-            self .log_signal .emit ("ℹ️ Favorite artists selection cancelled.")
+                QMessageBox.information(self,
+                                        self._tr("fav_artists_no_selection_title", "No Selection"),
+                                        self._tr("fav_artists_no_selection_message", "Please select at least one artist to download."))
+        else:
+            self.log_signal.emit("ℹ️ Favorite artists selection cancelled.")
 
     def _show_favorite_posts_dialog (self ):
         if self ._is_download_active ()or self .is_processing_favorites_queue :
@@ -7180,7 +7013,7 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit ("Favorite Posts: 'Use Cookie' is checked. Determining target domain...")
             kemono_cookies =prepare_cookies_for_request (
             cookies_config ['use_cookie'],
-            cookies_config ['cookie_text'],
+            cookies_config ['cookie_text'],            
             cookies_config ['selected_cookie_file'],
             cookies_config ['app_base_dir'],
             lambda msg :self .log_signal .emit (f"[FavPosts Cookie Check - Kemono] {msg }"),
@@ -7209,12 +7042,12 @@ class DownloaderApp (QWidget ):
                 self .log_signal .emit ("  ↳ Cookies for both Kemono.su and Coomer.su loaded. Will attempt to fetch from both.")
             else :
                 self .log_signal .emit ("  ↳ No valid cookies loaded for Kemono.su or Coomer.su.")
-                cookie_help_dialog =CookieHelpDialog (self )
+                cookie_help_dialog =CookieHelpDialog (self, self ) # Pass self as parent_app
                 cookie_help_dialog .exec_ ()
                 return 
         else :
             self .log_signal .emit ("Favorite Posts: 'Use Cookie' is NOT checked. Cookies are required.")
-            cookie_help_dialog =CookieHelpDialog (self )
+            cookie_help_dialog =CookieHelpDialog (self, self ) # Pass self as parent_app
             cookie_help_dialog .exec_ ()
             return 
 
