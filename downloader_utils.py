@@ -11,7 +11,7 @@ from concurrent .futures import ThreadPoolExecutor ,Future ,CancelledError ,as_c
 import html 
 from PyQt5 .QtCore import QObject ,pyqtSignal ,QThread ,QMutex ,QMutexLocker 
 from urllib .parse import urlparse 
-import uuid
+import uuid 
 try :
     from mega import Mega 
 
@@ -1017,14 +1017,14 @@ class PostProcessorWorker :
         except OSError as e :
             self .logger (f"   ❌ Critical error creating directory '{target_folder_path }': {e }. Skipping file '{api_original_filename }'.")
             return 0 ,1 ,api_original_filename ,False ,FILE_DOWNLOAD_STATUS_SKIPPED ,None 
-       
-        # Create a unique name stem for the .part file for this specific download operation
-        # filename_to_save_in_main_path is the intended name before OS-level collision suffixing (_1, _2)
-        # but multiple concurrent downloads might target the same filename_to_save_in_main_path.
-        # This is placed here because filename_to_save_in_main_path and api_original_filename are now fully defined.
-        temp_file_base_for_unique_part, temp_file_ext_for_unique_part = os.path.splitext(filename_to_save_in_main_path if filename_to_save_in_main_path else api_original_filename)
-        unique_id_for_part_file = uuid.uuid4().hex[:8] # Ensure uuid is imported
-        unique_part_file_stem_on_disk = f"{temp_file_base_for_unique_part}_{unique_id_for_part_file}"       
+
+
+
+
+
+        temp_file_base_for_unique_part ,temp_file_ext_for_unique_part =os .path .splitext (filename_to_save_in_main_path if filename_to_save_in_main_path else api_original_filename )
+        unique_id_for_part_file =uuid .uuid4 ().hex [:8 ]
+        unique_part_file_stem_on_disk =f"{temp_file_base_for_unique_part }_{unique_id_for_part_file }"
         max_retries =3 
         retry_delay =5 
         downloaded_size_bytes =0 
@@ -1035,9 +1035,9 @@ class PostProcessorWorker :
         download_successful_flag =False 
         last_exception_for_retry_later =None 
 
-        response_for_this_attempt = None # Initialize outside the loop for finally block
+        response_for_this_attempt =None 
         for attempt_num_single_stream in range (max_retries +1 ):
-            response_for_this_attempt = None # Reset for each attempt          
+            response_for_this_attempt =None 
             if self ._check_pause (f"File download attempt for '{api_original_filename }'"):break 
             if self .check_cancel ()or (skip_event and skip_event .is_set ()):break 
             try :
@@ -1055,15 +1055,15 @@ class PostProcessorWorker :
                 if self ._check_pause (f"Multipart decision for '{api_original_filename }'"):break 
 
                 if attempt_multipart :
-                    if response_for_this_attempt: # Close the initial response if we're going multipart
-                        response_for_this_attempt.close()
-                        response_for_this_attempt = None # So finally block doesn't try to close it again if multipart fails
-                    
-                    # self ._emit_signal ('file_download_status',False ) # Moved to finally
+                    if response_for_this_attempt :
+                        response_for_this_attempt .close ()
+                        response_for_this_attempt =None 
 
-                    # Use the unique stem for the path passed to download_file_in_parts.
-                    # download_file_in_parts will append ".part" to this.
-                    mp_save_path_for_unique_part_stem_arg = os.path.join(target_folder_path, f"{unique_part_file_stem_on_disk}{temp_file_ext_for_unique_part}")
+
+
+
+
+                    mp_save_path_for_unique_part_stem_arg =os .path .join (target_folder_path ,f"{unique_part_file_stem_on_disk }{temp_file_ext_for_unique_part }")
                     mp_success ,mp_bytes ,mp_hash ,mp_file_handle =download_file_in_parts (
                     file_url ,mp_save_path_for_unique_part_stem_arg ,total_size_bytes ,num_parts_for_file ,headers ,api_original_filename ,
                     emitter_for_multipart =self .emitter ,cookies_for_chunk_session =cookies_to_use_for_file ,
@@ -1076,8 +1076,8 @@ class PostProcessorWorker :
                         calculated_file_hash =mp_hash 
 
 
-                        # This is the actual unique .part file path on disk
-                        downloaded_part_file_path = mp_save_path_for_unique_part_stem_arg + ".part"
+
+                        downloaded_part_file_path =mp_save_path_for_unique_part_stem_arg +".part"
                         was_multipart_download =True 
                         if mp_file_handle :mp_file_handle .close ()
                         break 
@@ -1088,15 +1088,15 @@ class PostProcessorWorker :
                             download_successful_flag =False ;break 
                 else :
                     self .logger (f"⬇️ Downloading (Single Stream): '{api_original_filename }' (Size: {total_size_bytes /(1024 *1024 ):.2f} MB if known) [Base Name: '{filename_to_save_in_main_path }']")
-                    # Use the unique .part filename for single stream download
-                    current_single_stream_part_path = os.path.join(target_folder_path, f"{unique_part_file_stem_on_disk}{temp_file_ext_for_unique_part}.part")
+
+                    current_single_stream_part_path =os .path .join (target_folder_path ,f"{unique_part_file_stem_on_disk }{temp_file_ext_for_unique_part }.part")
                     current_attempt_downloaded_bytes =0 
                     md5_hasher =hashlib .md5 ()
                     last_progress_time =time .time ()
-                    
-                    single_stream_exception = None
+
+                    single_stream_exception =None 
                     try :
-                        with open (current_single_stream_part_path ,'wb') as f_part :
+                        with open (current_single_stream_part_path ,'wb')as f_part :
                             for chunk in response .iter_content (chunk_size =1 *1024 *1024 ):
                                 if self ._check_pause (f"Chunk download for '{api_original_filename }'"):break 
                                 if self .check_cancel ()or (skip_event and skip_event .is_set ()):break 
@@ -1112,45 +1112,45 @@ class PostProcessorWorker :
                             if os .path .exists (current_single_stream_part_path ):os .remove (current_single_stream_part_path )
                             break 
 
-                        # Determine if this single-stream download attempt was complete
-                        attempt_is_complete = False
-                        if response.status_code == 200: # Ensure basic success
-                            if total_size_bytes > 0: # Content-Length was provided
-                                if current_attempt_downloaded_bytes == total_size_bytes:
-                                    attempt_is_complete = True
-                                else:
-                                    self.logger(f"   ⚠️ Single-stream attempt for '{api_original_filename}' incomplete: received {current_attempt_downloaded_bytes} of {total_size_bytes} bytes.")
-                            elif total_size_bytes == 0: # Server reported 0-byte file (Content-Length: 0)
-                                if current_attempt_downloaded_bytes == 0: # And we got 0 bytes
-                                    attempt_is_complete = True
-                                else: # Server said 0 bytes, but we got some.
-                                    self.logger(f"   ⚠️ Mismatch for '{api_original_filename}': Server reported 0 bytes, but received {current_attempt_downloaded_bytes} bytes this attempt.")
-                            # Case: No Content-Length header, so total_size_bytes became 0 from int(headers.get('Content-Length',0)).
-                            # And we actually received some bytes.
-                            elif current_attempt_downloaded_bytes > 0 : # Implicitly total_size_bytes == 0 here due to previous conditions
-                                attempt_is_complete = True
-                                self.logger(f"   ⚠️ Single-stream for '{api_original_filename}' received {current_attempt_downloaded_bytes} bytes (no Content-Length from server). Assuming complete for this attempt as stream ended.")
 
-                        if attempt_is_complete:
-                            calculated_file_hash = md5_hasher.hexdigest()
-                            downloaded_size_bytes = current_attempt_downloaded_bytes
-                            downloaded_part_file_path = current_single_stream_part_path
-                            was_multipart_download = False # Ensure this is set for single stream success
-                            download_successful_flag = True # Mark THE ENTIRE DOWNLOAD as successful
-                            break # Break from the RETRY loop (attempt_num_single_stream)
-                        else: # This attempt was not successful (e.g., incomplete or 0 bytes when not expected)
-                            if os.path.exists(current_single_stream_part_path):
-                                try: os.remove(current_single_stream_part_path)
-                                except OSError as e_rem_part: self.logger(f"  -> Failed to remove .part file after failed single stream attempt: {e_rem_part}")
-                            # Let the retry loop continue if more attempts are left; download_successful_flag remains False for this attempt.
+                        attempt_is_complete =False 
+                        if response .status_code ==200 :
+                            if total_size_bytes >0 :
+                                if current_attempt_downloaded_bytes ==total_size_bytes :
+                                    attempt_is_complete =True 
+                                else :
+                                    self .logger (f"   ⚠️ Single-stream attempt for '{api_original_filename }' incomplete: received {current_attempt_downloaded_bytes } of {total_size_bytes } bytes.")
+                            elif total_size_bytes ==0 :
+                                if current_attempt_downloaded_bytes ==0 :
+                                    attempt_is_complete =True 
+                                else :
+                                    self .logger (f"   ⚠️ Mismatch for '{api_original_filename }': Server reported 0 bytes, but received {current_attempt_downloaded_bytes } bytes this attempt.")
+
+
+                            elif current_attempt_downloaded_bytes >0 :
+                                attempt_is_complete =True 
+                                self .logger (f"   ⚠️ Single-stream for '{api_original_filename }' received {current_attempt_downloaded_bytes } bytes (no Content-Length from server). Assuming complete for this attempt as stream ended.")
+
+                        if attempt_is_complete :
+                            calculated_file_hash =md5_hasher .hexdigest ()
+                            downloaded_size_bytes =current_attempt_downloaded_bytes 
+                            downloaded_part_file_path =current_single_stream_part_path 
+                            was_multipart_download =False 
+                            download_successful_flag =True 
+                            break 
+                        else :
+                            if os .path .exists (current_single_stream_part_path ):
+                                try :os .remove (current_single_stream_part_path )
+                                except OSError as e_rem_part :self .logger (f"  -> Failed to remove .part file after failed single stream attempt: {e_rem_part }")
+
                     except Exception as e_write :
                         self .logger (f"   ❌ Error writing single-stream to disk for '{api_original_filename }': {e_write }")
                         if os .path .exists (current_single_stream_part_path ):os .remove (current_single_stream_part_path )
 
                         raise 
-                        single_stream_exception = e_write
-                    if single_stream_exception:
-                        raise single_stream_exception
+                        single_stream_exception =e_write 
+                    if single_stream_exception :
+                        raise single_stream_exception 
 
             except (requests .exceptions .ConnectionError ,requests .exceptions .Timeout ,http .client .IncompleteRead )as e :
                 self .logger (f"   ❌ Download Error (Retryable): {api_original_filename }. Error: {e }")
@@ -1169,9 +1169,9 @@ class PostProcessorWorker :
                 last_exception_for_retry_later =e 
                 break 
             finally :
-                if response_for_this_attempt:
-                    response_for_this_attempt.close()
-                self ._emit_signal ('file_download_status', False) # Signal that this attempt's file operation is done
+                if response_for_this_attempt :
+                    response_for_this_attempt .close ()
+                self ._emit_signal ('file_download_status',False )
 
         final_total_for_progress =total_size_bytes if download_successful_flag and total_size_bytes >0 else downloaded_size_bytes 
         self ._emit_signal ('file_progress',api_original_filename ,(downloaded_size_bytes ,final_total_for_progress ))
@@ -1289,20 +1289,20 @@ class PostProcessorWorker :
 
         final_filename_on_disk =filename_after_compression 
 
-        # Always apply suffixing if a file with the exact name already exists in the target folder.
+
         temp_base ,temp_ext =os .path .splitext (final_filename_on_disk )
-        suffix_counter =1
+        suffix_counter =1 
         while os .path .exists (os .path .join (effective_save_folder ,final_filename_on_disk )):
             final_filename_on_disk =f"{temp_base }_{suffix_counter }{temp_ext }"
-            suffix_counter +=1
-        if final_filename_on_disk !=filename_after_compression : # Log if a suffix was actually applied
+            suffix_counter +=1 
+        if final_filename_on_disk !=filename_after_compression :
             self .logger (f"     Applied numeric suffix in '{os .path .basename (effective_save_folder )}': '{final_filename_on_disk }' (was '{filename_after_compression }')")
         if self ._check_pause (f"File saving for '{final_filename_on_disk }'"):return 0 ,1 ,final_filename_on_disk ,was_original_name_kept_flag ,FILE_DOWNLOAD_STATUS_SKIPPED ,None 
         final_save_path =os .path .join (effective_save_folder ,final_filename_on_disk )
         try :
             if data_to_write_io :
                 with open (final_save_path ,'wb')as f_out :
-                    time.sleep(0.05) # Small delay before writing compressed data                 
+                    time .sleep (0.05 )
                     f_out .write (data_to_write_io .getvalue ())
 
                 if downloaded_part_file_path and os .path .exists (downloaded_part_file_path ):
@@ -1312,7 +1312,7 @@ class PostProcessorWorker :
                         self .logger (f"  -> Failed to remove .part after compression: {e_rem }")
             else :
                 if downloaded_part_file_path and os .path .exists (downloaded_part_file_path ):
-                    time.sleep(0.1) # Small delay before rename for non-compressed files                
+                    time .sleep (0.1 )
                     os .rename (downloaded_part_file_path ,final_save_path )
                 else :
                     raise FileNotFoundError (f"Original .part file not found for saving: {downloaded_part_file_path }")
