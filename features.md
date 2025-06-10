@@ -323,6 +323,46 @@ Download directly from your favorited artists and posts on Kemono.su.
     -   **Note:** Files successfully retried or skipped due to hash match during a retry attempt are removed from this error list.
 ---
 
+## ⚙️ Application Settings
+
+These settings allow you to customize the application's appearance and language.
+
+-   **⚙️ Settings Button (Icon may vary, e.g., a gear ⚙️):**
+    -   **Location:** Typically located in a persistent area of the UI, possibly near other global controls or in a menu.
+    -   **Purpose:** Opens the "Settings" dialog.
+    -   **Tooltip Example:** "Open application settings (Theme, Language, etc.)"
+
+-   **"Settings" Dialog:**
+    -   **Title:** "Settings"
+    -   **Purpose:** Provides options to configure application-wide preferences.
+    -   **Sections:**
+        -   **Appearance Group (`Appearance`):**
+            -   **Theme Toggle Buttons/Options:**
+                -   `Switch to Light Mode`
+                -   `Switch to Dark Mode`
+                -   **Purpose:** Allows users to switch between a light and dark visual theme for the application.
+                -   **Tooltips:** Provide guidance on switching themes.
+        -   **Language Settings Group (`Language Settings`):**
+            -   **Language Selection Dropdown/List:**
+                -   **Label:** "Language:"
+                -   **Options:** Includes, but not limited to:
+                    -   English (`English`)
+                    -   日本語 (`日本語 (Japanese)`)
+                    -   Français (French)
+                    -   Español (Spanish)
+                    -   Deutsch (German)
+                    -   Русский (Russian)
+                    -   한국어 (Korean)
+                    -   简体中文 (Chinese Simplified)
+                -   **Purpose:** Allows users to change the display language of the application interface.
+            -   **Restart Prompt:** After changing the language, a dialog may appear:
+                -   **Title:** "Language Changed"
+                -   **Message:** "The language has been changed. A restart is required for all changes to take full effect."
+                -   **Informative Text:** "Would you like to restart the application now?"
+                -   **Buttons:** "Restart Now", "OK" (or similar to defer restart).
+    -   **"OK" Button:** Saves the changes made in the Settings dialog and closes it.
+---
+
 ## Other UI Elements
 
 -   **Retry Failed Downloads Prompt:**

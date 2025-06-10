@@ -119,6 +119,35 @@ except ImportError :
     sys .exit (1 )
 
 
+_app_icon_cache = None # Module-level cache
+
+def get_app_icon_object():
+    """
+    Loads and caches the application icon.
+    Returns a QIcon object.
+    """
+    global _app_icon_cache
+    if _app_icon_cache is not None and not _app_icon_cache.isNull():
+        return _app_icon_cache
+
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        base_dir = sys._MEIPASS
+    else:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    icon_path = os.path.join(base_dir, 'assets', 'Kemono.ico')
+    
+    if os.path.exists(icon_path):
+        _app_icon_cache = QIcon(icon_path)
+        if _app_icon_cache.isNull():
+            print(f"Warning: QIcon created from '{icon_path}' is null. Icon might be invalid.")
+            _app_icon_cache = QIcon() # Store an empty icon to avoid re-processing
+    else:
+        print(f"Warning: Application icon 'assets/Kemono.ico' not found at {icon_path} (in get_app_icon_object)")
+        _app_icon_cache = QIcon() # Store an empty icon
+    
+    return _app_icon_cache
+
 MAX_THREADS =200 
 RECOMMENDED_MAX_THREADS =50 
 MAX_FILE_THREADS_PER_POST_OR_WORKER =10 
@@ -167,6 +196,10 @@ class DownloadExtractedLinksDialog (QDialog ):
 
         super ().__init__ (parent )
         self .links_data =links_data 
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
 
 
         if parent :
@@ -299,6 +332,10 @@ class ConfirmAddAllDialog (QDialog ):
         self .user_choice =CONFIRM_ADD_ALL_CANCEL_DOWNLOAD 
         self .setWindowTitle (self ._tr ("confirm_add_all_dialog_title","Confirm Adding New Names"))
 
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
+
         main_layout =QVBoxLayout (self )
 
         info_label =QLabel (
@@ -416,6 +453,10 @@ class ExportOptionsDialog (QDialog ):
         self .setModal (True )
         self .selected_option =self .EXPORT_MODE_LINK_ONLY 
 
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
+
         layout =QVBoxLayout (self )
 
         self .description_label =QLabel ()
@@ -486,6 +527,10 @@ class ErrorFilesDialog (QDialog ):
         self .parent_app =parent_app 
         self .setModal (True )
         self .error_files =error_files_info_list 
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
 
         main_layout =QVBoxLayout (self )
 
@@ -625,6 +670,10 @@ class FutureSettingsDialog (QDialog ):
         self .parent_app =parent_app_ref 
         self .setModal (True )
 
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
+
         layout =QVBoxLayout (self )
 
 
@@ -759,6 +808,10 @@ class EmptyPopupDialog (QDialog ):
         self .current_scope_mode =self .SCOPE_CHARACTERS 
         self .app_base_dir =app_base_dir 
         self .all_creators_data =[]
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
         self .selected_creators_for_queue =[]
         self .globally_selected_creators ={}
 
@@ -1122,6 +1175,10 @@ class CookieHelpDialog (QDialog ):
         self .parent_app =parent_app 
         self .setModal (True )
         self .offer_download_without_option =offer_download_without_option 
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
         self .user_choice =None 
         main_layout =QVBoxLayout (self )
 
@@ -1205,6 +1262,10 @@ class KnownNamesFilterDialog (QDialog ):
         self .parent_app =parent_app_ref 
         self .setModal (True )
         self .all_known_name_entries =sorted (known_names_list ,key =lambda x :x ['name'].lower ())
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
         self .selected_entries_to_return =[]
 
         main_layout =QVBoxLayout (self )
@@ -1307,6 +1368,10 @@ class FavoriteArtistsDialog (QDialog ):
         self .parent_app =parent_app 
         self .cookies_config =cookies_config 
         self .all_fetched_artists =[]
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
         self .selected_artist_urls =[]
 
         self .setModal (True )
@@ -1787,6 +1852,10 @@ class FavoritePostsDialog (QDialog ):
         self .displayable_grouped_posts ={}
         self .fetcher_thread =None 
 
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
+
         self .setModal (True )
         self .setMinimumSize (600 ,600 )
         if hasattr (self .parent_app ,'get_dark_theme'):
@@ -2181,6 +2250,10 @@ class HelpGuideDialog (QDialog ):
         self .steps_data =steps_data 
         self .parent_app =parent_app 
 
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
+
         self .setModal (True )
         self .setFixedSize (650 ,600 )
 
@@ -2350,13 +2423,17 @@ class TourDialog (QDialog ):
 
     CONFIG_ORGANIZATION_NAME ="KemonoDownloader"
     CONFIG_APP_NAME_TOUR ="ApplicationTour"
-    TOUR_SHOWN_KEY ="neverShowTourAgainV18"
+    TOUR_SHOWN_KEY ="neverShowTourAgainV19"
 
     def __init__ (self ,parent =None ):
         super ().__init__ (parent )
         self .settings =QSettings (self .CONFIG_ORGANIZATION_NAME ,self .CONFIG_APP_NAME_TOUR )
         self .current_step =0 
         self .parent_app =parent 
+
+        app_icon = get_app_icon_object()
+        if not app_icon.isNull():
+            self.setWindowIcon(app_icon)
 
         self .setModal (True )
         self .setFixedSize (600 ,620 )
@@ -2803,12 +2880,12 @@ class DownloaderApp (QWidget ):
             else:
                 # Running as a script
                 base_dir_for_icon = os.path.dirname(os.path.abspath(__file__))
-            
-            icon_path_for_window = os.path.join(base_dir_for_icon, 'Kemono.ico')
+
+            icon_path_for_window = os.path.join(base_dir_for_icon, 'assets', 'Kemono.ico') # <--- This is for QWidget
             if os.path.exists(icon_path_for_window):
                 self.setWindowIcon(QIcon(icon_path_for_window))
             else:
-                self.log_signal.emit(f"⚠️ Main window icon 'Kemono.ico' not found at {icon_path_for_window} (tried in DownloaderApp init)")
+                self.log_signal.emit(f"⚠️ Main window icon 'assets/Kemono.ico' not found at {icon_path_for_window} (tried in DownloaderApp init)")
         except Exception as e_icon_app:
             self.log_signal.emit(f"❌ Error setting main window icon in DownloaderApp init: {e_icon_app}")
 
@@ -7145,9 +7222,9 @@ if __name__ =='__main__':
         qt_app =QApplication (sys .argv )
         if getattr (sys ,'frozen',False ):base_dir =sys ._MEIPASS 
         else :base_dir =os .path .dirname (os .path .abspath (__file__ ))
-        icon_path =os .path .join (base_dir ,'Kemono.ico')
+        icon_path =os .path .join (base_dir , 'assets', 'Kemono.ico')
         if os .path .exists (icon_path ):qt_app .setWindowIcon (QIcon (icon_path ))
-        else :print (f"Warning: Application icon 'Kemono.ico' not found at {icon_path }")
+        else :print (f"Warning: Application icon 'assets/Kemono.ico' not found at {icon_path }")
 
         downloader_app_instance =DownloaderApp ()
         primary_screen =QApplication .primaryScreen ()

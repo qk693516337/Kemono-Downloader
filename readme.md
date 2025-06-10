@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v5.1.0</h1>
+<h1 align="center">Kemono Downloader v5.2.0</h1>
 
 <table align="center">
   <tr>
@@ -34,7 +34,7 @@ A powerful, feature-rich GUI application for downloading content from **[Kemono.
 Built with PyQt5, this tool is designed for users who want deep filtering capabilities, customizable folder structures, efficient downloads, and intelligent automation, all within a modern and user-friendly graphical interface.
 
 *This v5.0.0 release marks a significant feature milestone. Future updates are expected to be less frequent, focusing on maintenance and minor refinements.*
-*Update v5.1.0 enhances error handling and UI responsiveness.*
+*Update v5.2.0 introduces multi-language support, theme selection, and further UI refinements.*
 <p align="center">
   <a href="features.md"><strong>📚 Full Feature List</strong></a> • 
   <a href="LICENSE"><strong>📝 License</strong></a>
@@ -69,12 +69,14 @@ Kemono Downloader offers a range of features to streamline your content download
 -   **⭐ Favorite Mode:**
     -   Directly download from your favorited artists and posts on Kemono.su.
     -   Requires a valid cookie and adapts the UI for easy selection from your favorites.
-    -   Supports downloading into a single location or artist-specific subfolders.
+    -   Supports downloading into a single location or artist-specific subfolders. 
 -   **Performance & Advanced Options:**
     -   **Cookie Support:** Use cookies (paste string or load from `cookies.txt`) to access restricted content.
     -   **Multithreading:** Configure the number of simultaneous downloads/post processing threads for improved speed.
 -   **Logging:**
     -   A detailed progress log displays download activity, errors, and summaries.
+-   **Multi-language Interface:** Choose from several languages for the UI (English, Japanese, French, Spanish, German, Russian, Korean, Chinese Simplified).
+-   **Theme Customization:** Selectable Light and Dark themes for user comfort.
 
 ---
 
@@ -84,6 +86,13 @@ Kemono Downloader offers a range of features to streamline your content download
     -   A new **"Export URLs to .txt"** button, allowing users to save links of failed downloads either as "URL only" or "URL with details" (including post title, ID, and original filename).
     -   Fixed a bug where files skipped during retry (due to existing hash match) were not correctly removed from the error list.
 -   **Improved UI Stability**: Addressed issues with UI state management to more accurately reflect ongoing download activities (including retries and external link downloads). This prevents the "Cancel" button from becoming inactive prematurely while operations are still running.
+
+## ✨ What's New in v5.2.0
+-   **Multi-language Support:** The interface now supports multiple languages: English, Japanese, French, Spanish, German, Russian, Korean, and Chinese (Simplified). Select your preferred language in the new Settings dialog.
+-   **Theme Selection:** Choose between Light and Dark application themes via the Settings dialog for a personalized viewing experience.
+-   **Centralized Settings:** A new Settings dialog (accessible via a settings button, often with a gear icon) provides a dedicated space for language and appearance customizations.
+-   **Internal Localization:** Introduced `languages.py` for managing UI translations, streamlining the addition of new languages by contributors.
+
 ---
 
 ## Installation
