@@ -5849,6 +5849,8 @@ class DownloaderApp (QWidget ):
                 self .download_thread .missed_character_post_signal .connect (self .handle_missed_character_post )
             if hasattr (self .download_thread ,'retryable_file_failed_signal'):
                 self .download_thread .retryable_file_failed_signal .connect (self ._handle_retryable_file_failure )
+                if hasattr(self.download_thread, 'permanent_file_failed_signal'): # Ensure this signal exists on BackendDownloadThread
+                    self.download_thread.permanent_file_failed_signal.connect(self._handle_permanent_file_failure_from_thread)
             self .download_thread .start ()
             self .log_signal .emit ("✅ Single download thread (for posts) started.")
         except Exception as e :
@@ -5875,6 +5877,12 @@ class DownloaderApp (QWidget ):
         """Appends details of files that failed but might be retryable later."""
         if list_of_retry_details :
             self .retryable_failed_files_info .extend (list_of_retry_details )
+
+    def _handle_permanent_file_failure_from_thread(self, list_of_permanent_failure_details):
+        """Handles permanently failed files signaled by the single BackendDownloadThread."""
+        if list_of_permanent_failure_details:
+            self.permanently_failed_files_for_dialog.extend(list_of_permanent_failure_details)
+            self.log_signal.emit(f"ℹ️ {len(list_of_permanent_failure_details)} file(s) from single-thread download marked as permanently failed for this session.")
 
     def _submit_post_to_worker_pool (self ,post_data_item ,worker_args_template ,num_file_dl_threads_for_each_worker ,emitter_for_worker ,ppw_expected_keys ,ppw_optional_keys_with_defaults ):
         """Helper to prepare and submit a single post processing task to the thread pool."""
