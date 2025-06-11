@@ -6445,6 +6445,16 @@ class DownloaderApp (QWidget ):
             self .last_link_input_text_for_queue_sync =self .link_input .text ()
         self .cancellation_message_logged_this_session =False 
 
+    def _get_domain_for_service(self, service_name: str) -> str:
+        """Determines the base domain for a given service."""
+        if not isinstance(service_name, str): # Basic type check
+            return "kemono.su" # Default fallback
+        service_lower = service_name.lower()
+        coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans', 'gumroad', 'patreon', 'subscribestar', 'dlsite', 'discord', 'fantia', 'boosty', 'pixiv', 'fanbox'} # Added more from your general usage
+        if service_lower in coomer_primary_services and service_lower not in ['patreon', 'discord', 'fantia', 'boosty', 'pixiv', 'fanbox']: # Explicitly keep these on kemono
+            return "coomer.su"
+        return "kemono.su"
+
     def download_finished (self ,total_downloaded ,total_skipped ,cancelled_by_user ,kept_original_names_list =None ):
         if kept_original_names_list is None :
             kept_original_names_list =list (self .all_kept_original_filenames )if hasattr (self ,'all_kept_original_filenames')else []
@@ -7164,7 +7174,7 @@ class DownloaderApp (QWidget ):
                     queue_item ={
                     'url':direct_post_url ,
                     'name':post_data ['title'],
-                    'name_for_folder':post_data ['creator_id'],
+                        'name_for_folder': post_data['creator_name_resolved'], # Use resolved name
                     'type':'post'
                     }
                     self .favorite_download_queue .append (queue_item )
