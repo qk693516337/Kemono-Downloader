@@ -801,6 +801,7 @@ class EmptyPopupDialog (QDialog ):
     INITIAL_LOAD_LIMIT =200 
     SCOPE_CREATORS ="Creators"
 
+
     def __init__ (self ,app_base_dir ,parent_app_ref ,parent =None ):
         super ().__init__ (parent )
         self .setMinimumSize (400 ,300 )
@@ -810,26 +811,46 @@ class EmptyPopupDialog (QDialog ):
         self .all_creators_data =[]
 
         app_icon = get_app_icon_object()
-        if not app_icon.isNull():
+        if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
         self .selected_creators_for_queue =[]
         self .globally_selected_creators ={}
+        self.fetched_posts_data = {} # Stores posts by (service, user_id)
+        self.post_fetch_thread = None
 
-        layout =QVBoxLayout (self )
+        # Main layout for the dialog will be a QHBoxLayout holding the splitter
+        dialog_layout = QHBoxLayout(self)
+        self.setLayout(dialog_layout)
+
+
+        # --- Left Pane (Creator Selection) ---
+        self.left_pane_widget = QWidget()
+        left_pane_layout = QVBoxLayout(self.left_pane_widget)
+
+        # Create a horizontal layout for search input and fetch button
+        search_fetch_layout = QHBoxLayout()
         self .search_input =QLineEdit ()
         self .search_input .textChanged .connect (self ._filter_list )
-        layout .addWidget (self .search_input )
-
+        search_fetch_layout.addWidget(self.search_input, 1) # Give search input more stretch
+        self.fetch_posts_button = QPushButton() # Placeholder text, will be translated
+        self.fetch_posts_button.setStyleSheet("padding: 1px 4px;") # Reduced padding
+        self.fetch_posts_button.setEnabled(False) # Initially disabled
+        self.fetch_posts_button.clicked.connect(self._handle_fetch_posts_click)
+        search_fetch_layout.addWidget(self.fetch_posts_button)
+        left_pane_layout.addLayout(search_fetch_layout)
+        
         self .progress_bar =QProgressBar ()
         self .progress_bar .setRange (0 ,0 )
         self .progress_bar .setTextVisible (False )
         self .progress_bar .setVisible (False )
-        layout .addWidget (self .progress_bar )
+        left_pane_layout.addWidget (self .progress_bar )
 
         self .list_widget =QListWidget ()
         self .list_widget .itemChanged .connect (self ._handle_item_check_changed )
-        layout .addWidget (self .list_widget )
-        button_layout =QHBoxLayout ()
+        left_pane_layout.addWidget (self .list_widget )
+
+        # Bottom buttons for left pane
+        left_bottom_buttons_layout =QHBoxLayout ()
         self .add_selected_button =QPushButton ()
         self .add_selected_button .setToolTip (
         "Add Selected Creators to URL Input\n\n"
@@ -838,20 +859,115 @@ class EmptyPopupDialog (QDialog ):
         )
         self .add_selected_button .clicked .connect (self ._handle_add_selected )
         self .add_selected_button .setDefault (True )
-        button_layout .addWidget (self .add_selected_button )
-
+        left_bottom_buttons_layout.addWidget (self .add_selected_button )
         self .scope_button =QPushButton ()
         self .scope_button .clicked .connect (self ._toggle_scope_mode )
-        button_layout .addWidget (self .scope_button )
-        layout .addLayout (button_layout )
+        left_bottom_buttons_layout.addWidget (self .scope_button )
+        left_pane_layout.addLayout(left_bottom_buttons_layout)
+
+        # --- Right Pane (Posts - initially hidden) ---
+        self.right_pane_widget = QWidget()
+        right_pane_layout = QVBoxLayout(self.right_pane_widget)
+
+        self.posts_area_title_label = QLabel("Fetched Posts")
+        self.posts_area_title_label.setAlignment(Qt.AlignCenter)
+        right_pane_layout.addWidget(self.posts_area_title_label)
+
+        self.posts_list_widget = QListWidget()
+        right_pane_layout.addWidget(self.posts_list_widget)
+
+        posts_buttons_top_layout = QHBoxLayout()
+        self.posts_select_all_button = QPushButton() # Text set in _retranslate_ui
+        self.posts_select_all_button.clicked.connect(self._handle_posts_select_all)
+        posts_buttons_top_layout.addWidget(self.posts_select_all_button)
+
+        self.posts_deselect_all_button = QPushButton() # Text set in _retranslate_ui
+        self.posts_deselect_all_button.clicked.connect(self._handle_posts_deselect_all)
+        posts_buttons_top_layout.addWidget(self.posts_deselect_all_button)
+        right_pane_layout.addLayout(posts_buttons_top_layout)
+
+        posts_buttons_bottom_layout = QHBoxLayout()
+        self.posts_add_selected_button = QPushButton() # Text set in _retranslate_ui
+        self.posts_add_selected_button.clicked.connect(self._handle_posts_add_selected_to_queue)
+        posts_buttons_bottom_layout.addWidget(self.posts_add_selected_button)
+
+        self.posts_close_button = QPushButton() # Text set in _retranslate_ui
+        self.posts_close_button.clicked.connect(self._handle_posts_close_view)
+        posts_buttons_bottom_layout.addWidget(self.posts_close_button)
+        right_pane_layout.addLayout(posts_buttons_bottom_layout)
+
+        self.right_pane_widget.hide() # Initially hidden
+
+
+
+
+        # --- Splitter ---
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.addWidget(self.left_pane_widget)
+        self.main_splitter.addWidget(self.right_pane_widget)
+        self.main_splitter.setCollapsible(0, False) # Prevent left pane from collapsing
+        self.main_splitter.setCollapsible(1, True)
+        dialog_layout.addWidget(self.main_splitter)
+
+        self.original_size = self.sizeHint() # Store initial size hint
+        self.main_splitter.setSizes([self.width(), 0]) # Left pane takes all width initially (before resize)
 
         self ._retranslate_ui ()
 
         if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
             self .setStyleSheet (self .parent_app .get_dark_theme ())
 
+        # Set initial size for the dialog (before fetching posts)
+        self.resize(self.original_size.width() + 50, self.original_size.height() + 100) # A bit larger than pure hint
 
         QTimer .singleShot (0 ,self ._perform_initial_load )
+
+    def _center_on_screen(self):
+        """Centers the dialog on the parent's screen or the primary screen."""
+        if self.parent_app:
+            parent_rect = self.parent_app.frameGeometry()
+            self.move(parent_rect.center() - self.rect().center())
+        else:
+            try:
+                screen_geo = QApplication.primaryScreen().availableGeometry()
+                self.move(screen_geo.center() - self.rect().center())
+            except AttributeError: # Fallback if no screen info (e.g., headless test)
+                pass
+
+    def _handle_fetch_posts_click(self):
+        selected_creators = list(self.globally_selected_creators.values())
+        if not selected_creators:
+            QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
+                                    "Please select at least one creator to fetch posts for.")
+            return
+
+        if self.parent_app:
+            parent_geometry = self.parent_app.geometry()
+            new_width = int(parent_geometry.width() * 0.75)
+            new_height = int(parent_geometry.height() * 0.80)
+            self.resize(new_width, new_height)
+            self._center_on_screen()
+
+        self.right_pane_widget.show()
+        QTimer.singleShot(10, lambda: self.main_splitter.setSizes([int(self.width() * 0.3), int(self.width() * 0.7)]))
+        self.add_selected_button.setEnabled(False)
+        self.setWindowTitle(self._tr("creator_popup_title_fetching", "Creator Posts"))
+        
+        self.fetch_posts_button.setEnabled(False)
+        self.posts_list_widget.clear()
+        self.fetched_posts_data.clear()
+        self.posts_area_title_label.setText(self._tr("fav_posts_loading_status", "Loading favorite posts...")) # Generic loading
+        self.progress_bar.setVisible(True)
+
+        if self.post_fetch_thread and self.post_fetch_thread.isRunning():
+            self.post_fetch_thread.cancel()
+            self.post_fetch_thread.wait()
+        self.post_fetch_thread = PostsFetcherThread(selected_creators, self)
+        self.post_fetch_thread.status_update.connect(self._handle_fetch_status_update)
+        self.post_fetch_thread.posts_fetched_signal.connect(self._handle_posts_fetched)
+        self.post_fetch_thread.fetch_error_signal.connect(self._handle_fetch_error)
+        self.post_fetch_thread.finished_signal.connect(self._handle_fetch_finished)
+        self.post_fetch_thread.start()
 
     def _tr (self ,key ,default_text =""):
         """Helper to get translation based on current app language."""
@@ -863,7 +979,15 @@ class EmptyPopupDialog (QDialog ):
         self .setWindowTitle (self ._tr ("creator_popup_title","Creator Selection"))
         self .search_input .setPlaceholderText (self ._tr ("creator_popup_search_placeholder","Search by name, service, or paste creator URL..."))
         self .add_selected_button .setText (self ._tr ("creator_popup_add_selected_button","Add Selected"))
+        self .fetch_posts_button.setText(self._tr("fetch_posts_button_text", "Fetch Posts"))
         self ._update_scope_button_text_and_tooltip ()
+        
+        # Retranslate right pane elements
+        self.posts_area_title_label.setText(self._tr("creator_popup_posts_area_title", "Fetched Posts")) # Placeholder key
+        self.posts_select_all_button.setText(self._tr("select_all_button_text", "Select All"))
+        self.posts_deselect_all_button.setText(self._tr("deselect_all_button_text", "Deselect All"))
+        self.posts_add_selected_button.setText(self._tr("creator_popup_add_posts_to_queue_button", "Add Selected Posts to Queue")) # Placeholder key
+        self.posts_close_button.setText(self._tr("fav_posts_cancel_button", "Cancel")) # Re-use cancel
 
     def _perform_initial_load (self ):
         """Called by QTimer to load data after dialog is shown."""
@@ -1116,8 +1240,137 @@ class EmptyPopupDialog (QDialog ):
         self .scope_button .setToolTip (
         f"Current Download Scope: {self .current_scope_mode }\n\n"
         f"Click to toggle between '{self .SCOPE_CHARACTERS }' and '{self .SCOPE_CREATORS }' scopes.\n"
-        f"'{self .SCOPE_CHARACTERS }': (Planned) Downloads into character-named folders directly in the main Download Location (artists mixed).\n"
-        f"'{self .SCOPE_CREATORS }': (Planned) Downloads into artist-named subfolders within the main Download Location, then character folders inside those.")
+        f"'{self .SCOPE_CHARACTERS }': Downloads into character-named folders directly in the main Download Location (artists mixed).\n"
+        f"'{self .SCOPE_CREATORS }': Downloads into artist-named subfolders within the main Download Location, then character folders inside those.")
+
+    def _handle_fetch_status_update(self, message):
+        if self.parent_app:
+            self.parent_app.log_signal.emit(f"[CreatorPopup Fetch] {message}")
+        self.posts_area_title_label.setText(message)
+
+    def _handle_posts_fetched(self, creator_info, posts_list):
+        creator_key = (creator_info.get('service'), str(creator_info.get('id')))
+        self.fetched_posts_data[creator_key] = posts_list
+        self._rebuild_posts_list_widget()
+
+    def _rebuild_posts_list_widget(self):
+        self.posts_list_widget.clear()
+        sorted_creator_keys = sorted(
+            self.fetched_posts_data.keys(),
+            key=lambda k: self.globally_selected_creators.get(k, {}).get('name', '').lower()
+        )
+
+        total_posts_shown = 0
+        for creator_key in sorted_creator_keys:
+            creator_info_original = self.globally_selected_creators.get(creator_key)
+            if not creator_info_original:
+                continue
+
+            posts_for_this_creator = self.fetched_posts_data.get(creator_key, [])
+            if not posts_for_this_creator:
+                continue
+
+            creator_header_item = QListWidgetItem(f"--- {self._tr('posts_for_creator_header', 'Posts for')} {creator_info_original['name']} ({creator_info_original['service']}) ---")
+            font = creator_header_item.font()
+            font.setBold(True)
+            creator_header_item.setFont(font)
+            creator_header_item.setFlags(Qt.NoItemFlags)
+            self.posts_list_widget.addItem(creator_header_item)
+
+            for post in posts_for_this_creator:
+                post_title = post.get('title', self._tr('untitled_post_placeholder', 'Untitled Post'))
+                item = QListWidgetItem(f"  {post_title}")
+                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+                item.setCheckState(Qt.Unchecked)
+                item_data = {
+                    'title': post_title,
+                    'id': post.get('id'),
+                    'service': creator_info_original['service'],
+                    'user_id': creator_info_original['id'],
+                    'creator_name': creator_info_original['name'],
+                    'full_post_data': post
+                }
+                item.setData(Qt.UserRole, item_data)
+                self.posts_list_widget.addItem(item)
+                total_posts_shown += 1
+        
+        if total_posts_shown == 0 and self.fetched_posts_data:
+            self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
+        elif total_posts_shown > 0:
+            self.posts_area_title_label.setText(self._tr("fetched_posts_count_label", "Fetched {count} post(s). Select to add to queue.").format(count=total_posts_shown))
+
+    def _handle_fetch_error(self, creator_info, error_message):
+        creator_name = creator_info.get('name', 'Unknown Creator')
+        if self.parent_app:
+            self.parent_app.log_signal.emit(f"[CreatorPopup Fetch ERROR] For {creator_name}: {error_message}")
+        # Update title label to show there was an error for this creator
+        self.posts_area_title_label.setText(self._tr("fetch_error_for_creator_label", "Error fetching for {creator_name}").format(creator_name=creator_name))
+
+
+    def _handle_fetch_finished(self):
+        self.fetch_posts_button.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        if not self.fetched_posts_data and not self.posts_list_widget.count():
+            self.posts_area_title_label.setText(self._tr("failed_to_fetch_or_no_posts_label", "Failed to fetch posts or no posts found."))
+        elif not self.posts_list_widget.count() and self.fetched_posts_data: # Data fetched, but all lists were empty
+             self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
+
+    def _handle_posts_select_all(self):
+        for i in range(self.posts_list_widget.count()):
+            item = self.posts_list_widget.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                item.setCheckState(Qt.Checked)
+
+    def _handle_posts_deselect_all(self):
+        for i in range(self.posts_list_widget.count()):
+            item = self.posts_list_widget.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable:
+                item.setCheckState(Qt.Unchecked)
+
+    def _handle_posts_add_selected_to_queue(self):
+        selected_posts_for_queue = []
+        for i in range(self.posts_list_widget.count()):
+            item = self.posts_list_widget.item(i)
+            if item.flags() & Qt.ItemIsUserCheckable and item.checkState() == Qt.Checked:
+                post_item_data = item.data(Qt.UserRole)
+                if post_item_data:
+                    domain = self._get_domain_for_service(post_item_data['service'])
+                    post_url = f"https://{domain}/{post_item_data['service']}/user/{post_item_data['user_id']}/post/{post_item_data['id']}"
+                    queue_item = {
+                        'type': 'single_post_from_popup',
+                        'url': post_url,
+                        'name': post_item_data['title'],
+                        'name_for_folder': post_item_data['creator_name'],
+                        'service': post_item_data['service'],
+                        'user_id': post_item_data['user_id'],
+                        'post_id': post_item_data['id']
+                    }
+                    selected_posts_for_queue.append(queue_item)
+
+        if selected_posts_for_queue:
+            if self.parent_app and hasattr(self.parent_app, 'favorite_download_queue'):
+                for qi in selected_posts_for_queue:
+                    self.parent_app.favorite_download_queue.append(qi)
+                self.parent_app.log_signal.emit(f"ℹ️ Added {len(selected_posts_for_queue)} selected posts to the download queue.")
+                if self.parent_app.link_input:
+                    self.parent_app.link_input.setPlaceholderText(
+                        self._tr("items_in_queue_placeholder", "{count} items in queue from popup.").format(count=len(self.parent_app.favorite_download_queue))
+                    )
+                    self.parent_app.link_input.clear()
+            self.accept()
+        else:
+            QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
+                                    self._tr("select_posts_to_queue_message", "Please select at least one post to add to the queue."))
+
+    def _handle_posts_close_view(self):
+        self.right_pane_widget.hide()
+        self.main_splitter.setSizes([self.width(), 0])
+        self.add_selected_button.setEnabled(True)
+        self.setWindowTitle(self._tr("creator_popup_title", "Creator Selection"))
+        # Optionally clear posts list and data
+        # self.posts_list_widget.clear()
+        # self.fetched_posts_data.clear()
+
     def _get_domain_for_service (self ,service_name ):
         """Determines the base domain for a given service."""
         service_lower =service_name .lower ()
@@ -1163,6 +1416,105 @@ class EmptyPopupDialog (QDialog ):
         else :
             if unique_key in self .globally_selected_creators :
                 del self .globally_selected_creators [unique_key ]
+        self.fetch_posts_button.setEnabled(bool(self.globally_selected_creators))
+
+class PostsFetcherThread(QThread):
+    status_update = pyqtSignal(str)
+    posts_fetched_signal = pyqtSignal(object, list) # creator_info (dict), posts_list
+    fetch_error_signal = pyqtSignal(object, str)   # creator_info (dict), error_message
+    finished_signal = pyqtSignal()
+
+    def __init__(self, creators_to_fetch, parent_dialog_ref):
+        super().__init__()
+        self.creators_to_fetch = creators_to_fetch
+        self.parent_dialog = parent_dialog_ref
+        self.cancellation_flag = threading.Event() # Use a threading.Event for cancellation
+
+    def cancel(self):
+        self.cancellation_flag.set() # Set the event
+        self.status_update.emit(self.parent_dialog._tr("post_fetch_cancelled_status", "Post fetching cancellation requested..."))
+
+    def run(self):
+        if not self.creators_to_fetch:
+            self.status_update.emit(self.parent_dialog._tr("no_creators_to_fetch_status", "No creators selected to fetch posts for."))
+            self.finished_signal.emit()
+            return
+
+        for creator_data in self.creators_to_fetch:
+            if self.cancellation_flag.is_set(): # Check the event
+                break
+            
+            creator_name = creator_data.get('name', 'Unknown Creator')
+            service = creator_data.get('service')
+            user_id = creator_data.get('id')
+
+            if not service or not user_id:
+                self.fetch_error_signal.emit(creator_data, f"Missing service or ID for {creator_name}")
+                continue
+
+            self.status_update.emit(self.parent_dialog._tr("fetching_posts_for_creator_status_all_pages", "Fetching all posts for {creator_name} ({service})... This may take a while.").format(creator_name=creator_name, service=service))
+            
+            domain = self.parent_dialog._get_domain_for_service(service)
+            api_url_base = f"https://{domain}/api/v1/{service}/user/{user_id}"
+            
+            # download_from_api will handle cookie preparation based on these params
+            use_cookie_param = False
+            cookie_text_param = ""
+            selected_cookie_file_param = None
+            app_base_dir_param = None
+
+            if self.parent_dialog.parent_app:
+                app = self.parent_dialog.parent_app
+                use_cookie_param = app.use_cookie_checkbox.isChecked()
+                cookie_text_param = app.cookie_text_input.text().strip()
+                selected_cookie_file_param = app.selected_cookie_filepath
+                app_base_dir_param = app.app_base_dir
+
+            all_posts_for_this_creator = [] 
+            try:
+                post_generator = download_from_api(
+                    api_url_base,
+                    logger=lambda msg: self.status_update.emit(f"[API Fetch - {creator_name}] {msg}"),
+                    # end_page=1, # REMOVED to fetch all pages
+                    use_cookie=use_cookie_param,
+                    cookie_text=cookie_text_param,
+                    selected_cookie_file=selected_cookie_file_param,
+                    app_base_dir=app_base_dir_param,
+                    cancellation_event=self.cancellation_flag # Pass the thread's own cancellation event
+                )
+                
+                for posts_batch in post_generator:
+                    if self.cancellation_flag.is_set(): # Check event here as well
+                        self.status_update.emit(f"Post fetching for {creator_name} cancelled during pagination.")
+                        break 
+                    all_posts_for_this_creator.extend(posts_batch)
+                    self.status_update.emit(f"Fetched {len(all_posts_for_this_creator)} posts so far for {creator_name}...")
+
+                if not self.cancellation_flag.is_set():
+                    self.posts_fetched_signal.emit(creator_data, all_posts_for_this_creator)
+                    self.status_update.emit(f"Finished fetching {len(all_posts_for_this_creator)} posts for {creator_name}.")
+                else:
+                    self.posts_fetched_signal.emit(creator_data, all_posts_for_this_creator) # Emit partial if any
+                    self.status_update.emit(f"Fetching for {creator_name} cancelled. {len(all_posts_for_this_creator)} posts collected.")
+
+            except RuntimeError as e: 
+                if "cancelled by user" in str(e).lower() or self.cancellation_flag.is_set():
+                    self.status_update.emit(f"Post fetching for {creator_name} cancelled: {e}")
+                    self.posts_fetched_signal.emit(creator_data, all_posts_for_this_creator) 
+                else:
+                    self.fetch_error_signal.emit(creator_data, f"Runtime error fetching posts for {creator_name}: {e}")
+            except Exception as e:
+                self.fetch_error_signal.emit(creator_data, f"Error fetching posts for {creator_name}: {e}")
+            
+            if self.cancellation_flag.is_set():
+                break
+            QThread.msleep(200)
+
+        if self.cancellation_flag.is_set():
+            self.status_update.emit(self.parent_dialog._tr("post_fetch_cancelled_status_done", "Post fetching cancelled."))
+        else:
+            self.status_update.emit(self.parent_dialog._tr("post_fetch_finished_status", "Finished fetching posts for selected creators."))
+        self.finished_signal.emit()
 
 class CookieHelpDialog (QDialog ):
     """A dialog to explain how to get a cookies.txt file."""
@@ -5264,18 +5616,199 @@ class DownloaderApp (QWidget ):
         if self ._is_download_active ():
             QMessageBox .warning (self ,"Busy","A download is already running.")
             return False 
-        if not direct_api_url and self .favorite_download_queue and not self .is_processing_favorites_queue :
-            is_from_creator_popup =False 
-            if self .favorite_download_queue :
-                self .cancellation_message_logged_this_session =False 
-                first_item_in_queue =self .favorite_download_queue [0 ]
-                if first_item_in_queue .get ('type')=='creator_popup_selection':
-                    is_from_creator_popup =True 
 
-            if is_from_creator_popup :
-                self .log_signal .emit (f"ℹ️ Detected {len (self .favorite_download_queue )} creators queued from popup. Starting processing...")
-                self ._process_next_favorite_download ()
-                return True 
+        # If this call to start_download is not for a specific URL (e.g., user clicked main "Download" button)
+        # AND there are items in the favorite queue AND we are not already processing it.
+        if not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
+            self.log_signal.emit(f"ℹ️ Detected {len(self.favorite_download_queue)} item(s) in the queue. Starting processing...")
+            self.cancellation_message_logged_this_session = False # Reset for new queue processing session
+            self._process_next_favorite_download() # Directly call this to start processing the queue
+            return True # Indicate that the download process has been initiated via the queue
+
+        # If we reach here, it means either:
+        # 1. direct_api_url was provided (e.g., recursive call from _process_next_favorite_download)
+        # 2. The favorite_download_queue was empty or already being processed, so we fall back to link_input.
+        api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
+
+        if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url and not api_url: # Check api_url here too
+            QMessageBox.information(self, "Favorite Mode Active",
+                                    "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
+            self.set_ui_enabled(True)
+            return False
+
+        main_ui_download_dir = self.dir_input.text().strip()
+
+        if not api_url and not self.favorite_download_queue: # If still no api_url and queue is empty
+            QMessageBox.critical(self, "Input Error", "URL is required.")
+            return False
+        elif not api_url and self.favorite_download_queue: # Safeguard: if URL input is empty but queue has items
+            self.log_signal.emit("ℹ️ URL input is empty, but queue has items. Processing queue...")
+            self.cancellation_message_logged_this_session = False
+            self._process_next_favorite_download() # This was the line with the unexpected indent
+            return True
+
+        self.cancellation_message_logged_this_session = False
+        use_subfolders = self.use_subfolders_checkbox.isChecked()
+        use_post_subfolders = self.use_subfolder_per_post_checkbox.isChecked()
+        compress_images = self.compress_images_checkbox.isChecked()
+        download_thumbnails = self.download_thumbnails_checkbox.isChecked()
+
+        use_multithreading_enabled_by_checkbox = self.use_multithreading_checkbox.isChecked()
+        try:
+            num_threads_from_gui = int(self.thread_count_input.text().strip())
+            if num_threads_from_gui < 1: num_threads_from_gui = 1
+        except ValueError:
+            QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
+            return False
+
+        if use_multithreading_enabled_by_checkbox:
+            if num_threads_from_gui > MAX_THREADS:
+                hard_warning_msg = (
+                    f"You've entered a thread count ({num_threads_from_gui}) exceeding the maximum of {MAX_THREADS}.\n\n"
+                    "Using an extremely high number of threads can lead to:\n"
+                    "  - Diminishing returns (no significant speed increase).\n"
+                    "  - Increased system instability or application crashes.\n"
+                    "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
+                    f"The thread count has been automatically capped to {MAX_THREADS} for stability."
+                )
+                QMessageBox.warning(self, "High Thread Count Warning", hard_warning_msg)
+                num_threads_from_gui = MAX_THREADS
+                self.thread_count_input.setText(str(MAX_THREADS))
+                self.log_signal.emit(f"⚠️ User attempted {num_threads_from_gui} threads, capped to {MAX_THREADS}.")
+            if SOFT_WARNING_THREAD_THRESHOLD < num_threads_from_gui <= MAX_THREADS:
+                soft_warning_msg_box = QMessageBox(self)
+                soft_warning_msg_box.setIcon(QMessageBox.Question)
+                soft_warning_msg_box.setWindowTitle("Thread Count Advisory")
+                soft_warning_msg_box.setText(
+                    f"You've set the thread count to {num_threads_from_gui}.\n\n"
+                    "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
+                    "  - Increased errors or failed file downloads.\n"
+                    "  - Connection issues with the server.\n"
+                    "  - Higher system resource usage.\n\n"
+                    "For most users and connections, 10-30 threads provide a good balance.\n\n"
+                    f"Do you want to proceed with {num_threads_from_gui} threads, or would you like to change the value?"
+                )
+                proceed_button = soft_warning_msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+                change_button = soft_warning_msg_box.addButton("Change Thread Value", QMessageBox.RejectRole)
+                soft_warning_msg_box.setDefaultButton(proceed_button)
+                soft_warning_msg_box.setEscapeButton(change_button)
+                soft_warning_msg_box.exec_()
+
+                if soft_warning_msg_box.clickedButton() == change_button:
+                    self.log_signal.emit(f"ℹ️ User opted to change thread count from {num_threads_from_gui} after advisory.")
+                    self.thread_count_input.setFocus()
+                    self.thread_count_input.selectAll()
+                    return False
+
+        raw_skip_words = self.skip_words_input.text().strip()
+        skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
+
+        raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
+        allow_multipart = self.allow_multipart_download_setting
+        remove_from_filename_words_list = [word.strip() for word in raw_remove_filename_words.split(',') if word.strip()]
+        scan_content_for_images = self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False
+        use_cookie_from_checkbox = self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False
+        app_base_dir_for_cookies = os.path.dirname(self.config_file)
+        cookie_text_from_input = self.cookie_text_input.text().strip() if hasattr(self, 'cookie_text_input') and use_cookie_from_checkbox else ""
+
+        use_cookie_for_this_run = use_cookie_from_checkbox
+        selected_cookie_file_path_for_backend = self.selected_cookie_filepath if use_cookie_from_checkbox and self.selected_cookie_filepath else None
+
+        if use_cookie_from_checkbox and not direct_api_url: # Only show cookie help if it's a fresh download start from UI
+            temp_cookies_for_check = prepare_cookies_for_request(
+                use_cookie_for_this_run,
+                cookie_text_from_input,
+                selected_cookie_file_path_for_backend,
+                app_base_dir_for_cookies,
+                lambda msg: self.log_signal.emit(f"[UI Cookie Check] {msg}")
+            )
+            if temp_cookies_for_check is None:
+                cookie_dialog = CookieHelpDialog(self, self, offer_download_without_option=True)
+                dialog_exec_result = cookie_dialog.exec_()
+
+                if cookie_dialog.user_choice == CookieHelpDialog.CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result == QDialog.Accepted:
+                    self.log_signal.emit("ℹ️ User chose to download without cookies for this session.")
+                    use_cookie_for_this_run = False
+                elif cookie_dialog.user_choice == CookieHelpDialog.CHOICE_CANCEL_DOWNLOAD or dialog_exec_result == QDialog.Rejected:
+                    self.log_signal.emit("❌ Download cancelled by user at cookie prompt.")
+                    return False
+                else: # Should not happen if dialog is modal and choices are handled
+                    self.log_signal.emit("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
+                    return False
+
+        current_skip_words_scope = self.get_skip_words_scope()
+        manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
+
+        extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
+        backend_filter_mode = self.get_filter_mode()
+        checked_radio_button = self.radio_group.checkedButton()
+        user_selected_filter_text = checked_radio_button.text() if checked_radio_button else "All"
+
+        effective_output_dir_for_run = ""
+
+        if selected_cookie_file_path_for_backend: # If a file is selected, cookie_text_from_input should be ignored by backend
+            cookie_text_from_input = ""
+
+        if backend_filter_mode == 'archive':
+            effective_skip_zip = False
+            effective_skip_rar = False
+        else:
+            effective_skip_zip = self.skip_zip_checkbox.isChecked()
+            effective_skip_rar = self.skip_rar_checkbox.isChecked()
+            if backend_filter_mode == 'audio': # Ensure audio mode doesn't force skip_zip/rar off
+                effective_skip_zip = self.skip_zip_checkbox.isChecked()
+                effective_skip_rar = self.skip_rar_checkbox.isChecked()
+
+        if not api_url: # This check is now after the queue processing
+            QMessageBox.critical(self, "Input Error", "URL is required.")
+            return False
+
+        if override_output_dir: # This is for items from the queue that need specific artist folders
+            if not main_ui_download_dir: # Main download dir must be set for this
+                QMessageBox.critical(self, "Configuration Error",
+                                     "The main 'Download Location' must be set in the UI "
+                                     "before downloading favorites with 'Artist Folders' scope.")
+                if self.is_processing_favorites_queue:
+                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory not set.")
+                return False # Stop this specific item
+
+            if not os.path.isdir(main_ui_download_dir):
+                QMessageBox.critical(self, "Directory Error",
+                                     f"The main 'Download Location' ('{main_ui_download_dir}') "
+                                     "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
+                if self.is_processing_favorites_queue:
+                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory invalid.")
+                return False # Stop this specific item
+            effective_output_dir_for_run = os.path.normpath(override_output_dir)
+        else: # For direct URL input or items not needing override
+            if not extract_links_only and not main_ui_download_dir:
+                QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode.")
+                return False
+
+            if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
+                reply = QMessageBox.question(self, "Create Directory?",
+                                             f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
+                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if reply == QMessageBox.Yes:
+                    try:
+                        os.makedirs(main_ui_download_dir, exist_ok=True)
+                        self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
+                    except Exception as e:
+                        QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
+                        return False
+                else:
+                    self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
+                    return False
+            effective_output_dir_for_run = os.path.normpath(main_ui_download_dir)
+
+        service, user_id, post_id_from_url = extract_post_info(api_url)
+        if not service or not user_id: # This check is fine here
+            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
+            return False
+
+        # ... (rest of the start_download method remains the same)
+            self ._process_next_favorite_download ()
+            return True 
 
 
         if self .favorite_mode_checkbox and self .favorite_mode_checkbox .isChecked ()and not direct_api_url :
@@ -7205,6 +7738,7 @@ class DownloaderApp (QWidget ):
         next_url =self .current_processing_favorite_item_info ['url']
         item_display_name =self .current_processing_favorite_item_info .get ('name','Unknown Item')
 
+        item_type = self.current_processing_favorite_item_info.get('type', 'artist')
         self .log_signal .emit (f"▶️ Processing next favorite from queue: '{item_display_name }' ({next_url })")
 
         override_dir =None 
@@ -7213,11 +7747,21 @@ class DownloaderApp (QWidget ):
             item_scope =self .favorite_download_scope 
 
         main_download_dir =self .dir_input .text ().strip ()
-        if item_scope ==EmptyPopupDialog .SCOPE_CREATORS or (item_scope ==FAVORITE_SCOPE_ARTIST_FOLDERS and main_download_dir ):
+        
+        # Determine if folder override is needed based on scope
+        # For 'creator_popup_selection', the scope is determined by dialog.current_scope_mode
+        # For 'artist' or 'single_post_from_popup' (queued from Favorite Artists/Posts dialogs), it's self.favorite_download_scope
+        should_create_artist_folder = False
+        if item_type == 'creator_popup_selection' and item_scope == EmptyPopupDialog.SCOPE_CREATORS:
+            should_create_artist_folder = True
+        elif item_type != 'creator_popup_selection' and self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS:
+            should_create_artist_folder = True
+
+        if should_create_artist_folder and main_download_dir:
             folder_name_key =self .current_processing_favorite_item_info .get ('name_for_folder','Unknown_Folder')
             item_specific_folder_name =clean_folder_name (folder_name_key )
             override_dir =os .path .normpath (os .path .join (main_download_dir ,item_specific_folder_name ))
-            self .log_signal .emit (f"    Favorite Scope: Artist Folders. Target directory: '{override_dir }'")
+            self .log_signal .emit (f"    Scope requires artist folder. Target directory: '{override_dir }'")
 
         success_starting_download =self .start_download (direct_api_url =next_url ,override_output_dir =override_dir )
 

@@ -121,6 +121,13 @@ translations ={
 "creator_popup_search_placeholder":"Search by name, service, or paste creator URL...",
 "creator_popup_add_selected_button":"Add Selected",
 "creator_popup_scope_characters_button":"Scope: Characters",
+"creator_popup_posts_area_title": "Fetched Posts",
+"fetch_posts_button_text": "Fetch Posts",
+"creator_popup_add_posts_to_queue_button": "Add Selected Posts to Queue",
+"posts_for_creator_header": "Posts for",
+"untitled_post_placeholder": "Untitled Post",
+"no_creators_to_fetch_status": "No creators selected to fetch posts for.",
+"post_fetch_cancelled_status": "Post fetching cancellation requested...",
 "creator_popup_scope_creators_button":"Scope: Creators",
 "favorite_artists_button_text":"🖼️ Favorite Artists",
 "favorite_artists_button_tooltip":"Browse and download from your favorite artists on Kemono.su/Coomer.su.",
@@ -175,6 +182,7 @@ translations ={
 "key_fetching_from_source_kemono_su":"Fetching favorites from Kemono.su...",
 "key_fetching_from_source_coomer_su":"Fetching favorites from Coomer.su...",
 "fav_posts_fetch_cancelled_status":"Favorite post fetch cancelled.",
+"fetching_posts_for_creator_status_all_pages": "Fetching all posts for {creator_name} ({service})... This may take a while.",
 
 "known_names_filter_dialog_title":"Add Known Names to Filter",
 "known_names_filter_search_placeholder":"Search names...",
@@ -1302,6 +1310,13 @@ translations ["fr"]={
 }
 
 translations ["en"].update ({
+    
+"creator_popup_title":"Creator Selection",
+"creator_popup_title_fetching": "Creator Posts", # New key
+"creator_popup_search_placeholder":"Search by name, service, or paste creator URL...",
+"creator_popup_add_selected_button": "Add Selected",
+"fetch_posts_button_text": "Fetch Posts",
+"creator_popup_scope_characters_button": "Scope: Characters",    
 "help_guide_dialog_title":"Kemono Downloader - Feature Guide",
 "help_guide_github_tooltip":"Visit project's GitHub page (Opens in browser)",
 "help_guide_instagram_tooltip":"Visit our Instagram page (Opens in browser)",
