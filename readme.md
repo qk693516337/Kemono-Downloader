@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v5.2.0</h1>
+<h1 align="center">Kemono Downloader v5.3.0</h1>
 
 <table align="center">
   <tr>
@@ -77,6 +77,20 @@ Kemono Downloader offers a range of features to streamline your content download
     -   A detailed progress log displays download activity, errors, and summaries.
 -   **Multi-language Interface:** Choose from several languages for the UI (English, Japanese, French, Spanish, German, Russian, Korean, Chinese Simplified).
 -   **Theme Customization:** Selectable Light and Dark themes for user comfort.
+
+---
+
+## ✨ What's New in v5.3.0
+-   **Multi-Creator Post Fetching & Queuing:**
+    -   The **Creator Selection popup** (🎨 icon) has been significantly enhanced.
+    -   After selecting multiple creators, you can now click a new "**Fetch Posts**" button.
+    -   This will retrieve and display posts from all selected creators in a new view within the popup.
+    -   You can then browse these fetched posts (with search functionality) and select individual posts.
+    -   A new "**Add Selected Posts to Queue**" button allows you to add your chosen posts directly to the main download queue, streamlining the process of gathering content from multiple artists.
+    -   The traditional "**Add Selected to URL**" button is still available if you prefer to populate the main URL field with creator names.
+-   **Improved Favorite Download Queue Handling:**
+    -   When items are added to the download queue from the Creator Selection popup, the main URL input field will now display a placeholder message (e.g., "{count} items in queue from popup").
+    -   The queue is now more robustly managed, especially when interacting with the main URL input field after items have been queued from the popup.
 
 ---
 

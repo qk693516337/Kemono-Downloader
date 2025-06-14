@@ -17,7 +17,9 @@ These are the primary controls you'll interact with to initiate and manage downl
         -   Kemono.su (and mirrors) individual posts (e.g., `https://kemono.su/patreon/user/12345/post/98765`).
         -   Coomer.party (and mirrors like coomer.su) creator pages.
         -   Coomer.party (and mirrors) individual posts.
-    -   **Note:** When **⭐ Favorite Mode** is active, this field is disabled and shows a "Favorite Mode active" message.
+    -   **Note:**
+        -   When **⭐ Favorite Mode** is active, this field is disabled and shows a "Favorite Mode active" message.
+        -   This field can also be populated with a placeholder message (e.g., "{count} items in queue from popup") if posts are added to the download queue directly from the 'Creator Selection' dialog's 'Fetched Posts' view.
 
 -   **🎨 Creator Selection Button:**
     -   **Icon:** 🎨 (Artist Palette)
@@ -29,10 +31,18 @@ These are the primary controls you'll interact with to initiate and manage downl
         -   **Creator List:** Displays creators with their service (e.g., Patreon, Fanbox) and ID.
         -   **Selection:** Checkboxes to select one or more creators.
         -   **"Add Selected to URL" Button:** Adds the names of selected creators to the URL input field, comma-separated.
+        -   **"Fetch Posts" Button:** After selecting creators, click this to retrieve their latest posts. This will display a new pane within the dialog showing the fetched posts.
         -   **"Download Scope" Radio Buttons (`Characters` / `Creators`):** Determines the folder structure for items added via this popup.
             -   `Characters`: Assumes creator names are character names for folder organization.
             -   `Creators`: Uses the actual creator names for folder organization.
-
+    -   **Fetched Posts View (Right Pane - Appears after clicking 'Fetch Posts'):**
+        -   **Posts Area Title Label:** Indicates loading status or number of fetched posts.
+        -   **Posts Search Input:** Allows filtering the list of fetched posts by title.
+        -   **Posts List Widget:** Displays posts fetched from the selected creators, often grouped by creator. Each post is checkable.
+        -   **Select All / Deselect All Buttons (for Posts):** Convenience buttons for selecting/deselecting all displayed fetched posts.
+        -   **"Add Selected Posts to Queue" Button:** Adds all checked posts from this view directly to the application's main download queue. The main URL input field will then show a message like "{count} items in queue from popup".
+        -   **"Close" Button (for Posts View):** Hides the fetched posts view and returns to the creator selection list, allowing you to use the 'Add Selected to URL' button if preferred.
+        
 -   **Page Range (Start to End) Input Fields:**
     -   **Purpose:** For creator URLs, specify a range of pages to fetch and process.
     -   **Usage:** Enter the starting page number in the first field and the ending page number in the second.
