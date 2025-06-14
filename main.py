@@ -204,13 +204,16 @@ class DownloadExtractedLinksDialog (QDialog ):
 
         if parent :
             parent_width =parent .width ()
-            parent_height =parent .height ()
-            dialog_width =int (parent_width *0.6 )
-            dialog_height =int (parent_height *0.7 )
-            min_w ,min_h =500 ,400 
-            self .resize (max (dialog_width ,min_w ),max (dialog_height ,min_h ))
-        else :
-            self .setMinimumSize (500 ,400 )
+            parent_height =parent .height()
+            screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768 # Default to 768 if screen info unavailable
+            scale_factor = screen_height / 768.0 # Scale based on height relative to 768p
+
+            base_min_w ,base_min_h =500 ,400
+            scaled_min_w = int(base_min_w * scale_factor)
+            scaled_min_h = int(base_min_h * scale_factor)
+
+            self.setMinimumSize(scaled_min_w, scaled_min_h)
+            self.resize(max(int(parent_width * 0.6 * scale_factor), scaled_min_w), max(int(parent_height * 0.7 * scale_factor), scaled_min_h))
 
 
 
@@ -332,9 +335,13 @@ class ConfirmAddAllDialog (QDialog ):
         self .user_choice =CONFIRM_ADD_ALL_CANCEL_DOWNLOAD 
         self .setWindowTitle (self ._tr ("confirm_add_all_dialog_title","Confirm Adding New Names"))
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
+        scale_factor = screen_height / 768.0
+
+        base_min_w ,base_min_h =480 ,350
+        scaled_min_w = int(base_min_w * scale_factor)
+        scaled_min_h = int(base_min_h * scale_factor)
+        self.setMinimumSize(scaled_min_w, scaled_min_h)
 
         main_layout =QVBoxLayout (self )
 
@@ -388,8 +395,6 @@ class ConfirmAddAllDialog (QDialog ):
         main_layout .addLayout (buttons_layout )
         self ._retranslate_ui ()
 
-        self .setMinimumWidth (480 )
-        self .setMinimumHeight (350 )
         if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
             self .setStyleSheet (parent .get_dark_theme ())
         self .add_selected_button .setDefault (True )
@@ -453,9 +458,12 @@ class ExportOptionsDialog (QDialog ):
         self .setModal (True )
         self .selected_option =self .EXPORT_MODE_LINK_ONLY 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
+        scale_factor = screen_height / 768.0
+
+        base_min_w =350
+        scaled_min_w = int(base_min_w * scale_factor)
+        self.setMinimumWidth(scaled_min_w)
 
         layout =QVBoxLayout (self )
 
@@ -490,7 +498,6 @@ class ExportOptionsDialog (QDialog ):
 
         self ._retranslate_ui ()
 
-        self .setMinimumWidth (350 )
 
         if self .parent_app and hasattr (self .parent_app ,'current_theme')and self .parent_app .current_theme =="dark":
             if hasattr (self .parent_app ,'get_dark_theme'):
@@ -528,9 +535,13 @@ class ErrorFilesDialog (QDialog ):
         self .setModal (True )
         self .error_files =error_files_info_list 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
+        scale_factor = screen_height / 768.0
+
+        base_min_w ,base_min_h =500 ,300
+        scaled_min_w = int(base_min_w * scale_factor)
+        scaled_min_h = int(base_min_h * scale_factor)
+        self.setMinimumSize(scaled_min_w, scaled_min_h)
 
         main_layout =QVBoxLayout (self )
 
@@ -580,8 +591,6 @@ class ErrorFilesDialog (QDialog ):
         self .retry_button .setEnabled (bool (self .error_files ))
         self .export_button .setEnabled (bool (self .error_files ))
 
-        self .setMinimumWidth (500 )
-        self .setMinimumHeight (300 )
         if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
             self .setStyleSheet (self .parent_app .get_dark_theme ())
         self .ok_button .setDefault (True )
@@ -670,9 +679,13 @@ class FutureSettingsDialog (QDialog ):
         self .parent_app =parent_app_ref 
         self .setModal (True )
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
+        scale_factor = screen_height / 768.0
+
+        base_min_w ,base_min_h =380 ,250
+        scaled_min_w = int(base_min_w * scale_factor)
+        scaled_min_h = int(base_min_h * scale_factor)
+        self.setMinimumSize(scaled_min_w, scaled_min_h)
 
         layout =QVBoxLayout (self )
 
@@ -707,7 +720,6 @@ class FutureSettingsDialog (QDialog ):
         self .ok_button .clicked .connect (self .accept )
         layout .addWidget (self .ok_button ,0 ,Qt .AlignRight |Qt .AlignBottom )
 
-        self .setMinimumSize (380 ,250 )
         self ._retranslate_ui ()
         self ._apply_dialog_theme ()
     def _tr (self ,key ,default_text =""):
@@ -805,10 +817,13 @@ class EmptyPopupDialog (QDialog ):
     def __init__ (self ,app_base_dir ,parent_app_ref ,parent =None ):
         super ().__init__ (parent )
         self .setMinimumSize (400 ,300 )
+        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
+        scale_factor = screen_height / 768.0
+        self.setMinimumSize(int(400 * scale_factor), int(300 * scale_factor))
+ 
         self .parent_app =parent_app_ref 
         self .current_scope_mode =self .SCOPE_CHARACTERS 
         self .app_base_dir =app_base_dir 
-        self .all_creators_data =[]
 
         app_icon = get_app_icon_object()
         if app_icon and not app_icon.isNull():
@@ -817,6 +832,7 @@ class EmptyPopupDialog (QDialog ):
         self .globally_selected_creators ={}
         self.fetched_posts_data = {} # Stores posts by (service, user_id)
         self.post_fetch_thread = None
+        self.globally_selected_post_ids = set() # To store (service, user_id, post_id) tuples
 
         # Main layout for the dialog will be a QHBoxLayout holding the splitter
         dialog_layout = QHBoxLayout(self)
@@ -833,7 +849,6 @@ class EmptyPopupDialog (QDialog ):
         self .search_input .textChanged .connect (self ._filter_list )
         search_fetch_layout.addWidget(self.search_input, 1) # Give search input more stretch
         self.fetch_posts_button = QPushButton() # Placeholder text, will be translated
-        self.fetch_posts_button.setStyleSheet("padding: 1px 4px;") # Reduced padding
         self.fetch_posts_button.setEnabled(False) # Initially disabled
         self.fetch_posts_button.clicked.connect(self._handle_fetch_posts_click)
         search_fetch_layout.addWidget(self.fetch_posts_button)
@@ -873,6 +888,12 @@ class EmptyPopupDialog (QDialog ):
         self.posts_area_title_label.setAlignment(Qt.AlignCenter)
         right_pane_layout.addWidget(self.posts_area_title_label)
 
+        self.posts_search_input = QLineEdit()
+        self.posts_search_input.setVisible(False) # Initially hidden until posts are fetched     
+        # Placeholder text will be set in _retranslate_ui
+        self.posts_search_input.textChanged.connect(self._filter_fetched_posts_list)
+        right_pane_layout.addWidget(self.posts_search_input)
+
         self.posts_list_widget = QListWidget()
         right_pane_layout.addWidget(self.posts_list_widget)
 
@@ -895,7 +916,7 @@ class EmptyPopupDialog (QDialog ):
         self.posts_close_button.clicked.connect(self._handle_posts_close_view)
         posts_buttons_bottom_layout.addWidget(self.posts_close_button)
         right_pane_layout.addLayout(posts_buttons_bottom_layout)
-
+        
         self.right_pane_widget.hide() # Initially hidden
 
 
@@ -910,7 +931,7 @@ class EmptyPopupDialog (QDialog ):
         dialog_layout.addWidget(self.main_splitter)
 
         self.original_size = self.sizeHint() # Store initial size hint
-        self.main_splitter.setSizes([self.width(), 0]) # Left pane takes all width initially (before resize)
+        self.main_splitter.setSizes([int(self.width() * scale_factor), 0]) # Left pane takes all width initially (before resize)
 
         self ._retranslate_ui ()
 
@@ -918,7 +939,7 @@ class EmptyPopupDialog (QDialog ):
             self .setStyleSheet (self .parent_app .get_dark_theme ())
 
         # Set initial size for the dialog (before fetching posts)
-        self.resize(self.original_size.width() + 50, self.original_size.height() + 100) # A bit larger than pure hint
+        self.resize(int((self.original_size.width() + 50) * scale_factor), int((self.original_size.height() + 100) * scale_factor)) # A bit larger than pure hint
 
         QTimer .singleShot (0 ,self ._perform_initial_load )
 
@@ -951,12 +972,15 @@ class EmptyPopupDialog (QDialog ):
         self.right_pane_widget.show()
         QTimer.singleShot(10, lambda: self.main_splitter.setSizes([int(self.width() * 0.3), int(self.width() * 0.7)]))
         self.add_selected_button.setEnabled(False)
+        self.globally_selected_post_ids.clear() # Clear previous post selections    
+        self.posts_search_input.setVisible(True)
         self.setWindowTitle(self._tr("creator_popup_title_fetching", "Creator Posts"))
         
         self.fetch_posts_button.setEnabled(False)
         self.posts_list_widget.clear()
         self.fetched_posts_data.clear()
         self.posts_area_title_label.setText(self._tr("fav_posts_loading_status", "Loading favorite posts...")) # Generic loading
+        self.posts_list_widget.itemChanged.connect(self._handle_post_item_check_changed) # Connect here     
         self.progress_bar.setVisible(True)
 
         if self.post_fetch_thread and self.post_fetch_thread.isRunning():
@@ -982,6 +1006,7 @@ class EmptyPopupDialog (QDialog ):
         self .fetch_posts_button.setText(self._tr("fetch_posts_button_text", "Fetch Posts"))
         self ._update_scope_button_text_and_tooltip ()
         
+        self.posts_search_input.setPlaceholderText(self._tr("creator_popup_posts_search_placeholder", "Search fetched posts by title..."))
         # Retranslate right pane elements
         self.posts_area_title_label.setText(self._tr("creator_popup_posts_area_title", "Fetched Posts")) # Placeholder key
         self.posts_select_all_button.setText(self._tr("select_all_button_text", "Select All"))
@@ -1251,12 +1276,50 @@ class EmptyPopupDialog (QDialog ):
     def _handle_posts_fetched(self, creator_info, posts_list):
         creator_key = (creator_info.get('service'), str(creator_info.get('id')))
         self.fetched_posts_data[creator_key] = posts_list
-        self._rebuild_posts_list_widget()
+        self._filter_fetched_posts_list() # Refresh list with current filter
 
-    def _rebuild_posts_list_widget(self):
+    def _filter_fetched_posts_list(self):
+        search_text = self.posts_search_input.text().lower().strip()
+        
+        data_for_rebuild = {} 
+
+        if not self.fetched_posts_data:
+            self.posts_area_title_label.setText(self._tr("no_posts_fetched_yet_status", "No posts fetched yet."))
+        elif not search_text:
+            data_for_rebuild = self.fetched_posts_data 
+            total_posts_in_view = sum(len(posts) for posts in data_for_rebuild.values())
+            if total_posts_in_view > 0:
+                self.posts_area_title_label.setText(self._tr("fetched_posts_count_label", "Fetched {count} post(s). Select to add to queue.").format(count=total_posts_in_view))
+            else: 
+                self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
+        else: 
+            for creator_key, posts_list in self.fetched_posts_data.items():
+                matching_posts_for_creator = [
+                    post for post in posts_list 
+                    if search_text in post.get('title', '').lower()
+                ]
+                if matching_posts_for_creator:
+                    data_for_rebuild[creator_key] = matching_posts_for_creator
+            
+            total_matching_posts = sum(len(posts) for posts in data_for_rebuild.values())
+            if total_matching_posts > 0:
+                self.posts_area_title_label.setText(self._tr("fetched_posts_count_label_filtered", "Displaying {count} post(s) matching filter.").format(count=total_matching_posts))
+            else:
+                self.posts_area_title_label.setText(self._tr("no_posts_match_search_filter", "No posts match your search filter."))
+        
+        self._rebuild_posts_list_widget(filtered_data_map=data_for_rebuild)
+
+    def _rebuild_posts_list_widget(self, filtered_data_map):
+        self.posts_list_widget.blockSignals(True) # Block signals during repopulation     
         self.posts_list_widget.clear()
+        data_to_display = filtered_data_map 
+
+        if not data_to_display:
+            self.posts_list_widget.blockSignals(False)            
+            return
+
         sorted_creator_keys = sorted(
-            self.fetched_posts_data.keys(),
+            data_to_display.keys(),
             key=lambda k: self.globally_selected_creators.get(k, {}).get('name', '').lower()
         )
 
@@ -1266,7 +1329,7 @@ class EmptyPopupDialog (QDialog ):
             if not creator_info_original:
                 continue
 
-            posts_for_this_creator = self.fetched_posts_data.get(creator_key, [])
+            posts_for_this_creator = data_to_display.get(creator_key, [])
             if not posts_for_this_creator:
                 continue
 
@@ -1291,13 +1354,19 @@ class EmptyPopupDialog (QDialog ):
                     'full_post_data': post
                 }
                 item.setData(Qt.UserRole, item_data)
+                post_unique_key = (
+                    item_data['service'],
+                    str(item_data['user_id']), 
+                    str(item_data['id'])      
+                )
+                if post_unique_key in self.globally_selected_post_ids:
+                    item.setCheckState(Qt.Checked)
+                else:
+                    item.setCheckState(Qt.Unchecked)
+              
                 self.posts_list_widget.addItem(item)
                 total_posts_shown += 1
-        
-        if total_posts_shown == 0 and self.fetched_posts_data:
-            self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
-        elif total_posts_shown > 0:
-            self.posts_area_title_label.setText(self._tr("fetched_posts_count_label", "Fetched {count} post(s). Select to add to queue.").format(count=total_posts_shown))
+        self.posts_list_widget.blockSignals(False) # Unblock signals
 
     def _handle_fetch_error(self, creator_info, error_message):
         creator_name = creator_info.get('name', 'Unknown Creator')
@@ -1310,40 +1379,115 @@ class EmptyPopupDialog (QDialog ):
     def _handle_fetch_finished(self):
         self.fetch_posts_button.setEnabled(True)
         self.progress_bar.setVisible(False)
-        if not self.fetched_posts_data and not self.posts_list_widget.count():
-            self.posts_area_title_label.setText(self._tr("failed_to_fetch_or_no_posts_label", "Failed to fetch posts or no posts found."))
-        elif not self.posts_list_widget.count() and self.fetched_posts_data: # Data fetched, but all lists were empty
-             self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
+
+        if not self.fetched_posts_data: 
+            if self.post_fetch_thread and self.post_fetch_thread.cancellation_flag.is_set():
+                 self.posts_area_title_label.setText(self._tr("post_fetch_cancelled_status_done", "Post fetching cancelled."))
+            else:
+                 self.posts_area_title_label.setText(self._tr("failed_to_fetch_or_no_posts_label", "Failed to fetch posts or no posts found."))
+            self.posts_search_input.setVisible(False)
+        elif not self.posts_list_widget.count() and not self.posts_search_input.text().strip(): 
+            self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
+            self.posts_search_input.setVisible(True) 
+        else: 
+            self.posts_search_input.setVisible(True)
 
     def _handle_posts_select_all(self):
+        self.posts_list_widget.blockSignals(True)      
         for i in range(self.posts_list_widget.count()):
             item = self.posts_list_widget.item(i)
             if item.flags() & Qt.ItemIsUserCheckable:
                 item.setCheckState(Qt.Checked)
 
+                # Add to global selection if not already there
+                item_data = item.data(Qt.UserRole)
+                if item_data:
+                    post_unique_key = (
+                        item_data['service'],
+                        str(item_data['user_id']),
+                        str(item_data['id'])
+                    )
+                    self.globally_selected_post_ids.add(post_unique_key)
+        self.posts_list_widget.blockSignals(False)
+
     def _handle_posts_deselect_all(self):
+        self.posts_list_widget.blockSignals(True)      
         for i in range(self.posts_list_widget.count()):
             item = self.posts_list_widget.item(i)
             if item.flags() & Qt.ItemIsUserCheckable:
                 item.setCheckState(Qt.Unchecked)
+        self.globally_selected_post_ids.clear() # Deselect all means clear all global selections
+        self.posts_list_widget.blockSignals(False)
+
+    def _handle_post_item_check_changed(self, item):
+        if not item or not item.data(Qt.UserRole): # Ignore header items or invalid items
+            return
+
+        item_data = item.data(Qt.UserRole)
+        post_unique_key = (
+            item_data['service'],
+            str(item_data['user_id']),
+            str(item_data['id'])
+        )
+
+        if item.checkState() == Qt.Checked:
+            self.globally_selected_post_ids.add(post_unique_key)
+        else:
+            self.globally_selected_post_ids.discard(post_unique_key)
 
     def _handle_posts_add_selected_to_queue(self):
         selected_posts_for_queue = []
-        for i in range(self.posts_list_widget.count()):
-            item = self.posts_list_widget.item(i)
-            if item.flags() & Qt.ItemIsUserCheckable and item.checkState() == Qt.Checked:
-                post_item_data = item.data(Qt.UserRole)
-                if post_item_data:
-                    domain = self._get_domain_for_service(post_item_data['service'])
-                    post_url = f"https://{domain}/{post_item_data['service']}/user/{post_item_data['user_id']}/post/{post_item_data['id']}"
+        if not self.globally_selected_post_ids:
+            QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
+                                    self._tr("select_posts_to_queue_message", "Please select at least one post to add to the queue."))
+            return
+
+        for post_key in self.globally_selected_post_ids:
+            service, user_id_str, post_id_str = post_key
+            post_data_found = None
+            creator_key_for_fetched_data = (service, user_id_str)
+            
+            if creator_key_for_fetched_data in self.fetched_posts_data:
+                for post_in_list in self.fetched_posts_data[creator_key_for_fetched_data]:
+                    if str(post_in_list.get('id')) == post_id_str:
+                        post_data_found = post_in_list
+                        break
+            
+            if post_data_found:
+                creator_info_original = self.globally_selected_creators.get(creator_key_for_fetched_data)
+                creator_name = creator_info_original.get('name', 'Unknown Creator') if creator_info_original else 'Unknown Creator'
+                
+                domain = self._get_domain_for_service(service)
+                post_url = f"https://{domain}/{service}/user/{user_id_str}/post/{post_id_str}"
+                queue_item = {
+                    'type': 'single_post_from_popup',
+                    'url': post_url,
+                    'name': post_data_found.get('title', self._tr('untitled_post_placeholder', 'Untitled Post')),
+                    'name_for_folder': creator_name, 
+                    'service': service,
+                    'user_id': user_id_str,
+                    'post_id': post_id_str
+                }
+                selected_posts_for_queue.append(queue_item)
+            else:
+                # This case might happen if fetched_posts_data was cleared or modified unexpectedly
+                # For robustness, we could try to reconstruct minimal info if needed,
+                # or log that the full data for a selected post was not found.
+                # For now, just log it if parent_app is available.
+                if self.parent_app and hasattr(self.parent_app, 'log_signal'):
+                    self.parent_app.log_signal.emit(f"⚠️ Could not find full post data for selected key: {post_key} when adding to queue.")
+                # Fallback: create a queue item with minimal info from the key itself
+                else: # Minimal fallback if full data is gone
+                    domain = self._get_domain_for_service(service)
+                    post_url = f"https://{domain}/{service}/user/{user_id_str}/post/{post_id_str}"
                     queue_item = {
                         'type': 'single_post_from_popup',
                         'url': post_url,
-                        'name': post_item_data['title'],
-                        'name_for_folder': post_item_data['creator_name'],
-                        'service': post_item_data['service'],
-                        'user_id': post_item_data['user_id'],
-                        'post_id': post_item_data['id']
+                        'name': f"post id {post_id_str}", # fallback name
+                        'name_for_folder': user_id_str, # fallback folder name
+                        'service': service,
+                        'user_id': user_id_str,
+                        'post_id': post_id_str
                     }
                     selected_posts_for_queue.append(queue_item)
 
@@ -1365,6 +1509,10 @@ class EmptyPopupDialog (QDialog ):
     def _handle_posts_close_view(self):
         self.right_pane_widget.hide()
         self.main_splitter.setSizes([self.width(), 0])
+        self.posts_list_widget.itemChanged.disconnect(self._handle_post_item_check_changed) # Disconnect    
+        self.posts_search_input.setVisible(False)
+        self.posts_search_input.clear()
+        self.globally_selected_post_ids.clear()        
         self.add_selected_button.setEnabled(True)
         self.setWindowTitle(self._tr("creator_popup_title", "Creator Selection"))
         # Optionally clear posts list and data
@@ -2603,7 +2751,10 @@ class HelpGuideDialog (QDialog ):
         self .parent_app =parent_app 
 
         app_icon = get_app_icon_object()
-        if not app_icon.isNull():
+        if not app_icon.isNull(): # Check if icon is valid
+            self.setWindowIcon(app_icon)
+        else: # Fallback to default if icon is null
+            self.setWindowIcon(QIcon())
             self.setWindowIcon(app_icon)
 
         self .setModal (True )

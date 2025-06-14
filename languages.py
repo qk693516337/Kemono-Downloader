@@ -122,6 +122,18 @@ translations ={
 "creator_popup_add_selected_button":"Add Selected",
 "creator_popup_scope_characters_button":"Scope: Characters",
 "creator_popup_posts_area_title": "Fetched Posts",
+"creator_popup_posts_search_placeholder": "Search fetched posts by title...",
+"no_posts_fetched_yet_status": "No posts fetched yet.",
+"fetched_posts_count_label": "Fetched {count} post(s). Select to add to queue.",
+"no_posts_found_for_selection": "No posts found for selected creator(s).",
+"fetched_posts_count_label_filtered": "Displaying {count} post(s) matching filter.",
+"no_posts_match_search_filter": "No posts match your search filter.",
+"fetch_error_for_creator_label": "Error fetching for {creator_name}",
+"post_fetch_cancelled_status_done": "Post fetching cancelled.",
+"failed_to_fetch_or_no_posts_label": "Failed to fetch posts or no posts found.",
+"select_posts_to_queue_message": "Please select at least one post to add to the queue.",
+"items_in_queue_placeholder": "{count} items in queue from popup.",
+"post_fetch_finished_status": "Finished fetching posts for selected creators.",
 "fetch_posts_button_text": "Fetch Posts",
 "creator_popup_add_posts_to_queue_button": "Add Selected Posts to Queue",
 "posts_for_creator_header": "Posts for",
@@ -144,6 +156,18 @@ translations ={
 "manga_style_date_based_text":"Name: Date Based",
 "manga_style_title_global_num_text":"Name: Title+G.Num",
 "manga_style_unknown_text":"Name: Unknown Style",
+"manga_style_post_title_tooltip":"""Files are named based on the post's title.
+- The first file in a post is named using the cleaned post title (e.g., 'My Chapter 1.jpg').
+- If the post has multiple files, subsequent files are also named using the post title, but with a numeric suffix like '_1', '_2', etc. (e.g., 'My Chapter 1_1.png', 'My Chapter 1_2.gif'). The counter for the suffix starts from 1 for the second file.
+- If a post has only one file, it's named after the post title without a suffix.
+
+Example: Post 'Chapter One' (3 files: originalA.jpg, originalB.png, originalC.gif)
+Output: 'Chapter One.jpg', 'Chapter One_1.png', 'Chapter One_2.gif'.""",
+"manga_style_original_file_tooltip":"Files attempt to keep their original filenames.\n\n- An optional prefix can be entered in the input field that appears next to this button.\n\nExample (with prefix 'MySeries'): 'MySeries_OriginalFile.jpg'.\nExample (no prefix): 'OriginalFile.jpg'.",
+"manga_style_date_based_tooltip":"Files are named sequentially (e.g., 001.ext, 002.ext) based on post publication order.\n\n- An optional prefix can be entered in the input field that appears next to this button.\n- Multithreading for post processing is disabled for this style to ensure correct numbering.\n\nExample (with prefix 'MyComic'): 'MyComic_001.jpg', 'MyComic_002.png'.\nExample (no prefix): '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"Files are named with the post's title and a global sequential number across all posts.\n\n- Format: '[Cleaned Post Title]_[Global Counter].[ext]'\n- The counter (e.g., _001, _002) increments for every file downloaded in the current session.\n- Multithreading for post processing is disabled for this style to ensure correct numbering.\n\nExample: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'.\nNext post 'Chapter 2' (1 file) -> 'Chapter 2_003.jpg'.",
+"manga_style_unknown_tooltip":"The manga filename style is currently unknown. This is unexpected. Please cycle to a valid style.",
+"manga_style_cycle_tooltip_suffix":"Click to cycle to the next style.",
 "fav_artists_dialog_title":"Favorite Artists",
 "fav_artists_loading_status":"Loading favorite artists...",
 "fav_artists_search_placeholder":"Search artists...",
@@ -621,6 +645,18 @@ translations ={
 "creator_popup_add_selected_button":"選択項目を追加",
 "creator_popup_scope_characters_button":"スコープ: キャラクター",
 "creator_popup_scope_creators_button":"スコープ: クリエイター",
+"creator_popup_title_fetching": "クリエイター投稿",
+"creator_popup_posts_area_title": "取得済み投稿",
+"creator_popup_posts_search_placeholder": "タイトルで取得済み投稿を検索...",
+"no_posts_fetched_yet_status": "まだ投稿が取得されていません。",
+"fetched_posts_count_label": "{count}件の投稿を取得しました。キューに追加するものを選択してください。",
+"no_posts_found_for_selection": "選択したクリエイターの投稿が見つかりませんでした。",
+"fetched_posts_count_label_filtered": "フィルターに一致する{count}件の投稿を表示中。",
+"no_posts_match_search_filter": "検索フィルターに一致する投稿がありません。",
+"fetch_error_for_creator_label": "{creator_name}の取得エラー",
+"post_fetch_cancelled_status_done": "投稿の取得がキャンセルされました。",
+"failed_to_fetch_or_no_posts_label": "投稿の取得に失敗したか、投稿が見つかりませんでした。",
+"select_posts_to_queue_message": "キューに追加する投稿を少なくとも1つ選択してください。",
 "favorite_artists_button_text":"🖼️ お気に入りアーティスト",
 "favorite_artists_button_tooltip":"Kemono.su/Coomer.suでお気に入りのアーティストを閲覧してダウンロードします。",
 "favorite_posts_button_text":"📄 お気に入り投稿",
@@ -636,6 +672,18 @@ translations ={
 "manga_style_date_based_text":"名前: 日付順",
 "manga_style_title_global_num_text":"名前: タイトル+通し番号",
 "manga_style_unknown_text":"名前: 不明なスタイル",
+"manga_style_post_title_tooltip":"""ファイルは投稿のタイトルに基づいて名前が付けられます。
+- 投稿の最初のファイルは、投稿のクリーンなタイトルを取得します（例：「私の第1章.jpg」）。
+- 投稿に複数のファイルがある場合、後続のファイルも投稿タイトルを使用して名前が付けられますが、「_1」、「_2」などの数字の接尾辞が付きます（例：「私の第1章_1.png」、「私の第1章_2.gif」）。接尾辞のカウンターは2番目のファイルから1で始まります。
+- 投稿にファイルが1つしかない場合は、接尾辞なしで投稿のタイトルに基づいて名前が付けられます。
+
+例：投稿「第一章」（3ファイル：originala.jpg、originalb.png、originalc.gif）
+出力：「第一章.jpg」、「第一章_1.png」、「第一章_2.gif」。""",
+"manga_style_original_file_tooltip":"ファイルは元のファイル名を保持しようとします。\n\n- このスタイルボタンの隣に表示される入力フィールドにオプションのプレフィックスを入力できます。\n\n例（プレフィックス「私のシリーズ」）：「私のシリーズ_元のファイル.jpg」。\n例（プレフィックスなし）：「元のファイル.jpg」。",
+"manga_style_date_based_tooltip":"ファイルは投稿の公開順に基づいて順番に名前が付けられます（例：001.ext、002.ext）。\n\n- このスタイルボタンの隣に表示される入力フィールドにオプションのプレフィックスを入力できます。\n- このスタイルでは、正しい番号付けを保証するために、投稿処理のマルチスレッドは自動的に無効になります。\n\n例（プレフィックス「私の漫画」）：「私の漫画_001.jpg」、「私の漫画_002.png」。\n例（プレフィックスなし）：「001.jpg」、「002.png」。",
+"manga_style_title_global_num_tooltip":"ファイルは投稿のタイトルと、すべての投稿にわたるグローバルな連番で名前が付けられます。\n\n- 形式：「[クリーンな投稿タイトル]_[グローバルカウンター].[ext]」\n- カウンター（例：_001、_002）は、現在のセッションでダウンロードされたすべてのファイルに対してインクリメントされます。\n- このスタイルでは、正しい番号付けを保証するために、投稿処理のマルチスレッドは自動的に無効になります。\n\n例：投稿「第1章」（2ファイル）->「第1章_001.jpg」、「第1章_002.png」。\n次の投稿「第2章」（1ファイル）->「第2章_003.jpg」。",
+"manga_style_unknown_tooltip":"漫画のファイル名スタイルは現在不明です。これは予期しないことです。有効なスタイルに切り替えてください。",
+"manga_style_cycle_tooltip_suffix":"クリックして次のスタイルに切り替えます。",
 "fav_artists_dialog_title":"お気に入りアーティスト",
 "fav_artists_loading_status":"お気に入りアーティストを読み込み中...",
 "fav_artists_search_placeholder":"アーティストを検索...",
@@ -675,6 +723,8 @@ translations ={
 "key_fetching_from_source_kemono_su":"Kemono.suからお気に入りを取得中...",
 "key_fetching_from_source_coomer_su":"Coomer.suからお気に入りを取得中...",
 "fav_posts_fetch_cancelled_status":"お気に入り投稿の取得がキャンセルされました。",
+"items_in_queue_placeholder": "ポップアップからキューに{count}件のアイテムがあります。",
+"post_fetch_finished_status": "選択したクリエイターの投稿の取得が完了しました。",
 
 "known_names_filter_dialog_title":"既知の名前をフィルターに追加",
 "known_names_filter_search_placeholder":"名前を検索...",
@@ -1103,6 +1153,18 @@ translations ["fr"]={
 "creator_popup_add_selected_button":"Ajouter la sélection",
 "creator_popup_scope_characters_button":"Portée : Personnages",
 "creator_popup_scope_creators_button":"Portée : Créateurs",
+"creator_popup_title_fetching": "Publications du créateur",
+"creator_popup_posts_area_title": "Publications récupérées",
+"creator_popup_posts_search_placeholder": "Rechercher les publications récupérées par titre...",
+"no_posts_fetched_yet_status": "Aucune publication récupérée pour le moment.",
+"fetched_posts_count_label": "{count} publication(s) récupérée(s). Sélectionnez pour ajouter à la file d'attente.",
+"no_posts_found_for_selection": "Aucune publication trouvée pour le(s) créateur(s) sélectionné(s).",
+"fetched_posts_count_label_filtered": "Affichage de {count} publication(s) correspondant au filtre.",
+"no_posts_match_search_filter": "Aucune publication ne correspond à votre filtre de recherche.",
+"fetch_error_for_creator_label": "Erreur de récupération pour {creator_name}",
+"post_fetch_cancelled_status_done": "Récupération des publications annulée.",
+"failed_to_fetch_or_no_posts_label": "Échec de la récupération des publications ou aucune publication trouvée.",
+"select_posts_to_queue_message": "Veuillez sélectionner au moins une publication à ajouter à la file d'attente.",
 "favorite_artists_button_text":"🖼️ Artistes favoris",
 "favorite_artists_button_tooltip":"Parcourez et téléchargez depuis vos artistes favoris sur Kemono.su/Coomer.su.",
 "favorite_posts_button_text":"📄 Publications favorites",
@@ -1118,6 +1180,18 @@ translations ["fr"]={
 "manga_style_date_based_text":"Nom : Basé sur la date",
 "manga_style_title_global_num_text":"Nom : Titre+Num.G",
 "manga_style_unknown_text":"Nom : Style inconnu",
+"manga_style_post_title_tooltip":"""Les fichiers sont nommés en fonction du titre de la publication.
+- Le premier fichier d'une publication est nommé en utilisant le titre nettoyé de la publication (par ex., 'Mon Chapitre 1.jpg').
+- Si la publication contient plusieurs fichiers, les fichiers suivants sont également nommés en utilisant le titre de la publication, mais avec un suffixe numérique comme '_1', '_2', etc. (par ex., 'Mon Chapitre 1_1.png', 'Mon Chapitre 1_2.gif'). Le compteur pour le suffixe commence à 1 pour le deuxième fichier.
+- Si une publication ne contient qu'un seul fichier, il est nommé d'après le titre de la publication sans suffixe.
+
+Exemple : Publication 'Chapitre Un' (3 fichiers : originalA.jpg, originalB.png, originalC.gif)
+Sortie : 'Chapitre Un.jpg', 'Chapitre Un_1.png', 'Chapitre Un_2.gif'.""",
+"manga_style_original_file_tooltip":"Les fichiers tentent de conserver leurs noms de fichiers originaux.\n\n- Un préfixe optionnel peut être saisi dans le champ de saisie qui apparaît à côté de ce bouton de style.\n\nExemple (avec préfixe 'MaSerie') : 'MaSerie_FichierOriginal.jpg'.\nExemple (sans préfixe) : 'FichierOriginal.jpg'.",
+"manga_style_date_based_tooltip":"Les fichiers sont nommés séquentiellement (par ex., 001.ext, 002.ext) en fonction de l'ordre de publication des publications.\n\n- Un préfixe optionnel peut être saisi dans le champ de saisie qui apparaît à côté de ce bouton de style.\n- Le multithreading pour le traitement des publications est automatiquement désactivé pour ce style afin d'assurer une numérotation correcte.\n\nExemple (avec préfixe 'MaBD') : 'MaBD_001.jpg', 'MaBD_002.png'.\nExemple (sans préfixe) : '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"Les fichiers sont nommés avec le titre de la publication et un numéro séquentiel global pour toutes les publications.\n\n- Format : '[Titre de la publication nettoyé]_[Compteur global].[ext]'\n- Le compteur (par ex., _001, _002) s'incrémente pour chaque fichier téléchargé dans la session actuelle.\n- Le multithreading pour le traitement des publications est automatiquement désactivé pour ce style afin d'assurer une numérotation correcte.\n\nExemple : Publication 'Chapitre 1' (2 fichiers) -> 'Chapitre 1_001.jpg', 'Chapitre 1_002.png'.\nPublication suivante 'Chapitre 2' (1 fichier) -> 'Chapitre 2_003.jpg'.",
+"manga_style_unknown_tooltip":"Le style de nom de fichier manga est actuellement inconnu. C'est inattendu. Veuillez passer à un style valide.",
+"manga_style_cycle_tooltip_suffix":"Cliquez pour passer au style suivant.",
 "fav_artists_dialog_title":"Artistes favoris",
 "fav_artists_loading_status":"Chargement des artistes favoris...",
 "fav_artists_search_placeholder":"Rechercher des artistes...",
@@ -1155,6 +1229,9 @@ translations ["fr"]={
 "key_fetching_from_source_kemono_su":"Récupération des favoris de Kemono.su...",
 "key_fetching_from_source_coomer_su":"Récupération des favoris de Coomer.su...",
 "fav_posts_fetch_cancelled_status":"Récupération des publications favorites annulée.",
+"items_in_queue_placeholder": "{count} éléments en file d'attente depuis la popup.",
+"post_fetch_finished_status": "Récupération des publications terminée pour les créateurs sélectionnés.",
+
 "known_names_filter_dialog_title":"Ajouter des noms connus au filtre",
 "known_names_filter_search_placeholder":"Rechercher des noms...",
 "known_names_filter_select_all_button":"Tout sélectionner",
@@ -1289,6 +1366,18 @@ translations ["fr"]={
 "help_guide_github_tooltip":"Visiter la page GitHub du projet (S'ouvre dans le navigateur)",
 "help_guide_instagram_tooltip":"Visiter notre page Instagram (S'ouvre dans le navigateur)",
 "help_guide_discord_tooltip":"Rejoindre notre communauté Discord (S'ouvre dans le navigateur)",
+"creator_popup_posts_search_placeholder": "Rechercher les publications récupérées par titre...",
+"no_posts_fetched_yet_status": "Aucune publication récupérée pour le moment.",
+"fetched_posts_count_label": "{count} publication(s) récupérée(s). Sélectionnez pour ajouter à la file d'attente.",
+"no_posts_found_for_selection": "Aucune publication trouvée pour le(s) créateur(s) sélectionné(s).",
+"fetched_posts_count_label_filtered": "Affichage de {count} publication(s) correspondant au filtre.",
+"no_posts_match_search_filter": "Aucune publication ne correspond à votre filtre de recherche.",
+"fetch_error_for_creator_label": "Erreur de récupération pour {creator_name}",
+"post_fetch_cancelled_status_done": "Récupération des publications annulée.",
+"failed_to_fetch_or_no_posts_label": "Échec de la récupération des publications ou aucune publication trouvée.",
+"select_posts_to_queue_message": "Veuillez sélectionner au moins une publication à ajouter à la file d'attente.",
+"items_in_queue_placeholder": "{count} éléments en file d'attente depuis la popup.",
+"post_fetch_finished_status": "Récupération des publications terminée pour les créateurs sélectionnés.",
 "help_guide_step1_title":"① Introduction & Entrées principales",
 "help_guide_step1_content":"<html><head/><body>\n<p>Ce guide offre un aperçu des fonctionnalités, des champs et des boutons de Kemono Downloader.</p>\n<h3>Zone de saisie principale (en haut à gauche)</h3>\n<ul>\n<li><b>🔗 URL Créateur/Post Kemono :</b>\n<ul>\n<li>Saisissez l'adresse web complète de la page d'un créateur (par ex., <i>https://kemono.su/patreon/user/12345</i>) ou d'une publication spécifique (par ex., <i>.../post/98765</i>).</li>\n<li>Prend en charge les URL de Kemono (kemono.su, kemono.party) et Coomer (coomer.su, coomer.party).</li>\n</ul>\n</li>\n<li><b>Plage de pages (Début à Fin) :</b>\n<ul>\n<li>Pour les URL de créateurs : Spécifiez une plage de pages à récupérer (par ex., pages 2 à 5). Laissez vide pour toutes les pages.</li>\n<li>Désactivé pour les URL de publications uniques ou lorsque le <b>Mode Manga/BD</b> est actif.</li>\n</ul>\n</li>\n<li><b>📁 Emplacement de téléchargement :</b>\n<ul>\n<li>Cliquez sur <b>'Parcourir...'</b> pour choisir un dossier principal sur votre ordinateur où tous les fichiers téléchargés seront enregistrés.</li>\n<li>Ce champ est requis sauf si vous utilisez le mode <b>'🔗 Liens Uniquement'</b>.</li>\n</ul>\n</li>\n<li><b>🎨 Bouton de sélection du créateur (à côté de la saisie de l'URL) :</b>\n<ul>\n<li>Cliquez sur l'icône de la palette (🎨) pour ouvrir la boîte de dialogue 'Sélection du créateur'.</li>\n<li>Cette boîte de dialogue charge les créateurs depuis votre fichier <code>creators.json</code> (qui doit se trouver dans le répertoire de l'application).</li>\n<li><b>À l'intérieur de la boîte de dialogue :</b>\n<ul>\n<li><b>Barre de recherche :</b> Tapez pour filtrer la liste des créateurs par nom ou service.</li>\n<li><b>Liste des créateurs :</b> Affiche les créateurs de votre <code>creators.json</code>. Les créateurs que vous avez mis en 'favoris' (dans les données JSON) apparaissent en haut.</li>\n<li><b>Cases à cocher :</b> Sélectionnez un ou plusieurs créateurs en cochant la case à côté de leur nom.</li>\n<li><b>Bouton 'Portée' (par ex., 'Portée : Personnages') :</b> Ce bouton bascule l'organisation du téléchargement lors de l'initiation des téléchargements à partir de cette popup :\n<ul><li><i>Portée : Personnages :</i> Les téléchargements seront organisés dans des dossiers nommés d'après les personnages directement dans votre 'Emplacement de téléchargement' principal. Les œuvres de différents créateurs pour le même personnage seront regroupées.</li>\n<li><i>Portée : Créateurs :</i> Les téléchargements créeront d'abord un dossier nommé d'après le créateur dans votre 'Emplacement de téléchargement' principal. Les sous-dossiers nommés d'après les personnages seront ensuite créés à l'intérieur du dossier de chaque créateur.</li></ul>\n</li>\n<li><b>Bouton 'Ajouter la sélection' :</b> Cliquer sur ce bouton prendra les noms de tous les créateurs cochés et les ajoutera au champ de saisie principal '🔗 URL Créateur/Post Kemono', séparés par des virgules. La boîte de dialogue se fermera alors.</li>\n</ul>\n</li>\n<li>Cette fonctionnalité offre un moyen rapide de remplir le champ URL pour plusieurs créateurs sans avoir à taper ou coller manuellement chaque URL.</li>\n</ul>\n</li>\n</ul></body></html>",
 "help_guide_step2_title":"② Filtrage des téléchargements",
@@ -1314,14 +1403,37 @@ translations ["en"].update ({
 "creator_popup_title":"Creator Selection",
 "creator_popup_title_fetching": "Creator Posts", # New key
 "creator_popup_search_placeholder":"Search by name, service, or paste creator URL...",
-"creator_popup_add_selected_button": "Add Selected",
+"creator_popup_add_selected_button": "Add Selected", # Already exists, but good to confirm
 "fetch_posts_button_text": "Fetch Posts",
 "creator_popup_scope_characters_button": "Scope: Characters",    
+"creator_popup_title_fetching": "Beiträge des Erstellers",
+"creator_popup_posts_area_title": "Abgerufene Beiträge",
+"creator_popup_posts_search_placeholder": "Abgerufene Beiträge nach Titel suchen...",
+"no_posts_fetched_yet_status": "Noch keine Beiträge abgerufen.",
+"fetched_posts_count_label": "{count} Beitrag/Beiträge abgerufen. Zum Hinzufügen zur Warteschlange auswählen.",
+"no_posts_found_for_selection": "Keine Beiträge für ausgewählte(n) Ersteller gefunden.",
+"fetched_posts_count_label_filtered": "Zeige {count} Beitrag/Beiträge an, die dem Filter entsprechen.",
+"no_posts_match_search_filter": "Keine Beiträge entsprechen Ihrem Suchfilter.",
+"fetch_error_for_creator_label": "Fehler beim Abrufen für {creator_name}",
+"post_fetch_cancelled_status_done": "Abruf von Beiträgen abgebrochen.",
+"failed_to_fetch_or_no_posts_label": "Fehler beim Abrufen von Beiträgen oder keine Beiträge gefunden.",
+"select_posts_to_queue_message": "Bitte wählen Sie mindestens einen Beitrag zum Hinzufügen zur Warteschlange aus.",
 "help_guide_dialog_title":"Kemono Downloader - Feature Guide",
 "help_guide_github_tooltip":"Visit project's GitHub page (Opens in browser)",
 "help_guide_instagram_tooltip":"Visit our Instagram page (Opens in browser)",
 "help_guide_discord_tooltip":"Visit our Discord community (Opens in browser)",
 "help_guide_step1_title":"① Introduction & Main Inputs",
+"creator_popup_posts_area_title": "Fetched Posts", # Already exists
+"creator_popup_posts_search_placeholder": "Search fetched posts by title...", # New key
+"no_posts_fetched_yet_status": "No posts fetched yet.", # New key
+"fetched_posts_count_label": "Fetched {count} post(s). Select to add to queue.", # New key
+"no_posts_found_for_selection": "No posts found for selected creator(s).", # New key
+"fetched_posts_count_label_filtered": "Displaying {count} post(s) matching filter.", # New key
+"no_posts_match_search_filter": "No posts match your search filter.", # New key
+"fetch_error_for_creator_label": "Error fetching for {creator_name}", # New key
+"post_fetch_cancelled_status_done": "Post fetching cancelled.", # New key
+"failed_to_fetch_or_no_posts_label": "Failed to fetch posts or no posts found.", # New key
+"select_posts_to_queue_message": "Please select at least one post to add to the queue.", # New key
 "help_guide_step1_content":"""<html><head/><body>
     <p>This guide provides an overview of the Kemono Downloader's features, fields, and buttons.</p>
     <h3>Main Input Area (Top Left)</h3>
@@ -1554,6 +1666,7 @@ translations ["en"].update ({
 "help_guide_step8_title":"⑧ Favorite Mode & Future Features",
 "help_guide_step8_content":"""<html><head/><body>
     <h3>Favorite Mode (Downloading from Your Kemono.su Favorites)</h3>
+    <p>This mode allows you to download content directly from artists you've favorited on Kemono.su/Coomer.su.</p> <!-- Added Coomer -->   
     <p>This mode allows you to download content directly from artists you've favorited on Kemono.su.</p>
     <ul>
         <li><b>⭐ How to Enable:</b>
@@ -1575,7 +1688,7 @@ translations ["en"].update ({
         </li>
         <li><b>🖼️ Favorite Artists Button:</b>
             <ul>
-                <li>Clicking this opens a dialog that lists all artists you have favorited on Kemono.su.</li>
+                <li>Clicking this opens a dialog that lists all artists you have favorited on Kemono.su and Coomer.su.</li> <!-- Added Coomer -->
                 <li>You can select one or more artists from this list to download their content.</li>
             </ul>
         </li>
@@ -1605,6 +1718,8 @@ translations ["en"].update ({
 "help_guide_step9_title":"⑨ Key Files & Tour",
 "help_guide_step9_content":"""<html><head/><body>
     <h3>Key Files Used by the Application</h3>
+    <p><b><code>creators.json</code> (Optional but Recommended):</b></p> <!-- Added creators.json -->
+    <ul><li>Located in the application's directory. This file stores a list of creators (name, service, ID, and an optional 'favorited' flag). The 'Creator Selection' popup (🎨 icon) uses this file to let you quickly select creators to add to the URL input. You can manually edit this JSON file to add or manage your list of creators.</li></ul>   
     <ul>
         <li><b><code>Known.txt</code>:</b>
             <ul>
@@ -1626,7 +1741,7 @@ translations ["en"].update ({
                 <li><b>Format:</b> Must be in Netscape cookie file format.</li>
                 <li><b>Usage:</b> Allows the downloader to use your browser's login session for accessing content that might be behind a login on Kemono/Coomer.</li>
             </ul>
-        </li>
+        </li>,
     </ul>
 
     <h3>First-Time User Tour</h3>
@@ -1634,7 +1749,9 @@ translations ["en"].update ({
         <li>On the first launch (or if reset), a welcome tour dialog appears, guiding you through the main features. You can skip it or choose to "Never show this tour again."</li>
     </ul>
     <p><em>Many UI elements also have tooltips that appear when you hover your mouse over them, providing quick hints.</em></p>
-    </body></html>"""
+    </body></html>""",
+    "items_in_queue_placeholder": "{count} items in queue from popup.", # New key
+    "post_fetch_finished_status": "Finished fetching posts for selected creators." # New key
 })
 
 translations ["ja"].update ({
@@ -1642,6 +1759,18 @@ translations ["ja"].update ({
 "help_guide_github_tooltip":"プロジェクトのGitHubページにアクセス (ブラウザで開きます)",
 "help_guide_instagram_tooltip":"Instagramページにアクセス (ブラウザで開きます)",
 "help_guide_discord_tooltip":"Discordコミュニティにアクセス (ブラウザで開きます)",
+"creator_popup_posts_search_placeholder": "タイトルで取得済み投稿を検索...",
+"no_posts_fetched_yet_status": "まだ投稿が取得されていません。",
+"fetched_posts_count_label": "{count}件の投稿を取得しました。キューに追加するものを選択してください。",
+"no_posts_found_for_selection": "選択したクリエイターの投稿が見つかりませんでした。",
+"fetched_posts_count_label_filtered": "フィルターに一致する{count}件の投稿を表示中。",
+"no_posts_match_search_filter": "検索フィルターに一致する投稿がありません。",
+"fetch_error_for_creator_label": "{creator_name}の取得エラー",
+"post_fetch_cancelled_status_done": "投稿の取得がキャンセルされました。",
+"failed_to_fetch_or_no_posts_label": "投稿の取得に失敗したか、投稿が見つかりませんでした。",
+"select_posts_to_queue_message": "キューに追加する投稿を少なくとも1つ選択してください。",
+"items_in_queue_placeholder": "ポップアップからキューに{count}件のアイテムがあります。",
+"post_fetch_finished_status": "選択したクリエイターの投稿の取得が完了しました。",
 "help_guide_step1_title":"① 概要と主な入力",
 "help_guide_step1_content":"""<html><head/><body>
     <p>このガイドでは、Kemonoダウンローダーの機能、フィールド、ボタンの概要を説明します。</p>
@@ -2076,6 +2205,18 @@ translations ["zh_CN"].update ({
 "creator_popup_add_selected_button":"添加所选",
 "creator_popup_scope_characters_button":"范围：角色",
 "creator_popup_scope_creators_button":"范围：创作者",
+"creator_popup_title_fetching": "创作者帖子",
+"creator_popup_posts_area_title": "已获取的帖子",
+"creator_popup_posts_search_placeholder": "按标题搜索已获取的帖子...",
+"no_posts_fetched_yet_status": "尚未获取任何帖子。",
+"fetched_posts_count_label": "已获取 {count} 个帖子。选择以添加到队列。",
+"no_posts_found_for_selection": "未找到所选创作者的帖子。",
+"fetched_posts_count_label_filtered": "正在显示 {count} 个符合筛选条件的帖子。",
+"no_posts_match_search_filter": "没有帖子符合您的搜索筛选条件。",
+"fetch_error_for_creator_label": "获取 {creator_name} 时出错",
+"post_fetch_cancelled_status_done": "帖子获取已取消。",
+"failed_to_fetch_or_no_posts_label": "获取帖子失败或未找到帖子。",
+"select_posts_to_queue_message": "请至少选择一个帖子以添加到队列。",
 "favorite_artists_button_text":"🖼️ 收藏的艺术家",
 "favorite_artists_button_tooltip":"浏览并从您在 Kemono.su/Coomer.su 上收藏的艺术家那里下载。",
 "favorite_posts_button_text":"📄 收藏的帖子",
@@ -2128,6 +2269,8 @@ translations ["zh_CN"].update ({
 "key_fetching_from_source_kemono_su":"正在从 Kemono.su 获取收藏...",
 "key_fetching_from_source_coomer_su":"正在从 Coomer.su 获取收藏...",
 "fav_posts_fetch_cancelled_status":"收藏帖子获取已取消。",
+"items_in_queue_placeholder": "来自弹出窗口的队列中有 {count} 个项目。",
+"post_fetch_finished_status": "已完成获取所选创作者的帖子。",
 "known_names_filter_dialog_title":"将已知名称添加到筛选器",
 "known_names_filter_search_placeholder":"搜索名称...",
 "known_names_filter_select_all_button":"全选",
@@ -2400,6 +2543,18 @@ translations ["ru"].update ({
 "creator_popup_add_selected_button":"Добавить выбранные",
 "creator_popup_scope_characters_button":"Область: Персонажи",
 "creator_popup_scope_creators_button":"Область: Авторы",
+"creator_popup_title_fetching": "Посты автора",
+"creator_popup_posts_area_title": "Загруженные посты",
+"creator_popup_posts_search_placeholder": "Искать загруженные посты по названию...",
+"no_posts_fetched_yet_status": "Посты еще не загружены.",
+"fetched_posts_count_label": "Загружено {count} постов. Выберите для добавления в очередь.",
+"no_posts_found_for_selection": "Для выбранных авторов посты не найдены.",
+"fetched_posts_count_label_filtered": "Отображается {count} постов, соответствующих фильтру.",
+"no_posts_match_search_filter": "Нет постов, соответствующих вашему поисковому фильтру.",
+"fetch_error_for_creator_label": "Ошибка загрузки для {creator_name}",
+"post_fetch_cancelled_status_done": "Загрузка постов отменена.",
+"failed_to_fetch_or_no_posts_label": "Не удалось загрузить посты или посты не найдены.",
+"select_posts_to_queue_message": "Пожалуйста, выберите хотя бы один пост для добавления в очередь.",
 "favorite_artists_button_text":"🖼️ Избранные художники",
 "favorite_artists_button_tooltip":"Просматривайте и скачивайте работы ваших любимых художников на Kemono.su/Coomer.su.",
 "favorite_posts_button_text":"📄 Избранные посты",
@@ -2415,6 +2570,18 @@ translations ["ru"].update ({
 "manga_style_date_based_text":"Название: На основе даты",
 "manga_style_title_global_num_text":"Название: Заголовок+Г.ном.",
 "manga_style_unknown_text":"Название: Неизвестный стиль",
+"manga_style_post_title_tooltip":"""Файлы именуются на основе заголовка поста.
+- Первый файл в посте именуется с использованием очищенного заголовка поста (например, 'Моя глава 1.jpg').
+- Если в посте несколько файлов, последующие файлы также именуются с использованием заголовка поста, но с числовым суффиксом, таким как '_1', '_2' и т. д. (например, 'Моя глава 1_1.png', 'Моя глава 1_2.gif'). Счетчик для суффикса начинается с 1 для второго файла.
+- Если в посте только один файл, он именуется по заголовку поста без суффикса.
+
+Пример: Пост 'Глава первая' (3 файла: originalA.jpg, originalB.png, originalC.gif)
+Вывод: 'Глава первая.jpg', 'Глава первая_1.png', 'Глава первая_2.gif'.""",
+"manga_style_original_file_tooltip":"Файлы пытаются сохранить свои исходные имена файлов.\n\n- Необязательный префикс можно ввести в поле ввода, которое появляется рядом с этой кнопкой стиля.\n\nПример (с префиксом 'МояСерия'): 'МояСерия_ИсходныйФайл.jpg'.\nПример (без префикса): 'ИсходныйФайл.jpg'.",
+"manga_style_date_based_tooltip":"Файлы именуются последовательно (например, 001.ext, 002.ext) на основе порядка публикации постов.\n\n- Необязательный префикс можно ввести в поле ввода, которое появляется рядом с этой кнопкой стиля.\n- Многопоточность для обработки постов автоматически отключается для этого стиля, чтобы обеспечить правильную нумерацию.\n\nПример (с префиксом 'МойКомикс'): 'МойКомикс_001.jpg', 'МойКомикс_002.png'.\nПример (без префикса): '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"Файлы именуются с заголовком поста и глобальным порядковым номером по всем постам.\n\n- Формат: '[Очищенный заголовок поста]_[Глобальный счетчик].[ext]'\n- Счетчик (например, _001, _002) увеличивается для каждого скачанного файла в текущей сессии.\n- Многопоточность для обработки постов автоматически отключается для этого стиля, чтобы обеспечить правильную нумерацию.\n\nПример: Пост 'Глава 1' (2 файла) -> 'Глава 1_001.jpg', 'Глава 1_002.png'.\nСледующий пост 'Глава 2' (1 файл) -> 'Глава 2_003.jpg'.",
+"manga_style_unknown_tooltip":"Стиль именования файлов манги в настоящее время неизвестен. Это неожиданно. Пожалуйста, переключитесь на допустимый стиль.",
+"manga_style_cycle_tooltip_suffix":"Нажмите, чтобы переключиться на следующий стиль.",
 "fav_artists_dialog_title":"Избранные художники",
 "fav_artists_loading_status":"Загрузка избранных художников...",
 "fav_artists_search_placeholder":"Поиск художников...",
@@ -2452,6 +2619,8 @@ translations ["ru"].update ({
 "key_fetching_from_source_kemono_su":"Загрузка избранного с Kemono.su...",
 "key_fetching_from_source_coomer_su":"Загрузка избранного с Coomer.su...",
 "fav_posts_fetch_cancelled_status":"Загрузка избранных постов отменена.",
+"items_in_queue_placeholder": "{count} элементов в очереди из всплывающего окна.",
+"post_fetch_finished_status": "Загрузка постов для выбранных авторов завершена.",
 "known_names_filter_dialog_title":"Добавить известные имена в фильтр",
 "known_names_filter_search_placeholder":"Поиск имен...",
 "known_names_filter_select_all_button":"Выбрать все",
@@ -2724,6 +2893,18 @@ translations ["ko"].update ({
 "creator_popup_add_selected_button":"선택 항목 추가",
 "creator_popup_scope_characters_button":"범위: 캐릭터",
 "creator_popup_scope_creators_button":"범위: 작성자",
+"creator_popup_title_fetching": "작성자 게시물",
+"creator_popup_posts_area_title": "가져온 게시물",
+"creator_popup_posts_search_placeholder": "제목으로 가져온 게시물 검색...",
+"no_posts_fetched_yet_status": "아직 가져온 게시물이 없습니다.",
+"fetched_posts_count_label": "{count}개의 게시물을 가져왔습니다. 대기열에 추가할 항목을 선택하십시오.",
+"no_posts_found_for_selection": "선택한 작성자에 대한 게시물을 찾을 수 없습니다.",
+"fetched_posts_count_label_filtered": "필터와 일치하는 {count}개의 게시물을 표시합니다.",
+"no_posts_match_search_filter": "검색 필터와 일치하는 게시물이 없습니다.",
+"fetch_error_for_creator_label": "{creator_name} 가져오기 오류",
+"post_fetch_cancelled_status_done": "게시물 가져오기가 취소되었습니다.",
+"failed_to_fetch_or_no_posts_label": "게시물을 가져오지 못했거나 게시물을 찾을 수 없습니다.",
+"select_posts_to_queue_message": "대기열에 추가할 게시물을 하나 이상 선택하십시오.",
 "favorite_artists_button_text":"🖼️ 즐겨찾는 아티스트",
 "favorite_artists_button_tooltip":"Kemono.su/Coomer.su에서 즐겨찾는 아티스트를 탐색하고 다운로드하십시오.",
 "favorite_posts_button_text":"📄 즐겨찾는 게시물",
@@ -2739,6 +2920,18 @@ translations ["ko"].update ({
 "manga_style_date_based_text":"이름: 날짜 기반",
 "manga_style_title_global_num_text":"이름: 제목+전역 번호",
 "manga_style_unknown_text":"이름: 알 수 없는 스타일",
+"manga_style_post_title_tooltip":"""파일은 게시물 제목을 기준으로 이름이 지정됩니다.
+- 게시물의 첫 번째 파일은 정리된 게시물 제목을 사용하여 이름이 지정됩니다(예: '내 1장.jpg').
+- 게시물에 여러 파일이 있는 경우 후속 파일도 게시물 제목을 사용하여 이름이 지정되지만 '_1', '_2' 등과 같은 숫자 접미사가 붙습니다(예: '내 1장_1.png', '내 1장_2.gif'). 접미사 카운터는 두 번째 파일부터 1로 시작합니다.
+- 게시물에 파일이 하나만 있는 경우 접미사 없이 게시물 제목을 기준으로 이름이 지정됩니다.
+
+예: 게시물 '1장'(파일 3개: originala.jpg, originalb.png, originalc.gif)
+출력: '1장.jpg', '1장_1.png', '1장_2.gif'.""",
+"manga_style_original_file_tooltip":"파일은 원래 파일 이름을 유지하려고 시도합니다.\n\n- 이 스타일 버튼 옆에 나타나는 입력 필드에 선택적 접두사를 입력할 수 있습니다.\n\n예(접두사 '내 시리즈'): '내 시리즈_원본 파일.jpg'.\n예(접두사 없음): '원본 파일.jpg'.",
+"manga_style_date_based_tooltip":"파일은 게시물 게시 순서에 따라 순차적으로 이름이 지정됩니다(예: 001.ext, 002.ext).\n\n- 이 스타일 버튼 옆에 나타나는 입력 필드에 선택적 접두사를 입력할 수 있습니다.\n- 이 스타일의 경우 올바른 번호 매기기를 보장하기 위해 게시물 처리 멀티스레딩이 자동으로 비활성화됩니다.\n\n예(접두사 '내 만화'): '내 만화_001.jpg', '내 만화_002.png'.\n예(접두사 없음): '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"파일은 게시물 제목과 모든 게시물에 걸친 전역 순차 번호로 이름이 지정됩니다.\n\n- 형식: '[정리된 게시물 제목]_[전역 카운터].[ext]'\n- 카운터(예: _001, _002)는 현재 세션에서 다운로드된 모든 파일에 대해 증가합니다.\n- 이 스타일의 경우 올바른 번호 매기기를 보장하기 위해 게시물 처리 멀티스레딩이 자동으로 비활성화됩니다.\n\n예: 게시물 '1장'(파일 2개) -> '1장_001.jpg', '1장_002.png'.\n다음 게시물 '2장'(파일 1개) -> '2장_003.jpg'.",
+"manga_style_unknown_tooltip":"만화 파일 이름 스타일이 현재 알 수 없습니다. 이는 예기치 않은 상황입니다. 유효한 스타일로 전환하십시오.",
+"manga_style_cycle_tooltip_suffix":"클릭하여 다음 스타일로 전환합니다.",
 "fav_artists_dialog_title":"즐겨찾는 아티스트",
 "fav_artists_loading_status":"즐겨찾는 아티스트 로드 중...",
 "fav_artists_search_placeholder":"아티스트 검색...",
@@ -2776,6 +2969,8 @@ translations ["ko"].update ({
 "key_fetching_from_source_kemono_su":"Kemono.su에서 즐겨찾기 가져오는 중...",
 "key_fetching_from_source_coomer_su":"Coomer.su에서 즐겨찾기 가져오는 중...",
 "fav_posts_fetch_cancelled_status":"즐겨찾는 게시물 가져오기가 취소되었습니다.",
+"items_in_queue_placeholder": "팝업에서 대기열에 {count}개의 항목이 있습니다.",
+"post_fetch_finished_status": "선택한 작성자에 대한 게시물 가져오기가 완료되었습니다.",
 "known_names_filter_dialog_title":"필터에 알려진 이름 추가",
 "known_names_filter_search_placeholder":"이름 검색...",
 "known_names_filter_select_all_button":"모두 선택",
@@ -3048,6 +3243,18 @@ translations ["es"].update ({
 "creator_popup_add_selected_button":"Añadir seleccionados",
 "creator_popup_scope_characters_button":"Ámbito: Personajes",
 "creator_popup_scope_creators_button":"Ámbito: Creadores",
+"creator_popup_title_fetching": "Publicaciones del creador",
+"creator_popup_posts_area_title": "Publicaciones obtenidas",
+"creator_popup_posts_search_placeholder": "Buscar publicaciones obtenidas por título...",
+"no_posts_fetched_yet_status": "Aún no se han obtenido publicaciones.",
+"fetched_posts_count_label": "{count} publicación(es) obtenida(s). Seleccione para añadir a la cola.",
+"no_posts_found_for_selection": "No se encontraron publicaciones para el/los creador(es) seleccionado(s).",
+"fetched_posts_count_label_filtered": "Mostrando {count} publicación(es) que coinciden con el filtro.",
+"no_posts_match_search_filter": "Ninguna publicación coincide con su filtro de búsqueda.",
+"fetch_error_for_creator_label": "Error al obtener para {creator_name}",
+"post_fetch_cancelled_status_done": "Obtención de publicaciones cancelada.",
+"failed_to_fetch_or_no_posts_label": "Error al obtener publicaciones o no se encontraron publicaciones.",
+"select_posts_to_queue_message": "Por favor, seleccione al menos una publicación para añadir a la cola.",
 "favorite_artists_button_text":"🖼️ Artistas favoritos",
 "favorite_artists_button_tooltip":"Explore y descargue de sus artistas favoritos en Kemono.su/Coomer.su.",
 "favorite_posts_button_text":"📄 Publicaciones favoritas",
@@ -3063,6 +3270,18 @@ translations ["es"].update ({
 "manga_style_date_based_text":"Nombre: Basado en la fecha",
 "manga_style_title_global_num_text":"Nombre: Título+Núm.G.",
 "manga_style_unknown_text":"Nombre: Estilo desconocido",
+"manga_style_post_title_tooltip":"""Los archivos se nombran según el título de la publicación.
+- El primer archivo de una publicación se nombra usando el título limpio de la publicación (p. ej., 'Mi Capítulo 1.jpg').
+- Si la publicación contiene varios archivos, los archivos posteriores también se nombran usando el título de la publicación, pero con un sufijo numérico como '_1', '_2', etc. (p. ej., 'Mi Capítulo 1_1.png', 'Mi Capítulo 1_2.gif'). El contador para el sufijo comienza en 1 para el segundo archivo.
+- Si una publicación solo tiene un archivo, se nombra según el título de la publicación sin sufijo.
+
+Ejemplo: Publicación 'Capítulo Uno' (3 archivos: originalA.jpg, originalB.png, originalC.gif)
+Salida: 'Capítulo Uno.jpg', 'Capítulo Uno_1.png', 'Capítulo Uno_2.gif'.""",
+"manga_style_original_file_tooltip":"Los archivos intentan conservar sus nombres de archivo originales.\n\n- Se puede introducir un prefijo opcional en el campo de entrada que aparece junto a este botón de estilo.\n\nEjemplo (con prefijo 'MiSerie'): 'MiSerie_ArchivoOriginal.jpg'.\nEjemplo (sin prefijo): 'ArchivoOriginal.jpg'.",
+"manga_style_date_based_tooltip":"Los archivos se nombran secuencialmente (p. ej., 001.ext, 002.ext) según el orden de publicación de los posts.\n\n- Se puede introducir un prefijo opcional en el campo de entrada que aparece junto a este botón de estilo.\n- El multihilo para el procesamiento de publicaciones se desactiva automáticamente para este estilo para garantizar una numeración correcta.\n\nEjemplo (con prefijo 'MiComic'): 'MiComic_001.jpg', 'MiComic_002.png'.\nEjemplo (sin prefijo): '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"Los archivos se nombran con el título de la publicación y un número secuencial global para todas las publicaciones.\n\n- Formato: '[Título de la publicación limpio]_[Contador global].[ext]'\n- El contador (p. ej., _001, _002) se incrementa por cada archivo descargado en la sesión actual.\n- El multihilo para el procesamiento de publicaciones se desactiva automáticamente para este estilo para garantizar una numeración correcta.\n\nEjemplo: Publicación 'Capítulo 1' (2 archivos) -> 'Capítulo 1_001.jpg', 'Capítulo 1_002.png'.\nSiguiente publicación 'Capítulo 2' (1 archivo) -> 'Capítulo 2_003.jpg'.",
+"manga_style_unknown_tooltip":"El estilo de nombre de archivo de manga es actualmente desconocido. Esto es inesperado. Por favor, cambie a un estilo válido.",
+"manga_style_cycle_tooltip_suffix":"Haga clic para cambiar al siguiente estilo.",
 "fav_artists_dialog_title":"Artistas favoritos",
 "fav_artists_loading_status":"Cargando artistas favoritos...",
 "fav_artists_search_placeholder":"Buscar artistas...",
@@ -3100,6 +3319,8 @@ translations ["es"].update ({
 "key_fetching_from_source_kemono_su":"Obteniendo los favoritos de Kemono.su...",
 "key_fetching_from_source_coomer_su":"Obteniendo los favoritos de Coomer.su...",
 "fav_posts_fetch_cancelled_status":"Obtención de publicaciones favoritas cancelada.",
+"items_in_queue_placeholder": "{count} elementos en cola desde la ventana emergente.",
+"post_fetch_finished_status": "Obtención de publicaciones finalizada para los creadores seleccionados.",
 "known_names_filter_dialog_title":"Añadir nombres conocidos al filtro",
 "known_names_filter_search_placeholder":"Buscar nombres...",
 "known_names_filter_select_all_button":"Seleccionar todo",
@@ -3234,6 +3455,18 @@ translations ["es"].update ({
 "help_guide_github_tooltip":"Visitar la página de GitHub del proyecto (se abre en el navegador)",
 "help_guide_instagram_tooltip":"Visitar nuestra página de Instagram (se abre en el navegador)",
 "help_guide_discord_tooltip":"Visitar nuestra comunidad de Discord (se abre en el navegador)",
+"creator_popup_posts_search_placeholder": "Buscar publicaciones obtenidas por título...",
+"no_posts_fetched_yet_status": "Aún no se han obtenido publicaciones.",
+"fetched_posts_count_label": "{count} publicación(es) obtenida(s). Seleccione para añadir a la cola.",
+"no_posts_found_for_selection": "No se encontraron publicaciones para el/los creador(es) seleccionado(s).",
+"fetched_posts_count_label_filtered": "Mostrando {count} publicación(es) que coinciden con el filtro.",
+"no_posts_match_search_filter": "Ninguna publicación coincide con su filtro de búsqueda.",
+"fetch_error_for_creator_label": "Error al obtener para {creator_name}",
+"post_fetch_cancelled_status_done": "Obtención de publicaciones cancelada.",
+"failed_to_fetch_or_no_posts_label": "Error al obtener publicaciones o no se encontraron publicaciones.",
+"select_posts_to_queue_message": "Por favor, seleccione al menos una publicación para añadir a la cola.",
+"items_in_queue_placeholder": "{count} elementos en cola desde la ventana emergente.",
+"post_fetch_finished_status": "Obtención de publicaciones finalizada para los creadores seleccionados.",
 "help_guide_step1_title":"① Introducción y entradas principales",
 "help_guide_step1_content":"<html><head/><body>\n<p>Esta guía ofrece una descripción general de las funciones, campos y botones de Kemono Downloader.</p>\n<h3>Área de entrada principal (arriba a la izquierda)</h3>\n<ul>\n<li><b>🔗 URL del creador/publicación de Kemono:</b>\n<ul>\n<li>Introduzca la dirección web completa de la página de un creador (p. ej., <i>https://kemono.su/patreon/user/12345</i>) o de una publicación específica (p. ej., <i>.../post/98765</i>).</li>\n<li>Admite URL de Kemono (kemono.su, kemono.party) y Coomer (coomer.su, coomer.party).</li>\n</ul>\n</li>\n<li><b>Rango de páginas (de inicio a fin):</b>\n<ul>\n<li>Para URL de creadores: Especifique un rango de páginas para obtener (p. ej., de la 2 a la 5). Déjelo en blanco para todas las páginas.</li>\n<li>Desactivado para URL de publicaciones únicas o cuando el <b>Modo Manga/Cómic</b> está activo.</li>\n</ul>\n</li>\n<li><b>📁 Ubicación de descarga:</b>\n<ul>\n<li>Haga clic en <b>'Explorar...'</b> para elegir una carpeta principal en su ordenador donde se guardarán todos los archivos descargados.</li>\n<li>Este campo es obligatorio a menos que esté usando el modo <b>'🔗 Solo enlaces'</b>.</li>\n</ul>\n</li>\n<li><b>🎨 Botón de selección de creador (junto a la entrada de URL):</b>\n<ul>\n<li>Haga clic en el icono de la paleta (🎨) para abrir el cuadro de diálogo 'Selección de creador'.</li>\n<li>Este cuadro de diálogo carga creadores desde su archivo <code>creators.json</code> (que debe estar en el directorio de la aplicación).</li>\n<li><b>Dentro del cuadro de diálogo:</b>\n<ul>\n<li><b>Barra de búsqueda:</b> Escriba para filtrar la lista de creadores por nombre o servicio.</li>\n<li><b>Lista de creadores:</b> Muestra los creadores de su <code>creators.json</code>. Los creadores que ha añadido a 'favoritos' (en los datos JSON) aparecen en la parte superior.</li>\n<li><b>Casillas de verificación:</b> Seleccione uno o más creadores marcando la casilla junto a su nombre.</li>\n<li><b>Botón 'Ámbito' (p. ej., 'Ámbito: Personajes'):</b> Este botón alterna la organización de la descarga al iniciar descargas desde esta ventana emergente:\n<ul><li><i>Ámbito: Personajes:</i> Las descargas se organizarán en carpetas con nombres de personajes directamente dentro de su 'Ubicación de descarga' principal. Las obras de diferentes creadores para el mismo personaje se agruparán.</li>\n<li><i>Ámbito: Creadores:</i> Las descargas crearán primero una carpeta con el nombre del creador dentro de su 'Ubicación de descarga' principal. Luego, se crearán subcarpetas con nombres de personajes dentro de la carpeta de cada creador.</li></ul>\n</li>\n<li><b>Botón 'Añadir seleccionados':</b> Al hacer clic aquí, se tomarán los nombres de todos los creadores marcados y se añadirán al campo de entrada principal '🔗 URL del creador/publicación de Kemono', separados por comas. El cuadro de diálogo se cerrará.</li>\n</ul>\n</li>\n<li>Esta función proporciona una forma rápida de rellenar el campo de URL para múltiples creadores sin tener que escribir o pegar manualmente cada URL.</li>\n</ul>\n</li>\n</ul></body></html>",
 "help_guide_step2_title":"② Filtrado de descargas",
@@ -3372,6 +3605,18 @@ translations ["de"].update ({
 "creator_popup_add_selected_button":"Ausgewählte hinzufügen",
 "creator_popup_scope_characters_button":"Bereich: Charaktere",
 "creator_popup_scope_creators_button":"Bereich: Ersteller",
+"creator_popup_title_fetching": "Beiträge des Erstellers",
+"creator_popup_posts_area_title": "Abgerufene Beiträge",
+"creator_popup_posts_search_placeholder": "Abgerufene Beiträge nach Titel suchen...",
+"no_posts_fetched_yet_status": "Noch keine Beiträge abgerufen.",
+"fetched_posts_count_label": "{count} Beitrag/Beiträge abgerufen. Zum Hinzufügen zur Warteschlange auswählen.",
+"no_posts_found_for_selection": "Keine Beiträge für ausgewählte(n) Ersteller gefunden.",
+"fetched_posts_count_label_filtered": "Zeige {count} Beitrag/Beiträge an, die dem Filter entsprechen.",
+"no_posts_match_search_filter": "Keine Beiträge entsprechen Ihrem Suchfilter.",
+"fetch_error_for_creator_label": "Fehler beim Abrufen für {creator_name}",
+"post_fetch_cancelled_status_done": "Abruf von Beiträgen abgebrochen.",
+"failed_to_fetch_or_no_posts_label": "Fehler beim Abrufen von Beiträgen oder keine Beiträge gefunden.",
+"select_posts_to_queue_message": "Bitte wählen Sie mindestens einen Beitrag zum Hinzufügen zur Warteschlange aus.",
 "favorite_artists_button_text":"🖼️ Lieblingskünstler",
 "favorite_artists_button_tooltip":"Durchsuchen und herunterladen von Ihren Lieblingskünstlern auf Kemono.su/Coomer.su.",
 "favorite_posts_button_text":"📄 Lieblingsbeiträge",
@@ -3387,6 +3632,18 @@ translations ["de"].update ({
 "manga_style_date_based_text":"Name: Datumsbasiert",
 "manga_style_title_global_num_text":"Name: Titel+G.Nr.",
 "manga_style_unknown_text":"Name: Unbekannter Stil",
+"manga_style_post_title_tooltip":"""Dateien werden basierend auf dem Beitragstitel benannt.
+- Die erste Datei in einem Beitrag wird unter Verwendung des bereinigten Beitragstitels benannt (z. B. 'Mein Kapitel 1.jpg').
+- Wenn der Beitrag mehrere Dateien enthält, werden nachfolgende Dateien ebenfalls unter Verwendung des Beitragstitels benannt, jedoch mit einem numerischen Suffix wie '_1', '_2' usw. (z. B. 'Mein Kapitel 1_1.png', 'Mein Kapitel 1_2.gif'). Der Zähler für das Suffix beginnt bei 1 für die zweite Datei.
+- Wenn ein Beitrag nur eine Datei hat, wird sie nach dem Beitragstitel ohne Suffix benannt.
+
+Beispiel: Beitrag 'Kapitel Eins' (3 Dateien: originalA.jpg, originalB.png, originalC.gif)
+Ausgabe: 'Kapitel Eins.jpg', 'Kapitel Eins_1.png', 'Kapitel Eins_2.gif'.""",
+"manga_style_original_file_tooltip":"Dateien versuchen, ihre ursprünglichen Dateinamen beizubehalten.\n\n- Ein optionales Präfix kann in das Eingabefeld eingegeben werden, das neben dieser Stil-Schaltfläche erscheint.\n\nBeispiel (mit Präfix 'MeineSerie'): 'MeineSerie_Originaldatei.jpg'.\nBeispiel (ohne Präfix): 'Originaldatei.jpg'.",
+"manga_style_date_based_tooltip":"Dateien werden sequentiell (z. B. 001.ext, 002.ext) basierend auf der Veröffentlichungsreihenfolge der Beiträge benannt.\n\n- Ein optionales Präfix kann in das Eingabefeld eingegeben werden, das neben dieser Stil-Schaltfläche erscheint.\n- Multithreading für die Beitragsverarbeitung wird für diesen Stil automatisch deaktiviert, um eine korrekte Nummerierung zu gewährleisten.\n\nBeispiel (mit Präfix 'MeinComic'): 'MeinComic_001.jpg', 'MeinComic_002.png'.\nBeispiel (ohne Präfix): '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"Dateien werden mit dem Beitragstitel und einer globalen fortlaufenden Nummer über alle Beiträge hinweg benannt.\n\n- Format: '[Bereinigter Beitragstitel]_[Globaler Zähler].[ext]'\n- Der Zähler (z. B. _001, _002) erhöht sich für jede in der aktuellen Sitzung heruntergeladene Datei.\n- Multithreading für die Beitragsverarbeitung wird für diesen Stil automatisch deaktiviert, um eine korrekte Nummerierung zu gewährleisten.\n\nBeispiel: Beitrag 'Kapitel 1' (2 Dateien) -> 'Kapitel 1_001.jpg', 'Kapitel 1_002.png'.\nNächster Beitrag 'Kapitel 2' (1 Datei) -> 'Kapitel 2_003.jpg'.",
+"manga_style_unknown_tooltip":"Der Manga-Dateinamenstil ist derzeit unbekannt. Dies ist unerwartet. Bitte wechseln Sie zu einem gültigen Stil.",
+"manga_style_cycle_tooltip_suffix":"Klicken, um zum nächsten Stil zu wechseln.",
 "fav_artists_dialog_title":"Lieblingskünstler",
 "fav_artists_loading_status":"Lade Lieblingskünstler...",
 "fav_artists_search_placeholder":"Künstler suchen...",
@@ -3424,6 +3681,8 @@ translations ["de"].update ({
 "key_fetching_from_source_kemono_su":"Rufe Favoriten von Kemono.su ab...",
 "key_fetching_from_source_coomer_su":"Rufe Favoriten von Coomer.su ab...",
 "fav_posts_fetch_cancelled_status":"Abruf von Lieblingsbeiträgen abgebrochen.",
+"items_in_queue_placeholder": "{count} Elemente in der Warteschlange aus dem Popup.",
+"post_fetch_finished_status": "Abruf von Beiträgen für ausgewählte Ersteller abgeschlossen.",
 "known_names_filter_dialog_title":"Bekannte Namen zum Filter hinzufügen",
 "known_names_filter_search_placeholder":"Namen suchen...",
 "known_names_filter_select_all_button":"Alle auswählen",
@@ -3558,6 +3817,18 @@ translations ["de"].update ({
 "help_guide_github_tooltip":"Besuchen Sie die GitHub-Seite des Projekts (öffnet sich im Browser)",
 "help_guide_instagram_tooltip":"Besuchen Sie unsere Instagram-Seite (öffnet sich im Browser)",
 "help_guide_discord_tooltip":"Besuchen Sie unsere Discord-Community (öffnet sich im Browser)",
+"creator_popup_posts_search_placeholder": "Abgerufene Beiträge nach Titel suchen...",
+"no_posts_fetched_yet_status": "Noch keine Beiträge abgerufen.",
+"fetched_posts_count_label": "{count} Beitrag/Beiträge abgerufen. Zum Hinzufügen zur Warteschlange auswählen.",
+"no_posts_found_for_selection": "Keine Beiträge für ausgewählte(n) Ersteller gefunden.",
+"fetched_posts_count_label_filtered": "Zeige {count} Beitrag/Beiträge an, die dem Filter entsprechen.",
+"no_posts_match_search_filter": "Keine Beiträge entsprechen Ihrem Suchfilter.",
+"fetch_error_for_creator_label": "Fehler beim Abrufen für {creator_name}",
+"post_fetch_cancelled_status_done": "Abruf von Beiträgen abgebrochen.",
+"failed_to_fetch_or_no_posts_label": "Fehler beim Abrufen von Beiträgen oder keine Beiträge gefunden.",
+"select_posts_to_queue_message": "Bitte wählen Sie mindestens einen Beitrag zum Hinzufügen zur Warteschlange aus.",
+"items_in_queue_placeholder": "{count} Elemente in der Warteschlange aus dem Popup.",
+"post_fetch_finished_status": "Abruf von Beiträgen für ausgewählte Ersteller abgeschlossen.",
 "help_guide_step1_title":"① Einführung & Haupteingaben",
 "help_guide_step1_content":"<html><head/><body>\n<p>Dieses Handbuch bietet einen Überblick über die Funktionen, Felder und Schaltflächen des Kemono Downloaders.</p>\n<h3>Haupteingabebereich (oben links)</h3>\n<ul>\n<li><b>🔗 Kemono Ersteller/Beitrags-URL:</b>\n<ul>\n<li>Geben Sie die vollständige Webadresse einer Erstellerseite (z. B. <i>https://kemono.su/patreon/user/12345</i>) oder eines bestimmten Beitrags (z. B. <i>.../post/98765</i>) ein.</li>\n<li>Unterstützt Kemono- (kemono.su, kemono.party) und Coomer-URLs (coomer.su, coomer.party).</li>\n</ul>\n</li>\n<li><b>Seitenbereich (Start bis Ende):</b>\n<ul>\n<li>Für Ersteller-URLs: Geben Sie einen Seitenbereich zum Abrufen an (z. B. Seiten 2 bis 5). Lassen Sie das Feld für alle Seiten leer.</li>\n<li>Deaktiviert für einzelne Beitrags-URLs oder wenn der <b>Manga/Comic-Modus</b> aktiv ist.</li>\n</ul>\n</li>\n<li><b>📁 Download-Speicherort:</b>\n<ul>\n<li>Klicken Sie auf <b>'Durchsuchen...'</b>, um einen Hauptordner auf Ihrem Computer auszuwählen, in dem alle heruntergeladenen Dateien gespeichert werden.</li>\n<li>Dieses Feld ist erforderlich, es sei denn, Sie verwenden den Modus <b>'🔗 Nur Links'</b>.</li>\n</ul>\n</li>\n<li><b>🎨 Erstellerauswahl-Schaltfläche (neben der URL-Eingabe):</b>\n<ul>\n<li>Klicken Sie auf das Palettensymbol (🎨), um das Dialogfeld 'Erstellerauswahl' zu öffnen.</li>\n<li>Dieses Dialogfeld lädt Ersteller aus Ihrer <code>creators.json</code>-Datei (die sich im Anwendungsverzeichnis befinden sollte).</li>\n<li><b>Innerhalb des Dialogfelds:</b>\n<ul>\n<li><b>Suchleiste:</b> Geben Sie Text ein, um die Liste der Ersteller nach Name oder Dienst zu filtern.</li>\n<li><b>Erstellerliste:</b> Zeigt Ersteller aus Ihrer <code>creators.json</code> an. Ersteller, die Sie als 'Favoriten' markiert haben (in den JSON-Daten), werden oben angezeigt.</li>\n<li><b>Kontrollkästchen:</b> Wählen Sie einen oder mehrere Ersteller aus, indem Sie das Kästchen neben ihrem Namen aktivieren.</li>\n<li><b>Schaltfläche 'Bereich' (z. B. 'Bereich: Charaktere'):</b> Diese Schaltfläche schaltet die Download-Organisation um, wenn Downloads aus diesem Popup gestartet werden:\n<ul><li><i>Bereich: Charaktere:</i> Downloads werden direkt in Ihrem Haupt-'Download-Speicherort' in nach Charakteren benannte Ordner organisiert. Arbeiten verschiedener Ersteller für denselben Charakter werden zusammengefasst.</li>\n<li><i>Bereich: Ersteller:</i> Downloads erstellen zuerst einen nach dem Ersteller benannten Ordner in Ihrem Haupt-'Download-Speicherort'. Dann werden in jedem Erstellerordner nach Charakteren benannte Unterordner erstellt.</li></ul>\n</li>\n<li><b>Schaltfläche 'Ausgewählte hinzufügen':</b> Wenn Sie hier klicken, werden die Namen aller aktivierten Ersteller übernommen und durch Kommas getrennt in das Haupteingabefeld '🔗 Kemono Ersteller/Beitrags-URL' eingefügt. Das Dialogfeld wird dann geschlossen.</li>\n</ul>\n</li>\n<li>Diese Funktion bietet eine schnelle Möglichkeit, das URL-Feld für mehrere Ersteller zu füllen, ohne jede URL manuell eingeben oder einfügen zu müssen.</li>\n</ul>\n</li>\n</ul></body></html>",
 "help_guide_step2_title":"② Downloads filtern",
@@ -3696,6 +3967,18 @@ translations ["pt"].update ({
 "creator_popup_add_selected_button":"Adicionar Selecionados",
 "creator_popup_scope_characters_button":"Escopo: Personagens",
 "creator_popup_scope_creators_button":"Escopo: Criadores",
+"creator_popup_title_fetching": "Publicações do Criador",
+"creator_popup_posts_area_title": "Publicações Buscadas",
+"creator_popup_posts_search_placeholder": "Pesquisar publicações buscadas por título...",
+"no_posts_fetched_yet_status": "Nenhuma publicação buscada ainda.",
+"fetched_posts_count_label": "{count} publicação(ões) buscada(s). Selecione para adicionar à fila.",
+"no_posts_found_for_selection": "Nenhuma publicação encontrada para o(s) criador(es) selecionado(s).",
+"fetched_posts_count_label_filtered": "Exibindo {count} publicação(ões) que correspondem ao filtro.",
+"no_posts_match_search_filter": "Nenhuma publicação corresponde ao seu filtro de pesquisa.",
+"fetch_error_for_creator_label": "Erro ao buscar para {creator_name}",
+"post_fetch_cancelled_status_done": "Busca de publicações cancelada.",
+"failed_to_fetch_or_no_posts_label": "Falha ao buscar publicações ou nenhuma publicação encontrada.",
+"select_posts_to_queue_message": "Por favor, selecione pelo menos uma publicação para adicionar à fila.",
 "favorite_artists_button_text":"🖼️ Artistas Favoritos",
 "favorite_artists_button_tooltip":"Navegue e baixe de seus artistas favoritos no Kemono.su/Coomer.su.",
 "favorite_posts_button_text":"📄 Publicações Favoritas",
@@ -3711,6 +3994,18 @@ translations ["pt"].update ({
 "manga_style_date_based_text":"Nome: Baseado na Data",
 "manga_style_title_global_num_text":"Nome: Título+Núm. Global",
 "manga_style_unknown_text":"Nome: Estilo Desconhecido",
+"manga_style_post_title_tooltip":"""Os arquivos são nomeados com base no título da publicação.
+- O primeiro arquivo em uma publicação é nomeado usando o título limpo da publicação (ex: 'Meu Capítulo 1.jpg').
+- Se a publicação contiver vários arquivos, os arquivos subsequentes também são nomeados usando o título da publicação, mas com um sufixo numérico como '_1', '_2', etc. (ex: 'Meu Capítulo 1_1.png', 'Meu Capítulo 1_2.gif'). O contador para o sufixo começa em 1 para o segundo arquivo.
+- Se uma publicação tiver apenas um arquivo, ele será nomeado com base no título da publicação sem sufixo.
+
+Exemplo: Publicação 'Capítulo Um' (3 arquivos: originalA.jpg, originalB.png, originalC.gif)
+Saída: 'Capítulo Um.jpg', 'Capítulo Um_1.png', 'Capítulo Um_2.gif'.""",
+"manga_style_original_file_tooltip":"Os arquivos tentam manter seus nomes de arquivo originais.\n\n- Um prefixo opcional pode ser inserido no campo de entrada que aparece ao lado deste botão de estilo.\n\nExemplo (com prefixo 'MinhaSérie'): 'MinhaSérie_ArquivoOriginal.jpg'.\nExemplo (sem prefixo): 'ArquivoOriginal.jpg'.",
+"manga_style_date_based_tooltip":"Os arquivos são nomeados sequencialmente (ex: 001.ext, 002.ext) com base na ordem de publicação dos posts.\n\n- Um prefixo opcional pode ser inserido no campo de entrada que aparece ao lado deste botão de estilo.\n- O multithreading para processamento de publicações é desativado automaticamente para este estilo para garantir a numeração correta.\n\nExemplo (com prefixo 'MeuQuadrinho'): 'MeuQuadrinho_001.jpg', 'MeuQuadrinho_002.png'.\nExemplo (sem prefixo): '001.jpg', '002.png'.",
+"manga_style_title_global_num_tooltip":"Os arquivos são nomeados com o título da publicação e um número sequencial global para todas as publicações.\n\n- Formato: '[Título da Publicação Limpo]_[Contador Global].[ext]'\n- O contador (ex: _001, _002) incrementa para cada arquivo baixado na sessão atual.\n- O multithreading para processamento de publicações é desativado automaticamente para este estilo para garantir a numeração correta.\n\nExemplo: Publicação 'Capítulo 1' (2 arquivos) -> 'Capítulo 1_001.jpg', 'Capítulo 1_002.png'.\nPróxima publicação 'Capítulo 2' (1 arquivo) -> 'Capítulo 2_003.jpg'.",
+"manga_style_unknown_tooltip":"O estilo de nome de arquivo de mangá é atualmente desconhecido. Isso é inesperado. Por favor, alterne para um estilo válido.",
+"manga_style_cycle_tooltip_suffix":"Clique para alternar para o próximo estilo.",
 "fav_artists_dialog_title":"Artistas Favoritos",
 "fav_artists_loading_status":"Carregando artistas favoritos...",
 "fav_artists_search_placeholder":"Pesquisar artistas...",
@@ -3748,6 +4043,8 @@ translations ["pt"].update ({
 "key_fetching_from_source_kemono_su":"Buscando favoritos do Kemono.su...",
 "key_fetching_from_source_coomer_su":"Buscando favoritos do Coomer.su...",
 "fav_posts_fetch_cancelled_status":"Busca de publicações favoritas cancelada.",
+"items_in_queue_placeholder": "{count} itens na fila do pop-up.",
+"post_fetch_finished_status": "Busca de publicações concluída para os criadores selecionados.",
 "known_names_filter_dialog_title":"Adicionar Nomes Conhecidos ao Filtro",
 "known_names_filter_search_placeholder":"Pesquisar nomes...",
 "known_names_filter_select_all_button":"Selecionar Todos",
@@ -4020,6 +4317,18 @@ translations ["zh_TW"].update ({
 "creator_popup_add_selected_button":"新增所選",
 "creator_popup_scope_characters_button":"範圍：角色",
 "creator_popup_scope_creators_button":"範圍：創作者",
+"creator_popup_title_fetching": "創作者貼文",
+"creator_popup_posts_area_title": "已擷取的貼文",
+"creator_popup_posts_search_placeholder": "按標題搜尋已擷取的貼文...",
+"no_posts_fetched_yet_status": "尚未擷取任何貼文。",
+"fetched_posts_count_label": "已擷取 {count} 篇貼文。選取以新增至佇列。",
+"no_posts_found_for_selection": "找不到所選創作者的貼文。",
+"fetched_posts_count_label_filtered": "正在顯示 {count} 篇符合篩選條件的貼文。",
+"no_posts_match_search_filter": "沒有貼文符合您的搜尋篩選條件。",
+"fetch_error_for_creator_label": "擷取 {creator_name} 時發生錯誤",
+"post_fetch_cancelled_status_done": "貼文擷取已取消。",
+"failed_to_fetch_or_no_posts_label": "擷取貼文失敗或找不到貼文。",
+"select_posts_to_queue_message": "請至少選擇一篇貼文以新增至佇列。",
 "favorite_artists_button_text":"🖼️ 最愛的藝術家",
 "favorite_artists_button_tooltip":"瀏覽並從您在 Kemono.su/Coomer.su 上最愛的藝術家下載。",
 "favorite_posts_button_text":"📄 最愛的貼文",
@@ -4035,6 +4344,18 @@ translations ["zh_TW"].update ({
 "manga_style_date_based_text":"命名：基於日期",
 "manga_style_title_global_num_text":"命名：標題+全域編號",
 "manga_style_unknown_text":"命名：未知樣式",
+"manga_style_post_title_tooltip":"""檔案根據貼文標題命名。
+- 貼文中的第一個檔案使用清理後的貼文標題命名（例如：「我的第一章.jpg」）。
+- 如果貼文包含多個檔案，後續檔案也使用貼文標題命名，但會加上數字後綴，例如「_1」、「_2」等（例如：「我的第一章_1.png」、「我的第一章_2.gif」）。後綴的計數器從第二個檔案的 1 開始。
+- 如果貼文只有一個檔案，則根據貼文標題命名，不加後綴。
+
+範例：貼文「第一章」（3 個檔案：originala.jpg、originalb.png、originalc.gif）
+輸出：「第一章.jpg」、「第一章_1.png」、「第一章_2.gif」。""",
+"manga_style_original_file_tooltip":"檔案會嘗試保留其原始檔名。\n\n- 可在此樣式按鈕旁邊出現的輸入欄位中輸入可選的前綴。\n\n範例（前綴「我的系列」）：「我的系列_原始檔案.jpg」。\n範例（無前綴）：「原始檔案.jpg」。",
+"manga_style_date_based_tooltip":"檔案根據貼文的發布順序按順序命名（例如：001.ext、002.ext）。\n\n- 可在此樣式按鈕旁邊出現的輸入欄位中輸入可選的前綴。\n- 此樣式會自動停用貼文處理的多執行緒，以確保正確的編號。\n\n範例（前綴「我的漫畫」）：「我的漫畫_001.jpg」、「我的漫畫_002.png」。\n範例（無前綴）：「001.jpg」、「002.png」。",
+"manga_style_title_global_num_tooltip":"檔案使用貼文標題和所有貼文的全域序號命名。\n\n- 格式：「[清理後的貼文標題]_[全域計數器].[ext]」\n- 計數器（例如：_001、_002）會針對目前工作階段中下載的每個檔案遞增。\n- 此樣式會自動停用貼文處理的多執行緒，以確保正確的編號。\n\n範例：貼文「第一章」（2 個檔案）-> 「第一章_001.jpg」、「第一章_002.png」。\n下一個貼文「第二章」（1 個檔案）-> 「第二章_003.jpg」。",
+"manga_style_unknown_tooltip":"漫畫檔名樣式目前未知。這是不預期的。請切換到有效的樣式。",
+"manga_style_cycle_tooltip_suffix":"點擊以切換到下一個樣式。",
 "fav_artists_dialog_title":"最愛的藝術家",
 "fav_artists_loading_status":"正在載入最愛的藝術家...",
 "fav_artists_search_placeholder":"搜尋藝術家...",
@@ -4072,6 +4393,10 @@ translations ["zh_TW"].update ({
 "key_fetching_from_source_kemono_su":"正在從 Kemono.su 擷取最愛...",
 "key_fetching_from_source_coomer_su":"正在從 Coomer.su 擷取最愛...",
 "fav_posts_fetch_cancelled_status":"最愛的貼文擷取已取消。",
+"items_in_queue_placeholder": "彈出視窗中有 {count} 個項目在佇列中。",
+"post_fetch_finished_status": "已完成擷取所選創作者的貼文。",
+"items_in_queue_placeholder": "彈出視窗中有 {count} 個項目在佇列中。",
+"post_fetch_finished_status": "已完成擷取所選創作者的貼文。",
 "known_names_filter_dialog_title":"將已知名稱新增至篩選器",
 "known_names_filter_search_placeholder":"搜尋名稱...",
 "known_names_filter_select_all_button":"全選",
