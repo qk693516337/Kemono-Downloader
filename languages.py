@@ -1406,7 +1406,7 @@ translations ["en"].update ({
 "creator_popup_add_selected_button": "Add Selected", # Already exists, but good to confirm
 "fetch_posts_button_text": "Fetch Posts",
 "creator_popup_scope_characters_button": "Scope: Characters",    
-"creator_popup_title_fetching": "Beiträge des Erstellers",
+"creator_popup_title_fetching": "Creator Selection",
 "creator_popup_posts_area_title": "Abgerufene Beiträge",
 "creator_popup_posts_search_placeholder": "Abgerufene Beiträge nach Titel suchen...",
 "no_posts_fetched_yet_status": "Noch keine Beiträge abgerufen.",
