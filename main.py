@@ -7363,6 +7363,9 @@ class DownloaderApp (QWidget ):
                 downloaded_files_from_future ,skipped_files_from_future ,kept_originals_from_future ,retryable_failures_from_post ,permanent_failures_from_post ,history_data_from_worker =result_tuple 
                 if history_data_from_worker :
                     self ._add_to_history_candidates (history_data_from_worker )
+                if permanent_failures_from_post:
+                    self.permanently_failed_files_for_dialog.extend(permanent_failures_from_post)
+                    self ._add_to_history_candidates (history_data_from_worker )
             with self .downloaded_files_lock :
                 self .download_counter +=downloaded_files_from_future 
                 self .skip_counter +=skipped_files_from_future 
