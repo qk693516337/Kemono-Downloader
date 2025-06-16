@@ -11,7 +11,7 @@ import http .client
 import traceback 
 import html 
 import subprocess 
-import datetime # Import the datetime module
+import datetime 
 import random 
 from collections import deque 
 import unicodedata 
@@ -62,7 +62,7 @@ try :
     FILE_DOWNLOAD_STATUS_SKIPPED ,
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER ,
     STYLE_DATE_BASED ,
-    STYLE_DATE_POST_TITLE, # Import new style
+    STYLE_DATE_POST_TITLE ,
     STYLE_POST_TITLE_GLOBAL_NUMBERING ,
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS ,
     download_mega_file as drive_download_mega_file ,
@@ -101,7 +101,7 @@ except ImportError as e :
     FILE_DOWNLOAD_STATUS_SKIPPED ="skipped"
     FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER ="failed_retry_later"
     STYLE_DATE_BASED ="date_based"
-    STYLE_DATE_POST_TITLE = "date_post_title"
+    STYLE_DATE_POST_TITLE ="date_post_title"
     STYLE_POST_TITLE_GLOBAL_NUMBERING ="post_title_global_numbering"
     CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS =set ()
     def drive_download_mega_file (*args ,**kwargs ):print ("drive_download_mega_file (stub)");pass 
@@ -122,34 +122,34 @@ except ImportError :
     sys .exit (1 )
 
 
-_app_icon_cache = None # Module-level cache
+_app_icon_cache =None 
 
-def get_app_icon_object():
+def get_app_icon_object ():
     """
     Loads and caches the application icon.
     Returns a QIcon object.
     """
-    global _app_icon_cache
-    if _app_icon_cache is not None and not _app_icon_cache.isNull():
-        return _app_icon_cache
+    global _app_icon_cache 
+    if _app_icon_cache is not None and not _app_icon_cache .isNull ():
+        return _app_icon_cache 
 
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        base_dir = sys._MEIPASS
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    icon_path = os.path.join(base_dir, 'assets', 'Kemono.ico')
-    
-    if os.path.exists(icon_path):
-        _app_icon_cache = QIcon(icon_path)
-        if _app_icon_cache.isNull():
-            print(f"Warning: QIcon created from '{icon_path}' is null. Icon might be invalid.")
-            _app_icon_cache = QIcon() # Store an empty icon to avoid re-processing
-    else:
-        print(f"Warning: Application icon 'assets/Kemono.ico' not found at {icon_path} (in get_app_icon_object)")
-        _app_icon_cache = QIcon() # Store an empty icon
-    
-    return _app_icon_cache
+    if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
+        base_dir =sys ._MEIPASS 
+    else :
+        base_dir =os .path .dirname (os .path .abspath (__file__ ))
+
+    icon_path =os .path .join (base_dir ,'assets','Kemono.ico')
+
+    if os .path .exists (icon_path ):
+        _app_icon_cache =QIcon (icon_path )
+        if _app_icon_cache .isNull ():
+            print (f"Warning: QIcon created from '{icon_path }' is null. Icon might be invalid.")
+            _app_icon_cache =QIcon ()
+    else :
+        print (f"Warning: Application icon 'assets/Kemono.ico' not found at {icon_path } (in get_app_icon_object)")
+        _app_icon_cache =QIcon ()
+
+    return _app_icon_cache 
 
 MAX_THREADS =200 
 RECOMMENDED_MAX_THREADS =50 
@@ -165,7 +165,7 @@ HTML_PREFIX ="<!HTML!>"
 CONFIG_ORGANIZATION_NAME ="KemonoDownloader"
 CONFIG_APP_NAME_MAIN ="ApplicationSettings"
 MANGA_FILENAME_STYLE_KEY ="mangaFilenameStyleV1"
-STYLE_POST_TITLE ="post_title" # Already defined in downloader_utils, but kept for clarity if used locally
+STYLE_POST_TITLE ="post_title"
 STYLE_ORIGINAL_NAME ="original_name"
 STYLE_DATE_BASED ="date_based"
 STYLE_POST_TITLE_GLOBAL_NUMBERING =STYLE_POST_TITLE_GLOBAL_NUMBERING 
@@ -200,23 +200,23 @@ class DownloadExtractedLinksDialog (QDialog ):
         super ().__init__ (parent )
         self .links_data =links_data 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
 
 
         if parent :
             parent_width =parent .width ()
-            parent_height =parent .height()
-            screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768 # Default to 768 if screen info unavailable
-            scale_factor = screen_height / 768.0 # Scale based on height relative to 768p
+            parent_height =parent .height ()
+            screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+            scale_factor =screen_height /768.0 
 
-            base_min_w ,base_min_h =500 ,400
-            scaled_min_w = int(base_min_w * scale_factor)
-            scaled_min_h = int(base_min_h * scale_factor)
+            base_min_w ,base_min_h =500 ,400 
+            scaled_min_w =int (base_min_w *scale_factor )
+            scaled_min_h =int (base_min_h *scale_factor )
 
-            self.setMinimumSize(scaled_min_w, scaled_min_h)
-            self.resize(max(int(parent_width * 0.6 * scale_factor), scaled_min_w), max(int(parent_height * 0.7 * scale_factor), scaled_min_h))
+            self .setMinimumSize (scaled_min_w ,scaled_min_h )
+            self .resize (max (int (parent_width *0.6 *scale_factor ),scaled_min_w ),max (int (parent_height *0.7 *scale_factor ),scaled_min_h ))
 
 
 
@@ -335,17 +335,17 @@ class ConfirmAddAllDialog (QDialog ):
         self .parent_app =parent_app 
         self .setModal (True )
         self .new_filter_objects_list =new_filter_objects_list 
-        self.setWindowTitle(self._tr("confirm_add_all_dialog_title", "Confirm Adding New Names"))    
+        self .setWindowTitle (self ._tr ("confirm_add_all_dialog_title","Confirm Adding New Names"))
         self .user_choice =CONFIRM_ADD_ALL_CANCEL_DOWNLOAD 
         self .setWindowTitle (self ._tr ("confirm_add_all_dialog_title","Confirm Adding New Names"))
 
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 768.0
+        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+        scale_factor =screen_height /768.0 
 
-        base_min_w ,base_min_h =480 ,350
-        scaled_min_w = int(base_min_w * scale_factor)
-        scaled_min_h = int(base_min_h * scale_factor)
-        self.setMinimumSize(scaled_min_w, scaled_min_h)
+        base_min_w ,base_min_h =480 ,350 
+        scaled_min_w =int (base_min_w *scale_factor )
+        scaled_min_h =int (base_min_h *scale_factor )
+        self .setMinimumSize (scaled_min_w ,scaled_min_h )
 
         main_layout =QVBoxLayout (self )
 
@@ -404,7 +404,7 @@ class ConfirmAddAllDialog (QDialog ):
         self .add_selected_button .setDefault (True )
 
     def _tr (self ,key ,default_text =""):
-        
+
         if callable (get_translation )and self .parent_app :
             return get_translation (self .parent_app .current_selected_language ,key ,default_text )
         return default_text 
@@ -463,12 +463,12 @@ class ExportOptionsDialog (QDialog ):
         self .setModal (True )
         self .selected_option =self .EXPORT_MODE_LINK_ONLY 
 
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 768.0
+        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+        scale_factor =screen_height /768.0 
 
-        base_min_w =350
-        scaled_min_w = int(base_min_w * scale_factor)
-        self.setMinimumWidth(scaled_min_w)
+        base_min_w =350 
+        scaled_min_w =int (base_min_w *scale_factor )
+        self .setMinimumWidth (scaled_min_w )
 
         layout =QVBoxLayout (self )
 
@@ -540,13 +540,13 @@ class ErrorFilesDialog (QDialog ):
         self .setModal (True )
         self .error_files =error_files_info_list 
 
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 768.0
+        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+        scale_factor =screen_height /768.0 
 
-        base_min_w ,base_min_h =500 ,300
-        scaled_min_w = int(base_min_w * scale_factor)
-        scaled_min_h = int(base_min_h * scale_factor)
-        self.setMinimumSize(scaled_min_w, scaled_min_h)
+        base_min_w ,base_min_h =500 ,300 
+        scaled_min_w =int (base_min_w *scale_factor )
+        scaled_min_h =int (base_min_h *scale_factor )
+        self .setMinimumSize (scaled_min_w ,scaled_min_h )
 
         main_layout =QVBoxLayout (self )
 
@@ -684,13 +684,13 @@ class FutureSettingsDialog (QDialog ):
         self .parent_app =parent_app_ref 
         self .setModal (True )
 
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 768.0
+        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+        scale_factor =screen_height /768.0 
 
-        base_min_w ,base_min_h =380 ,250
-        scaled_min_w = int(base_min_w * scale_factor)
-        scaled_min_h = int(base_min_h * scale_factor)
-        self.setMinimumSize(scaled_min_w, scaled_min_h)
+        base_min_w ,base_min_h =380 ,250 
+        scaled_min_w =int (base_min_w *scale_factor )
+        scaled_min_h =int (base_min_h *scale_factor )
+        self .setMinimumSize (scaled_min_w ,scaled_min_h )
 
         layout =QVBoxLayout (self )
 
@@ -822,57 +822,57 @@ class EmptyPopupDialog (QDialog ):
     def __init__ (self ,app_base_dir ,parent_app_ref ,parent =None ):
         super ().__init__ (parent )
         self .setMinimumSize (400 ,300 )
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 768.0
-        self.setMinimumSize(int(400 * scale_factor), int(300 * scale_factor))
- 
+        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+        scale_factor =screen_height /768.0 
+        self .setMinimumSize (int (400 *scale_factor ),int (300 *scale_factor ))
+
         self .parent_app =parent_app_ref 
         self .current_scope_mode =self .SCOPE_CHARACTERS 
         self .app_base_dir =app_base_dir 
 
-        app_icon = get_app_icon_object()
-        if app_icon and not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if app_icon and not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
         self .selected_creators_for_queue =[]
         self .globally_selected_creators ={}
-        self.fetched_posts_data = {} # Stores posts by (service, user_id)
-        self.post_fetch_thread = None
-        self.TITLE_COLUMN_WIDTH_FOR_POSTS = 70 # Define column width
-        self.globally_selected_post_ids = set() # To store (service, user_id, post_id) tuples
-        self._is_scrolling_titles = False # For scroll synchronization
-        self._is_scrolling_dates = False  # For scroll synchronization
-
-        # Main layout for the dialog will be a QHBoxLayout holding the splitter
-        dialog_layout = QHBoxLayout(self)
-        self.setLayout(dialog_layout)
+        self .fetched_posts_data ={}
+        self .post_fetch_thread =None 
+        self .TITLE_COLUMN_WIDTH_FOR_POSTS =70 
+        self .globally_selected_post_ids =set ()
+        self ._is_scrolling_titles =False 
+        self ._is_scrolling_dates =False 
 
 
-        # --- Left Pane (Creator Selection) ---
-        self.left_pane_widget = QWidget()
-        left_pane_layout = QVBoxLayout(self.left_pane_widget)
+        dialog_layout =QHBoxLayout (self )
+        self .setLayout (dialog_layout )
 
-        # Create a horizontal layout for search input and fetch button
-        search_fetch_layout = QHBoxLayout()
+
+
+        self .left_pane_widget =QWidget ()
+        left_pane_layout =QVBoxLayout (self .left_pane_widget )
+
+
+        search_fetch_layout =QHBoxLayout ()
         self .search_input =QLineEdit ()
         self .search_input .textChanged .connect (self ._filter_list )
-        search_fetch_layout.addWidget(self.search_input, 1) # Give search input more stretch
-        self.fetch_posts_button = QPushButton() # Placeholder text, will be translated
-        self.fetch_posts_button.setEnabled(False) # Initially disabled
-        self.fetch_posts_button.clicked.connect(self._handle_fetch_posts_click)
-        search_fetch_layout.addWidget(self.fetch_posts_button)
-        left_pane_layout.addLayout(search_fetch_layout)
-        
+        search_fetch_layout .addWidget (self .search_input ,1 )
+        self .fetch_posts_button =QPushButton ()
+        self .fetch_posts_button .setEnabled (False )
+        self .fetch_posts_button .clicked .connect (self ._handle_fetch_posts_click )
+        search_fetch_layout .addWidget (self .fetch_posts_button )
+        left_pane_layout .addLayout (search_fetch_layout )
+
         self .progress_bar =QProgressBar ()
         self .progress_bar .setRange (0 ,0 )
         self .progress_bar .setTextVisible (False )
         self .progress_bar .setVisible (False )
-        left_pane_layout.addWidget (self .progress_bar )
+        left_pane_layout .addWidget (self .progress_bar )
 
         self .list_widget =QListWidget ()
         self .list_widget .itemChanged .connect (self ._handle_item_check_changed )
-        left_pane_layout.addWidget (self .list_widget )
+        left_pane_layout .addWidget (self .list_widget )
 
-        # Bottom buttons for left pane
+
         left_bottom_buttons_layout =QHBoxLayout ()
         self .add_selected_button =QPushButton ()
         self .add_selected_button .setToolTip (
@@ -882,156 +882,156 @@ class EmptyPopupDialog (QDialog ):
         )
         self .add_selected_button .clicked .connect (self ._handle_add_selected )
         self .add_selected_button .setDefault (True )
-        left_bottom_buttons_layout.addWidget (self .add_selected_button )
+        left_bottom_buttons_layout .addWidget (self .add_selected_button )
         self .scope_button =QPushButton ()
         self .scope_button .clicked .connect (self ._toggle_scope_mode )
-        left_bottom_buttons_layout.addWidget (self .scope_button )
-        left_pane_layout.addLayout(left_bottom_buttons_layout)
-
-        # --- Right Pane (Posts - initially hidden) ---
-        self.right_pane_widget = QWidget()
-        right_pane_layout = QVBoxLayout(self.right_pane_widget)
-
-        self.posts_area_title_label = QLabel("Fetched Posts")
-        self.posts_area_title_label.setAlignment(Qt.AlignCenter)
-        right_pane_layout.addWidget(self.posts_area_title_label)
-
-        self.posts_search_input = QLineEdit()
-        self.posts_search_input.setVisible(False) # Initially hidden until posts are fetched
-        # Placeholder text will be set in _retranslate_ui
-        self.posts_search_input.textChanged.connect(self._filter_fetched_posts_list)
-        right_pane_layout.addWidget(self.posts_search_input) # Moved search input up
-
-        # Headers for the new two-column layout (Title and Date)
-        posts_headers_layout = QHBoxLayout()
-        self.posts_title_header_label = QLabel() # Text set in _retranslate_ui
-        self.posts_title_header_label.setStyleSheet("font-weight: bold; padding-left: 20px;") # Padding for checkbox alignment
-        posts_headers_layout.addWidget(self.posts_title_header_label, 7) # 70% stretch factor
-
-        self.posts_date_header_label = QLabel() # Text set in _retranslate_ui
-        self.posts_date_header_label.setStyleSheet("font-weight: bold;")
-        posts_headers_layout.addWidget(self.posts_date_header_label, 3) # 30% stretch factor
-        right_pane_layout.addLayout(posts_headers_layout)
+        left_bottom_buttons_layout .addWidget (self .scope_button )
+        left_pane_layout .addLayout (left_bottom_buttons_layout )
 
 
-        # Splitter for Title and Date lists
-        self.posts_content_splitter = QSplitter(Qt.Horizontal)
+        self .right_pane_widget =QWidget ()
+        right_pane_layout =QVBoxLayout (self .right_pane_widget )
 
-        self.posts_title_list_widget = QListWidget() # Renamed from self.posts_list_widget
-        self.posts_title_list_widget.itemChanged.connect(self._handle_post_item_check_changed)
-        self.posts_title_list_widget.setAlternatingRowColors(True) # Enable alternating row colors
-        self.posts_content_splitter.addWidget(self.posts_title_list_widget)
+        self .posts_area_title_label =QLabel ("Fetched Posts")
+        self .posts_area_title_label .setAlignment (Qt .AlignCenter )
+        right_pane_layout .addWidget (self .posts_area_title_label )
 
-        self.posts_date_list_widget = QListWidget() # New list for dates
-        self.posts_date_list_widget.setSelectionMode(QAbstractItemView.NoSelection) # Dates are not selectable/interactive
-        self.posts_date_list_widget.setAlternatingRowColors(True) # Enable alternating row colors
-        self.posts_date_list_widget.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff) # No horizontal scroll for dates
-        self.posts_content_splitter.addWidget(self.posts_date_list_widget)
+        self .posts_search_input =QLineEdit ()
+        self .posts_search_input .setVisible (False )
 
-        right_pane_layout.addWidget(self.posts_content_splitter, 1) # Add stretch factor of 1
+        self .posts_search_input .textChanged .connect (self ._filter_fetched_posts_list )
+        right_pane_layout .addWidget (self .posts_search_input )
 
-        posts_buttons_top_layout = QHBoxLayout()
-        self.posts_select_all_button = QPushButton() # Text set in _retranslate_ui
-        self.posts_select_all_button.clicked.connect(self._handle_posts_select_all)
-        posts_buttons_top_layout.addWidget(self.posts_select_all_button)
 
-        self.posts_deselect_all_button = QPushButton() # Text set in _retranslate_ui
-        self.posts_deselect_all_button.clicked.connect(self._handle_posts_deselect_all)
-        posts_buttons_top_layout.addWidget(self.posts_deselect_all_button)
-        right_pane_layout.addLayout(posts_buttons_top_layout)
+        posts_headers_layout =QHBoxLayout ()
+        self .posts_title_header_label =QLabel ()
+        self .posts_title_header_label .setStyleSheet ("font-weight: bold; padding-left: 20px;")
+        posts_headers_layout .addWidget (self .posts_title_header_label ,7 )
 
-        posts_buttons_bottom_layout = QHBoxLayout()
-        self.posts_add_selected_button = QPushButton() # Text set in _retranslate_ui
-        self.posts_add_selected_button.clicked.connect(self._handle_posts_add_selected_to_queue)
-        posts_buttons_bottom_layout.addWidget(self.posts_add_selected_button)
-
-        self.posts_close_button = QPushButton() # Text set in _retranslate_ui
-        self.posts_close_button.clicked.connect(self._handle_posts_close_view)
-        posts_buttons_bottom_layout.addWidget(self.posts_close_button)
-        right_pane_layout.addLayout(posts_buttons_bottom_layout)
-        
-        self.right_pane_widget.hide() # Initially hidden
+        self .posts_date_header_label =QLabel ()
+        self .posts_date_header_label .setStyleSheet ("font-weight: bold;")
+        posts_headers_layout .addWidget (self .posts_date_header_label ,3 )
+        right_pane_layout .addLayout (posts_headers_layout )
 
 
 
+        self .posts_content_splitter =QSplitter (Qt .Horizontal )
 
-        # --- Splitter ---
-        self.main_splitter = QSplitter(Qt.Horizontal)
-        self.main_splitter.addWidget(self.left_pane_widget)
-        self.main_splitter.addWidget(self.right_pane_widget)
-        self.main_splitter.setCollapsible(0, False) # Prevent left pane from collapsing
-        self.main_splitter.setCollapsible(1, True) # Allow right pane to be hidden
+        self .posts_title_list_widget =QListWidget ()
+        self .posts_title_list_widget .itemChanged .connect (self ._handle_post_item_check_changed )
+        self .posts_title_list_widget .setAlternatingRowColors (True )
+        self .posts_content_splitter .addWidget (self .posts_title_list_widget )
 
-        # Connect scrollbars for synchronized scrolling (AFTER both widgets are created)
-        self.posts_title_list_widget.verticalScrollBar().valueChanged.connect(self._sync_scroll_dates)
-        self.posts_date_list_widget.verticalScrollBar().valueChanged.connect(self._sync_scroll_titles)     
-        dialog_layout.addWidget(self.main_splitter)
+        self .posts_date_list_widget =QListWidget ()
+        self .posts_date_list_widget .setSelectionMode (QAbstractItemView .NoSelection )
+        self .posts_date_list_widget .setAlternatingRowColors (True )
+        self .posts_date_list_widget .setHorizontalScrollBarPolicy (Qt .ScrollBarAlwaysOff )
+        self .posts_content_splitter .addWidget (self .posts_date_list_widget )
 
-        self.original_size = self.sizeHint() # Store initial size hint
-        self.main_splitter.setSizes([int(self.width() * scale_factor), 0]) # Left pane takes all width initially (before resize)
+        right_pane_layout .addWidget (self .posts_content_splitter ,1 )
+
+        posts_buttons_top_layout =QHBoxLayout ()
+        self .posts_select_all_button =QPushButton ()
+        self .posts_select_all_button .clicked .connect (self ._handle_posts_select_all )
+        posts_buttons_top_layout .addWidget (self .posts_select_all_button )
+
+        self .posts_deselect_all_button =QPushButton ()
+        self .posts_deselect_all_button .clicked .connect (self ._handle_posts_deselect_all )
+        posts_buttons_top_layout .addWidget (self .posts_deselect_all_button )
+        right_pane_layout .addLayout (posts_buttons_top_layout )
+
+        posts_buttons_bottom_layout =QHBoxLayout ()
+        self .posts_add_selected_button =QPushButton ()
+        self .posts_add_selected_button .clicked .connect (self ._handle_posts_add_selected_to_queue )
+        posts_buttons_bottom_layout .addWidget (self .posts_add_selected_button )
+
+        self .posts_close_button =QPushButton ()
+        self .posts_close_button .clicked .connect (self ._handle_posts_close_view )
+        posts_buttons_bottom_layout .addWidget (self .posts_close_button )
+        right_pane_layout .addLayout (posts_buttons_bottom_layout )
+
+        self .right_pane_widget .hide ()
+
+
+
+
+
+        self .main_splitter =QSplitter (Qt .Horizontal )
+        self .main_splitter .addWidget (self .left_pane_widget )
+        self .main_splitter .addWidget (self .right_pane_widget )
+        self .main_splitter .setCollapsible (0 ,False )
+        self .main_splitter .setCollapsible (1 ,True )
+
+
+        self .posts_title_list_widget .verticalScrollBar ().valueChanged .connect (self ._sync_scroll_dates )
+        self .posts_date_list_widget .verticalScrollBar ().valueChanged .connect (self ._sync_scroll_titles )
+        dialog_layout .addWidget (self .main_splitter )
+
+        self .original_size =self .sizeHint ()
+        self .main_splitter .setSizes ([int (self .width ()*scale_factor ),0 ])
 
         self ._retranslate_ui ()
 
         if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
             self .setStyleSheet (self .parent_app .get_dark_theme ())
 
-        # Set initial size for the dialog (before fetching posts)
-        self.resize(int((self.original_size.width() + 50) * scale_factor), int((self.original_size.height() + 100) * scale_factor)) # A bit larger than pure hint
+
+        self .resize (int ((self .original_size .width ()+50 )*scale_factor ),int ((self .original_size .height ()+100 )*scale_factor ))
 
         QTimer .singleShot (0 ,self ._perform_initial_load )
 
-    def _center_on_screen(self):
+    def _center_on_screen (self ):
         """Centers the dialog on the parent's screen or the primary screen."""
-        if self.parent_app:
-            parent_rect = self.parent_app.frameGeometry()
-            self.move(parent_rect.center() - self.rect().center())
-        else:
-            try:
-                screen_geo = QApplication.primaryScreen().availableGeometry()
-                self.move(screen_geo.center() - self.rect().center())
-            except AttributeError: # Fallback if no screen info (e.g., headless test)
-                pass
+        if self .parent_app :
+            parent_rect =self .parent_app .frameGeometry ()
+            self .move (parent_rect .center ()-self .rect ().center ())
+        else :
+            try :
+                screen_geo =QApplication .primaryScreen ().availableGeometry ()
+                self .move (screen_geo .center ()-self .rect ().center ())
+            except AttributeError :
+                pass 
 
-    def _handle_fetch_posts_click(self):
-        selected_creators = list(self.globally_selected_creators.values())
-        if not selected_creators:
-            QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
-                                    "Please select at least one creator to fetch posts for.")
-            return
+    def _handle_fetch_posts_click (self ):
+        selected_creators =list (self .globally_selected_creators .values ())
+        if not selected_creators :
+            QMessageBox .information (self ,self ._tr ("no_selection_title","No Selection"),
+            "Please select at least one creator to fetch posts for.")
+            return 
 
-        if self.parent_app:
-            parent_geometry = self.parent_app.geometry()
-            new_width = int(parent_geometry.width() * 0.75)
-            new_height = int(parent_geometry.height() * 0.80)
-            self.resize(new_width, new_height)
-            self._center_on_screen()
+        if self .parent_app :
+            parent_geometry =self .parent_app .geometry ()
+            new_width =int (parent_geometry .width ()*0.75 )
+            new_height =int (parent_geometry .height ()*0.80 )
+            self .resize (new_width ,new_height )
+            self ._center_on_screen ()
 
-        self.right_pane_widget.show()
-        QTimer.singleShot(10, lambda: self.main_splitter.setSizes([int(self.width() * 0.3), int(self.width() * 0.7)]))
-        # Set initial sizes for the new posts_content_splitter (70/30 for title/date)
-        QTimer.singleShot(20, lambda: self.posts_content_splitter.setSizes([int(self.posts_content_splitter.width() * 0.7), int(self.posts_content_splitter.width() * 0.3)]))      
-        self.add_selected_button.setEnabled(False)
-        self.globally_selected_post_ids.clear() # Clear previous post selections    
-        self.posts_search_input.setVisible(True)
-        self.setWindowTitle(self._tr("creator_popup_title_fetching", "Creator Posts"))
-        
-        self.fetch_posts_button.setEnabled(False)
-        self.posts_title_list_widget.clear()
-        self.posts_date_list_widget.clear() # Clear date list as well       
-        self.fetched_posts_data.clear()
-        self.posts_area_title_label.setText(self._tr("fav_posts_loading_status", "Loading favorite posts...")) # Generic loading
-        self.posts_title_list_widget.itemChanged.connect(self._handle_post_item_check_changed) # Connect here
-        self.progress_bar.setVisible(True)
+        self .right_pane_widget .show ()
+        QTimer .singleShot (10 ,lambda :self .main_splitter .setSizes ([int (self .width ()*0.3 ),int (self .width ()*0.7 )]))
 
-        if self.post_fetch_thread and self.post_fetch_thread.isRunning():
-            self.post_fetch_thread.cancel()
-            self.post_fetch_thread.wait()
-        self.post_fetch_thread = PostsFetcherThread(selected_creators, self)
-        self.post_fetch_thread.status_update.connect(self._handle_fetch_status_update)
-        self.post_fetch_thread.posts_fetched_signal.connect(self._handle_posts_fetched)
-        self.post_fetch_thread.fetch_error_signal.connect(self._handle_fetch_error)
-        self.post_fetch_thread.finished_signal.connect(self._handle_fetch_finished)
-        self.post_fetch_thread.start()
+        QTimer .singleShot (20 ,lambda :self .posts_content_splitter .setSizes ([int (self .posts_content_splitter .width ()*0.7 ),int (self .posts_content_splitter .width ()*0.3 )]))
+        self .add_selected_button .setEnabled (False )
+        self .globally_selected_post_ids .clear ()
+        self .posts_search_input .setVisible (True )
+        self .setWindowTitle (self ._tr ("creator_popup_title_fetching","Creator Posts"))
+
+        self .fetch_posts_button .setEnabled (False )
+        self .posts_title_list_widget .clear ()
+        self .posts_date_list_widget .clear ()
+        self .fetched_posts_data .clear ()
+        self .posts_area_title_label .setText (self ._tr ("fav_posts_loading_status","Loading favorite posts..."))
+        self .posts_title_list_widget .itemChanged .connect (self ._handle_post_item_check_changed )
+        self .progress_bar .setVisible (True )
+
+        if self .post_fetch_thread and self .post_fetch_thread .isRunning ():
+            self .post_fetch_thread .cancel ()
+            self .post_fetch_thread .wait ()
+        self .post_fetch_thread =PostsFetcherThread (selected_creators ,self )
+        self .post_fetch_thread .status_update .connect (self ._handle_fetch_status_update )
+        self .post_fetch_thread .posts_fetched_signal .connect (self ._handle_posts_fetched )
+        self .post_fetch_thread .fetch_error_signal .connect (self ._handle_fetch_error )
+        self .post_fetch_thread .finished_signal .connect (self ._handle_fetch_finished )
+        self .post_fetch_thread .start ()
 
     def _tr (self ,key ,default_text =""):
         """Helper to get translation based on current app language."""
@@ -1043,31 +1043,31 @@ class EmptyPopupDialog (QDialog ):
         self .setWindowTitle (self ._tr ("creator_popup_title","Creator Selection"))
         self .search_input .setPlaceholderText (self ._tr ("creator_popup_search_placeholder","Search by name, service, or paste creator URL..."))
         self .add_selected_button .setText (self ._tr ("creator_popup_add_selected_button","Add Selected"))
-        self .fetch_posts_button.setText(self._tr("fetch_posts_button_text", "Fetch Posts"))
+        self .fetch_posts_button .setText (self ._tr ("fetch_posts_button_text","Fetch Posts"))
         self ._update_scope_button_text_and_tooltip ()
-        
-        self.posts_search_input.setPlaceholderText(self._tr("creator_popup_posts_search_placeholder", "Search fetched posts by title..."))
-        # Set header texts for the new two-column layout
-        self.posts_title_header_label.setText(self._tr("column_header_post_title", "Post Title"))
-        self.posts_date_header_label.setText(self._tr("column_header_date_uploaded", "Date Uploaded"))
-        # Retranslate right pane elements
-        self.posts_area_title_label.setText(self._tr("creator_popup_posts_area_title", "Fetched Posts")) # Placeholder key
-        self.posts_select_all_button.setText(self._tr("select_all_button_text", "Select All"))
-        self.posts_deselect_all_button.setText(self._tr("deselect_all_button_text", "Deselect All"))
-        self.posts_add_selected_button.setText(self._tr("creator_popup_add_posts_to_queue_button", "Add Selected Posts to Queue")) # Placeholder key
-        self.posts_close_button.setText(self._tr("fav_posts_cancel_button", "Cancel")) # Re-use cancel
 
-    def _sync_scroll_dates(self, value):
-        if not self._is_scrolling_titles: # Check flag
-            self._is_scrolling_dates = True # Set own flag
-            self.posts_date_list_widget.verticalScrollBar().setValue(value)
-            self._is_scrolling_dates = False # Clear own flag
+        self .posts_search_input .setPlaceholderText (self ._tr ("creator_popup_posts_search_placeholder","Search fetched posts by title..."))
 
-    def _sync_scroll_titles(self, value):
-        if not self._is_scrolling_dates: # Check flag
-            self._is_scrolling_titles = True # Set own flag
-            self.posts_title_list_widget.verticalScrollBar().setValue(value)
-            self._is_scrolling_titles = False # Clear own flag
+        self .posts_title_header_label .setText (self ._tr ("column_header_post_title","Post Title"))
+        self .posts_date_header_label .setText (self ._tr ("column_header_date_uploaded","Date Uploaded"))
+
+        self .posts_area_title_label .setText (self ._tr ("creator_popup_posts_area_title","Fetched Posts"))
+        self .posts_select_all_button .setText (self ._tr ("select_all_button_text","Select All"))
+        self .posts_deselect_all_button .setText (self ._tr ("deselect_all_button_text","Deselect All"))
+        self .posts_add_selected_button .setText (self ._tr ("creator_popup_add_posts_to_queue_button","Add Selected Posts to Queue"))
+        self .posts_close_button .setText (self ._tr ("fav_posts_cancel_button","Cancel"))
+
+    def _sync_scroll_dates (self ,value ):
+        if not self ._is_scrolling_titles :
+            self ._is_scrolling_dates =True 
+            self .posts_date_list_widget .verticalScrollBar ().setValue (value )
+            self ._is_scrolling_dates =False 
+
+    def _sync_scroll_titles (self ,value ):
+        if not self ._is_scrolling_dates :
+            self ._is_scrolling_titles =True 
+            self .posts_title_list_widget .verticalScrollBar ().setValue (value )
+            self ._is_scrolling_titles =False 
 
     def _perform_initial_load (self ):
         """Called by QTimer to load data after dialog is shown."""
@@ -1323,327 +1323,327 @@ class EmptyPopupDialog (QDialog ):
         f"'{self .SCOPE_CHARACTERS }': Downloads into character-named folders directly in the main Download Location (artists mixed).\n"
         f"'{self .SCOPE_CREATORS }': Downloads into artist-named subfolders within the main Download Location, then character folders inside those.")
 
-    def _handle_fetch_status_update(self, message):
-        if self.parent_app:
-            self.parent_app.log_signal.emit(f"[CreatorPopup Fetch] {message}")
-        self.posts_area_title_label.setText(message)
+    def _handle_fetch_status_update (self ,message ):
+        if self .parent_app :
+            self .parent_app .log_signal .emit (f"[CreatorPopup Fetch] {message }")
+        self .posts_area_title_label .setText (message )
 
-    def _handle_posts_fetched(self, creator_info, posts_list):
-        creator_key = (creator_info.get('service'), str(creator_info.get('id')))
-        # Store both creator_info and the posts_list
-        self.fetched_posts_data[creator_key] = (creator_info, posts_list)
-        self._filter_fetched_posts_list() # Refresh list with current filter
+    def _handle_posts_fetched (self ,creator_info ,posts_list ):
+        creator_key =(creator_info .get ('service'),str (creator_info .get ('id')))
 
-    def _filter_fetched_posts_list(self):
-        search_text = self.posts_search_input.text().lower().strip()
-        
-        data_for_rebuild = {} 
+        self .fetched_posts_data [creator_key ]=(creator_info ,posts_list )
+        self ._filter_fetched_posts_list ()
 
-        if not self.fetched_posts_data:
-            self.posts_area_title_label.setText(self._tr("no_posts_fetched_yet_status", "No posts fetched yet."))
-        elif not search_text:
-            data_for_rebuild = self.fetched_posts_data
-            # Adjust for tuple structure: (creator_info, posts_list)
-            total_posts_in_view = sum(len(posts_tuple[1]) for posts_tuple in data_for_rebuild.values())
-            if total_posts_in_view > 0:
-                self.posts_area_title_label.setText(self._tr("fetched_posts_count_label", "Fetched {count} post(s). Select to add to queue.").format(count=total_posts_in_view))
-            else: 
-                self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
-        else: 
-            for creator_key, (creator_data_tuple_part, posts_list_tuple_part) in self.fetched_posts_data.items(): # Unpack tuple
-                matching_posts_for_creator = [
-                    post for post in posts_list_tuple_part # Use posts_list_tuple_part
-                    if search_text in post.get('title', '').lower()
+    def _filter_fetched_posts_list (self ):
+        search_text =self .posts_search_input .text ().lower ().strip ()
+
+        data_for_rebuild ={}
+
+        if not self .fetched_posts_data :
+            self .posts_area_title_label .setText (self ._tr ("no_posts_fetched_yet_status","No posts fetched yet."))
+        elif not search_text :
+            data_for_rebuild =self .fetched_posts_data 
+
+            total_posts_in_view =sum (len (posts_tuple [1 ])for posts_tuple in data_for_rebuild .values ())
+            if total_posts_in_view >0 :
+                self .posts_area_title_label .setText (self ._tr ("fetched_posts_count_label","Fetched {count} post(s). Select to add to queue.").format (count =total_posts_in_view ))
+            else :
+                self .posts_area_title_label .setText (self ._tr ("no_posts_found_for_selection","No posts found for selected creator(s)."))
+        else :
+            for creator_key ,(creator_data_tuple_part ,posts_list_tuple_part )in self .fetched_posts_data .items ():
+                matching_posts_for_creator =[
+                post for post in posts_list_tuple_part 
+                if search_text in post .get ('title','').lower ()
                 ]
-                if matching_posts_for_creator:
-                    # Store the tuple back, with original creator_info and filtered posts
-                    data_for_rebuild[creator_key] = (creator_data_tuple_part, matching_posts_for_creator)
-            
-            # Adjust for tuple structure
-            total_matching_posts = sum(len(posts_tuple[1]) for posts_tuple in data_for_rebuild.values())
-            if total_matching_posts > 0:
-                self.posts_area_title_label.setText(self._tr("fetched_posts_count_label_filtered", "Displaying {count} post(s) matching filter.").format(count=total_matching_posts))
-            else:
-                self.posts_area_title_label.setText(self._tr("no_posts_match_search_filter", "No posts match your search filter."))
-        
-        self._rebuild_posts_list_widget(filtered_data_map=data_for_rebuild)
+                if matching_posts_for_creator :
 
-    def _rebuild_posts_list_widget(self, filtered_data_map):
-        self.posts_title_list_widget.blockSignals(True) # Block signals during repopulation
-        self.posts_date_list_widget.blockSignals(True)       
-        self.posts_title_list_widget.clear()
-        self.posts_date_list_widget.clear() # Clear date list as well
-        data_to_display = filtered_data_map 
+                    data_for_rebuild [creator_key ]=(creator_data_tuple_part ,matching_posts_for_creator )
 
-        if not data_to_display:
-            self.posts_title_list_widget.blockSignals(False) # Corrected widget name
-            self.posts_date_list_widget.blockSignals(False)                      
-            return
 
-        # Sort creator keys based on the name stored within the fetched data tuple
-        sorted_creator_keys = sorted(
-            data_to_display.keys(),
-            key=lambda k: data_to_display[k][0].get('name', '').lower() # data_to_display[k] is (creator_info, posts_list)
+            total_matching_posts =sum (len (posts_tuple [1 ])for posts_tuple in data_for_rebuild .values ())
+            if total_matching_posts >0 :
+                self .posts_area_title_label .setText (self ._tr ("fetched_posts_count_label_filtered","Displaying {count} post(s) matching filter.").format (count =total_matching_posts ))
+            else :
+                self .posts_area_title_label .setText (self ._tr ("no_posts_match_search_filter","No posts match your search filter."))
+
+        self ._rebuild_posts_list_widget (filtered_data_map =data_for_rebuild )
+
+    def _rebuild_posts_list_widget (self ,filtered_data_map ):
+        self .posts_title_list_widget .blockSignals (True )
+        self .posts_date_list_widget .blockSignals (True )
+        self .posts_title_list_widget .clear ()
+        self .posts_date_list_widget .clear ()
+        data_to_display =filtered_data_map 
+
+        if not data_to_display :
+            self .posts_title_list_widget .blockSignals (False )
+            self .posts_date_list_widget .blockSignals (False )
+            return 
+
+
+        sorted_creator_keys =sorted (
+        data_to_display .keys (),
+        key =lambda k :data_to_display [k ][0 ].get ('name','').lower ()
         )
 
-        total_posts_shown = 0
-        for creator_key in sorted_creator_keys:
-            # Get creator_info and posts_for_this_creator from the stored tuple
-            creator_info_original, posts_for_this_creator = data_to_display.get(creator_key, (None, []))
+        total_posts_shown =0 
+        for creator_key in sorted_creator_keys :
 
-            if not creator_info_original or not posts_for_this_creator: # Ensure both parts of tuple are valid
-                continue
-            
-            creator_header_item = QListWidgetItem(f"--- {self._tr('posts_for_creator_header', 'Posts for')} {creator_info_original['name']} ({creator_info_original['service']}) ---")
-            font = creator_header_item.font()
-            font.setBold(True)
-            creator_header_item.setFont(font)
-            creator_header_item.setFlags(Qt.NoItemFlags)
-            self.posts_title_list_widget.addItem(creator_header_item)
-            self.posts_date_list_widget.addItem(QListWidgetItem("")) # Add empty item to date list for spacing
+            creator_info_original ,posts_for_this_creator =data_to_display .get (creator_key ,(None ,[]))
 
-            for post in posts_for_this_creator:
-                post_title = post.get('title', self._tr('untitled_post_placeholder', 'Untitled Post'))
+            if not creator_info_original or not posts_for_this_creator :
+                continue 
 
-                # Add date prefix
-                date_prefix_str = "[No Date]" # Default
-                published_date_str = post.get('published')
-                added_date_str = post.get('added')
-                
-                date_to_use_str = None
-                if published_date_str:
-                    date_to_use_str = published_date_str
-                elif added_date_str:
-                    date_to_use_str = added_date_str
-                
-                if date_to_use_str:
-                    try:
-                        # Assuming date is in ISO format like YYYY-MM-DDTHH:MM:SS
-                        formatted_date = date_to_use_str.split('T')[0]
-                        date_prefix_str = f"[{formatted_date}]"
-                    except Exception: # pylint: disable=bare-except
-                        pass # Keep "[No Date]" if parsing fails
-                            
-                # Determine date string
-                date_display_str = "[No Date]" # Default
-                published_date_str = post.get('published')
-                added_date_str = post.get('added')
-                
-                date_to_use_str = None
-                if published_date_str:
-                    date_to_use_str = published_date_str
-                elif added_date_str:
-                    date_to_use_str = added_date_str
-                
-                if date_to_use_str:
-                    try:
-                        # Assuming date is in ISO format like YYYY-MM-DDTHH:MM:SS
-                        formatted_date = date_to_use_str.split('T')[0]
-                        date_display_str = f"[{formatted_date}]"
-                    except Exception: # pylint: disable=bare-except
-                        pass # Keep "[No Date]" if parsing fails
-                
-                # Title item
-                title_item_text = f"  {post_title}" # Display full title, QListWidget handles ellipsis
-                item = QListWidgetItem(title_item_text)
-                item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
-                item.setCheckState(Qt.Unchecked)
-                item_data = {
-                    'title': post_title,
-                    'id': post.get('id'),
-                    'service': creator_info_original['service'],
-                    'user_id': creator_info_original['id'],
-                    'creator_name': creator_info_original['name'],
-                    'full_post_data': post,
-                    'date_display_str': date_display_str, # Store formatted date for easy access
-                    'published_date_for_sort': date_to_use_str # Store raw date for potential future sorting
+            creator_header_item =QListWidgetItem (f"--- {self ._tr ('posts_for_creator_header','Posts for')} {creator_info_original ['name']} ({creator_info_original ['service']}) ---")
+            font =creator_header_item .font ()
+            font .setBold (True )
+            creator_header_item .setFont (font )
+            creator_header_item .setFlags (Qt .NoItemFlags )
+            self .posts_title_list_widget .addItem (creator_header_item )
+            self .posts_date_list_widget .addItem (QListWidgetItem (""))
+
+            for post in posts_for_this_creator :
+                post_title =post .get ('title',self ._tr ('untitled_post_placeholder','Untitled Post'))
+
+
+                date_prefix_str ="[No Date]"
+                published_date_str =post .get ('published')
+                added_date_str =post .get ('added')
+
+                date_to_use_str =None 
+                if published_date_str :
+                    date_to_use_str =published_date_str 
+                elif added_date_str :
+                    date_to_use_str =added_date_str 
+
+                if date_to_use_str :
+                    try :
+
+                        formatted_date =date_to_use_str .split ('T')[0 ]
+                        date_prefix_str =f"[{formatted_date }]"
+                    except Exception :
+                        pass 
+
+
+                date_display_str ="[No Date]"
+                published_date_str =post .get ('published')
+                added_date_str =post .get ('added')
+
+                date_to_use_str =None 
+                if published_date_str :
+                    date_to_use_str =published_date_str 
+                elif added_date_str :
+                    date_to_use_str =added_date_str 
+
+                if date_to_use_str :
+                    try :
+
+                        formatted_date =date_to_use_str .split ('T')[0 ]
+                        date_display_str =f"[{formatted_date }]"
+                    except Exception :
+                        pass 
+
+
+                title_item_text =f"  {post_title }"
+                item =QListWidgetItem (title_item_text )
+                item .setFlags (item .flags ()|Qt .ItemIsUserCheckable )
+                item .setCheckState (Qt .Unchecked )
+                item_data ={
+                'title':post_title ,
+                'id':post .get ('id'),
+                'service':creator_info_original ['service'],
+                'user_id':creator_info_original ['id'],
+                'creator_name':creator_info_original ['name'],
+                'full_post_data':post ,
+                'date_display_str':date_display_str ,
+                'published_date_for_sort':date_to_use_str 
                 }
-                item.setData(Qt.UserRole, item_data)
-                post_unique_key = (
-                    item_data['service'],
-                    str(item_data['user_id']), 
-                    str(item_data['id'])      
+                item .setData (Qt .UserRole ,item_data )
+                post_unique_key =(
+                item_data ['service'],
+                str (item_data ['user_id']),
+                str (item_data ['id'])
                 )
-                if post_unique_key in self.globally_selected_post_ids:
-                    item.setCheckState(Qt.Checked)
-                else:
-                    item.setCheckState(Qt.Unchecked)
-              
-                self.posts_title_list_widget.addItem(item)
-                total_posts_shown += 1
-                # Date item (purely display)
-                date_item = QListWidgetItem(f"  {date_display_str}")
-                date_item.setFlags(Qt.NoItemFlags) # Not selectable, not checkable
-                self.posts_date_list_widget.addItem(date_item)
+                if post_unique_key in self .globally_selected_post_ids :
+                    item .setCheckState (Qt .Checked )
+                else :
+                    item .setCheckState (Qt .Unchecked )
 
-        self.posts_title_list_widget.blockSignals(False) # Unblock signals
-        self.posts_date_list_widget.blockSignals(False)
+                self .posts_title_list_widget .addItem (item )
+                total_posts_shown +=1 
 
-    def _handle_fetch_error(self, creator_info, error_message):
-        creator_name = creator_info.get('name', 'Unknown Creator')
-        if self.parent_app:
-            self.parent_app.log_signal.emit(f"[CreatorPopup Fetch ERROR] For {creator_name}: {error_message}")
-        # Update title label to show there was an error for this creator
-        self.posts_area_title_label.setText(self._tr("fetch_error_for_creator_label", "Error fetching for {creator_name}").format(creator_name=creator_name))
+                date_item =QListWidgetItem (f"  {date_display_str }")
+                date_item .setFlags (Qt .NoItemFlags )
+                self .posts_date_list_widget .addItem (date_item )
+
+        self .posts_title_list_widget .blockSignals (False )
+        self .posts_date_list_widget .blockSignals (False )
+
+    def _handle_fetch_error (self ,creator_info ,error_message ):
+        creator_name =creator_info .get ('name','Unknown Creator')
+        if self .parent_app :
+            self .parent_app .log_signal .emit (f"[CreatorPopup Fetch ERROR] For {creator_name }: {error_message }")
+
+        self .posts_area_title_label .setText (self ._tr ("fetch_error_for_creator_label","Error fetching for {creator_name}").format (creator_name =creator_name ))
 
 
-    def _handle_fetch_finished(self):
-        self.fetch_posts_button.setEnabled(True)
-        self.progress_bar.setVisible(False)
+    def _handle_fetch_finished (self ):
+        self .fetch_posts_button .setEnabled (True )
+        self .progress_bar .setVisible (False )
 
-        if not self.fetched_posts_data: 
-            if self.post_fetch_thread and self.post_fetch_thread.cancellation_flag.is_set():
-                 self.posts_area_title_label.setText(self._tr("post_fetch_cancelled_status_done", "Post fetching cancelled."))
-            else:
-                 self.posts_area_title_label.setText(self._tr("failed_to_fetch_or_no_posts_label", "Failed to fetch posts or no posts found."))
-            self.posts_search_input.setVisible(False)
-        elif not self.posts_title_list_widget.count() and not self.posts_search_input.text().strip():
-            self.posts_area_title_label.setText(self._tr("no_posts_found_for_selection", "No posts found for selected creator(s)."))
-            self.posts_search_input.setVisible(True) 
-        else: 
-            QTimer.singleShot(10, lambda: self.posts_content_splitter.setSizes([int(self.posts_content_splitter.width() * 0.7), int(self.posts_content_splitter.width() * 0.3)]))
-            self.posts_search_input.setVisible(True)
+        if not self .fetched_posts_data :
+            if self .post_fetch_thread and self .post_fetch_thread .cancellation_flag .is_set ():
+                 self .posts_area_title_label .setText (self ._tr ("post_fetch_cancelled_status_done","Post fetching cancelled."))
+            else :
+                 self .posts_area_title_label .setText (self ._tr ("failed_to_fetch_or_no_posts_label","Failed to fetch posts or no posts found."))
+            self .posts_search_input .setVisible (False )
+        elif not self .posts_title_list_widget .count ()and not self .posts_search_input .text ().strip ():
+            self .posts_area_title_label .setText (self ._tr ("no_posts_found_for_selection","No posts found for selected creator(s)."))
+            self .posts_search_input .setVisible (True )
+        else :
+            QTimer .singleShot (10 ,lambda :self .posts_content_splitter .setSizes ([int (self .posts_content_splitter .width ()*0.7 ),int (self .posts_content_splitter .width ()*0.3 )]))
+            self .posts_search_input .setVisible (True )
 
-    def _handle_posts_select_all(self):
-        self.posts_title_list_widget.blockSignals(True)      
-        for i in range(self.posts_title_list_widget.count()):
-            item = self.posts_title_list_widget.item(i)
-            if item.flags() & Qt.ItemIsUserCheckable:
-                item.setCheckState(Qt.Checked)
+    def _handle_posts_select_all (self ):
+        self .posts_title_list_widget .blockSignals (True )
+        for i in range (self .posts_title_list_widget .count ()):
+            item =self .posts_title_list_widget .item (i )
+            if item .flags ()&Qt .ItemIsUserCheckable :
+                item .setCheckState (Qt .Checked )
 
-                # Add to global selection if not already there
-                item_data = item.data(Qt.UserRole)
-                if item_data:
-                    post_unique_key = (
-                        item_data['service'],
-                        str(item_data['user_id']),
-                        str(item_data['id'])
+
+                item_data =item .data (Qt .UserRole )
+                if item_data :
+                    post_unique_key =(
+                    item_data ['service'],
+                    str (item_data ['user_id']),
+                    str (item_data ['id'])
                     )
-                    self.globally_selected_post_ids.add(post_unique_key)
-        self.posts_title_list_widget.blockSignals(False)
+                    self .globally_selected_post_ids .add (post_unique_key )
+        self .posts_title_list_widget .blockSignals (False )
 
-    def _handle_posts_deselect_all(self):
-        self.posts_title_list_widget.blockSignals(True)      
-        for i in range(self.posts_title_list_widget.count()):
-            item = self.posts_title_list_widget.item(i)
-            if item.flags() & Qt.ItemIsUserCheckable:
-                item.setCheckState(Qt.Unchecked)
-        self.globally_selected_post_ids.clear() # Deselect all means clear all global selections
-        self.posts_title_list_widget.blockSignals(False)
+    def _handle_posts_deselect_all (self ):
+        self .posts_title_list_widget .blockSignals (True )
+        for i in range (self .posts_title_list_widget .count ()):
+            item =self .posts_title_list_widget .item (i )
+            if item .flags ()&Qt .ItemIsUserCheckable :
+                item .setCheckState (Qt .Unchecked )
+        self .globally_selected_post_ids .clear ()
+        self .posts_title_list_widget .blockSignals (False )
 
-    def _handle_post_item_check_changed(self, item):
-        if not item or not item.data(Qt.UserRole): # Ignore header items or invalid items
-            return
+    def _handle_post_item_check_changed (self ,item ):
+        if not item or not item .data (Qt .UserRole ):
+            return 
 
-        item_data = item.data(Qt.UserRole)
-        post_unique_key = (
-            item_data['service'],
-            str(item_data['user_id']),
-            str(item_data['id'])
+        item_data =item .data (Qt .UserRole )
+        post_unique_key =(
+        item_data ['service'],
+        str (item_data ['user_id']),
+        str (item_data ['id'])
         )
 
-        if item.checkState() == Qt.Checked:
-            self.globally_selected_post_ids.add(post_unique_key)
-        else:
-            self.globally_selected_post_ids.discard(post_unique_key)
+        if item .checkState ()==Qt .Checked :
+            self .globally_selected_post_ids .add (post_unique_key )
+        else :
+            self .globally_selected_post_ids .discard (post_unique_key )
 
-    def _handle_posts_add_selected_to_queue(self):
-        selected_posts_for_queue = []
-        if not self.globally_selected_post_ids:
-            QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
-                                    self._tr("select_posts_to_queue_message", "Please select at least one post to add to the queue."))
-            return
+    def _handle_posts_add_selected_to_queue (self ):
+        selected_posts_for_queue =[]
+        if not self .globally_selected_post_ids :
+            QMessageBox .information (self ,self ._tr ("no_selection_title","No Selection"),
+            self ._tr ("select_posts_to_queue_message","Please select at least one post to add to the queue."))
+            return 
 
-        for post_key in self.globally_selected_post_ids:
-            service, user_id_str, post_id_str = post_key
-            post_data_found = None
-            creator_key_for_fetched_data = (service, user_id_str)
-            
-            # Access posts from the tuple structure in self.fetched_posts_data
-            if creator_key_for_fetched_data in self.fetched_posts_data:
-                _unused_creator_info, posts_in_list_for_creator = self.fetched_posts_data[creator_key_for_fetched_data]
-                for post_in_list in posts_in_list_for_creator:
-                    if str(post_in_list.get('id')) == post_id_str:
-                        post_data_found = post_in_list
-                        break
-            
-            if post_data_found:
-                # Get creator_info from the fetched_posts_data tuple
-                creator_info_original, _unused_posts = self.fetched_posts_data.get(creator_key_for_fetched_data, ({}, []))
-                creator_name = creator_info_original.get('name', 'Unknown Creator') if creator_info_original else 'Unknown Creator'
-                
-                domain = self._get_domain_for_service(service)
-                post_url = f"https://{domain}/{service}/user/{user_id_str}/post/{post_id_str}"
-                queue_item = {
-                    'type': 'single_post_from_popup',
-                    'url': post_url,
-                    'name': post_data_found.get('title', self._tr('untitled_post_placeholder', 'Untitled Post')),
-                    'name_for_folder': creator_name, 
-                    'service': service,
-                    'user_id': user_id_str,
-                    'post_id': post_id_str
+        for post_key in self .globally_selected_post_ids :
+            service ,user_id_str ,post_id_str =post_key 
+            post_data_found =None 
+            creator_key_for_fetched_data =(service ,user_id_str )
+
+
+            if creator_key_for_fetched_data in self .fetched_posts_data :
+                _unused_creator_info ,posts_in_list_for_creator =self .fetched_posts_data [creator_key_for_fetched_data ]
+                for post_in_list in posts_in_list_for_creator :
+                    if str (post_in_list .get ('id'))==post_id_str :
+                        post_data_found =post_in_list 
+                        break 
+
+            if post_data_found :
+
+                creator_info_original ,_unused_posts =self .fetched_posts_data .get (creator_key_for_fetched_data ,({},[]))
+                creator_name =creator_info_original .get ('name','Unknown Creator')if creator_info_original else 'Unknown Creator'
+
+                domain =self ._get_domain_for_service (service )
+                post_url =f"https://{domain }/{service }/user/{user_id_str }/post/{post_id_str }"
+                queue_item ={
+                'type':'single_post_from_popup',
+                'url':post_url ,
+                'name':post_data_found .get ('title',self ._tr ('untitled_post_placeholder','Untitled Post')),
+                'name_for_folder':creator_name ,
+                'service':service ,
+                'user_id':user_id_str ,
+                'post_id':post_id_str 
                 }
-                selected_posts_for_queue.append(queue_item)
-            else:
-                # This case might happen if fetched_posts_data was cleared or modified unexpectedly
-                # For robustness, we could try to reconstruct minimal info if needed,
-                # or log that the full data for a selected post was not found.
-                # For now, just log it if parent_app is available.
-                if self.parent_app and hasattr(self.parent_app, 'log_signal'):
-                    self.parent_app.log_signal.emit(f"⚠️ Could not find full post data for selected key: {post_key} when adding to queue.")
-                # Fallback: create a queue item with minimal info from the key itself
-                else: # Minimal fallback if full data is gone
-                    domain = self._get_domain_for_service(service)
-                    post_url = f"https://{domain}/{service}/user/{user_id_str}/post/{post_id_str}"
-                    queue_item = {
-                        'type': 'single_post_from_popup',
-                        'url': post_url,
-                        'name': f"post id {post_id_str}", # fallback name
-                        'name_for_folder': user_id_str, # fallback folder name
-                        'service': service,
-                        'user_id': user_id_str,
-                        'post_id': post_id_str
+                selected_posts_for_queue .append (queue_item )
+            else :
+
+
+
+
+                if self .parent_app and hasattr (self .parent_app ,'log_signal'):
+                    self .parent_app .log_signal .emit (f"⚠️ Could not find full post data for selected key: {post_key } when adding to queue.")
+
+                else :
+                    domain =self ._get_domain_for_service (service )
+                    post_url =f"https://{domain }/{service }/user/{user_id_str }/post/{post_id_str }"
+                    queue_item ={
+                    'type':'single_post_from_popup',
+                    'url':post_url ,
+                    'name':f"post id {post_id_str }",
+                    'name_for_folder':user_id_str ,
+                    'service':service ,
+                    'user_id':user_id_str ,
+                    'post_id':post_id_str 
                     }
-                    selected_posts_for_queue.append(queue_item)
+                    selected_posts_for_queue .append (queue_item )
 
-        if selected_posts_for_queue:
-            if self.parent_app and hasattr(self.parent_app, 'favorite_download_queue'):
-                for qi in selected_posts_for_queue:
-                    self.parent_app.favorite_download_queue.append(qi)
-                
-                num_just_added_posts = len(selected_posts_for_queue)
-                total_in_queue = len(self.parent_app.favorite_download_queue)
+        if selected_posts_for_queue :
+            if self .parent_app and hasattr (self .parent_app ,'favorite_download_queue'):
+                for qi in selected_posts_for_queue :
+                    self .parent_app .favorite_download_queue .append (qi )
 
-                self.parent_app.log_signal.emit(f"ℹ️ Added {num_just_added_posts} selected posts to the download queue. Total in queue: {total_in_queue}.")
-                
-                if self.parent_app.link_input:
-                    self.parent_app.link_input.blockSignals(True)
-                    self.parent_app.link_input.setText(
-                        self.parent_app._tr("popup_posts_selected_text", "Posts - {count} selected").format(count=num_just_added_posts)
+                num_just_added_posts =len (selected_posts_for_queue )
+                total_in_queue =len (self .parent_app .favorite_download_queue )
+
+                self .parent_app .log_signal .emit (f"ℹ️ Added {num_just_added_posts } selected posts to the download queue. Total in queue: {total_in_queue }.")
+
+                if self .parent_app .link_input :
+                    self .parent_app .link_input .blockSignals (True )
+                    self .parent_app .link_input .setText (
+                    self .parent_app ._tr ("popup_posts_selected_text","Posts - {count} selected").format (count =num_just_added_posts )
                     )
-                    self.parent_app.link_input.blockSignals(False)
-                    self.parent_app.link_input.setPlaceholderText(
-                        self.parent_app._tr("items_in_queue_placeholder", "{count} items in queue from popup.").format(count=total_in_queue)
+                    self .parent_app .link_input .blockSignals (False )
+                    self .parent_app .link_input .setPlaceholderText (
+                    self .parent_app ._tr ("items_in_queue_placeholder","{count} items in queue from popup.").format (count =total_in_queue )
                     )
-            self.accept()
-        else:
-            QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
-                                    self._tr("select_posts_to_queue_message", "Please select at least one post to add to the queue."))
+            self .accept ()
+        else :
+            QMessageBox .information (self ,self ._tr ("no_selection_title","No Selection"),
+            self ._tr ("select_posts_to_queue_message","Please select at least one post to add to the queue."))
 
-    def _handle_posts_close_view(self):
-        self.right_pane_widget.hide()
-        self.main_splitter.setSizes([self.width(), 0])
-        self.posts_list_widget.itemChanged.disconnect(self._handle_post_item_check_changed) # Disconnect    
-        if hasattr(self, '_handle_post_item_check_changed'): # Check if connected before disconnecting
-            self.posts_title_list_widget.itemChanged.disconnect(self._handle_post_item_check_changed)      
-        self.posts_search_input.setVisible(False)
-        self.posts_search_input.clear()
-        self.globally_selected_post_ids.clear()        
-        self.add_selected_button.setEnabled(True)
-        self.setWindowTitle(self._tr("creator_popup_title", "Creator Selection"))
-        # Optionally clear posts list and data
-        # self.posts_list_widget.clear()
-        # self.fetched_posts_data.clear()
+    def _handle_posts_close_view (self ):
+        self .right_pane_widget .hide ()
+        self .main_splitter .setSizes ([self .width (),0 ])
+        self .posts_list_widget .itemChanged .disconnect (self ._handle_post_item_check_changed )
+        if hasattr (self ,'_handle_post_item_check_changed'):
+            self .posts_title_list_widget .itemChanged .disconnect (self ._handle_post_item_check_changed )
+        self .posts_search_input .setVisible (False )
+        self .posts_search_input .clear ()
+        self .globally_selected_post_ids .clear ()
+        self .add_selected_button .setEnabled (True )
+        self .setWindowTitle (self ._tr ("creator_popup_title","Creator Selection"))
+
+
+
 
     def _get_domain_for_service (self ,service_name ):
         """Determines the base domain for a given service."""
@@ -1690,114 +1690,114 @@ class EmptyPopupDialog (QDialog ):
         else :
             if unique_key in self .globally_selected_creators :
                 del self .globally_selected_creators [unique_key ]
-        self.fetch_posts_button.setEnabled(bool(self.globally_selected_creators))
+        self .fetch_posts_button .setEnabled (bool (self .globally_selected_creators ))
 
-class PostsFetcherThread(QThread):
-    status_update = pyqtSignal(str)
-    posts_fetched_signal = pyqtSignal(object, list) # creator_info (dict), posts_list
-    fetch_error_signal = pyqtSignal(object, str)   # creator_info (dict), error_message
-    finished_signal = pyqtSignal()
+class PostsFetcherThread (QThread ):
+    status_update =pyqtSignal (str )
+    posts_fetched_signal =pyqtSignal (object ,list )
+    fetch_error_signal =pyqtSignal (object ,str )
+    finished_signal =pyqtSignal ()
 
-    def __init__(self, creators_to_fetch, parent_dialog_ref):
-        super().__init__()
-        self.creators_to_fetch = creators_to_fetch
-        self.parent_dialog = parent_dialog_ref
-        self.cancellation_flag = threading.Event() # Use a threading.Event for cancellation
+    def __init__ (self ,creators_to_fetch ,parent_dialog_ref ):
+        super ().__init__ ()
+        self .creators_to_fetch =creators_to_fetch 
+        self .parent_dialog =parent_dialog_ref 
+        self .cancellation_flag =threading .Event ()
 
-    def cancel(self):
-        self.cancellation_flag.set() # Set the event
-        self.status_update.emit(self.parent_dialog._tr("post_fetch_cancelled_status", "Post fetching cancellation requested..."))
+    def cancel (self ):
+        self .cancellation_flag .set ()
+        self .status_update .emit (self .parent_dialog ._tr ("post_fetch_cancelled_status","Post fetching cancellation requested..."))
 
-    def run(self):
-        if not self.creators_to_fetch:
-            self.status_update.emit(self.parent_dialog._tr("no_creators_to_fetch_status", "No creators selected to fetch posts for."))
-            self.finished_signal.emit()
-            return
+    def run (self ):
+        if not self .creators_to_fetch :
+            self .status_update .emit (self .parent_dialog ._tr ("no_creators_to_fetch_status","No creators selected to fetch posts for."))
+            self .finished_signal .emit ()
+            return 
 
-        for creator_data in self.creators_to_fetch:
-            if self.cancellation_flag.is_set(): # Check the event
-                break
-            
-            creator_name = creator_data.get('name', 'Unknown Creator')
-            service = creator_data.get('service')
-            user_id = creator_data.get('id')
+        for creator_data in self .creators_to_fetch :
+            if self .cancellation_flag .is_set ():
+                break 
 
-            if not service or not user_id:
-                self.fetch_error_signal.emit(creator_data, f"Missing service or ID for {creator_name}")
-                continue
+            creator_name =creator_data .get ('name','Unknown Creator')
+            service =creator_data .get ('service')
+            user_id =creator_data .get ('id')
 
-            self.status_update.emit(self.parent_dialog._tr("fetching_posts_for_creator_status_all_pages", "Fetching all posts for {creator_name} ({service})... This may take a while.").format(creator_name=creator_name, service=service))
-            
-            domain = self.parent_dialog._get_domain_for_service(service)
-            api_url_base = f"https://{domain}/api/v1/{service}/user/{user_id}"
-            
-            # download_from_api will handle cookie preparation based on these params
-            use_cookie_param = False
-            cookie_text_param = ""
-            selected_cookie_file_param = None
-            app_base_dir_param = None
+            if not service or not user_id :
+                self .fetch_error_signal .emit (creator_data ,f"Missing service or ID for {creator_name }")
+                continue 
 
-            if self.parent_dialog.parent_app:
-                app = self.parent_dialog.parent_app
-                use_cookie_param = app.use_cookie_checkbox.isChecked()
-                cookie_text_param = app.cookie_text_input.text().strip()
-                selected_cookie_file_param = app.selected_cookie_filepath
-                app_base_dir_param = app.app_base_dir
+            self .status_update .emit (self .parent_dialog ._tr ("fetching_posts_for_creator_status_all_pages","Fetching all posts for {creator_name} ({service})... This may take a while.").format (creator_name =creator_name ,service =service ))
 
-            all_posts_for_this_creator = [] 
-            try:
-                post_generator = download_from_api(
-                    api_url_base,
-                    logger=lambda msg: self.status_update.emit(f"[API Fetch - {creator_name}] {msg}"),
-                    # end_page=1, # REMOVED to fetch all pages
-                    use_cookie=use_cookie_param,
-                    cookie_text=cookie_text_param,
-                    selected_cookie_file=selected_cookie_file_param,
-                    app_base_dir=app_base_dir_param, # corrected comma
-                    manga_filename_style_for_sort_check=None, # PostsFetcherThread doesn't use manga mode settings for its own fetching
-                    cancellation_event=self.cancellation_flag
+            domain =self .parent_dialog ._get_domain_for_service (service )
+            api_url_base =f"https://{domain }/api/v1/{service }/user/{user_id }"
+
+
+            use_cookie_param =False 
+            cookie_text_param =""
+            selected_cookie_file_param =None 
+            app_base_dir_param =None 
+
+            if self .parent_dialog .parent_app :
+                app =self .parent_dialog .parent_app 
+                use_cookie_param =app .use_cookie_checkbox .isChecked ()
+                cookie_text_param =app .cookie_text_input .text ().strip ()
+                selected_cookie_file_param =app .selected_cookie_filepath 
+                app_base_dir_param =app .app_base_dir 
+
+            all_posts_for_this_creator =[]
+            try :
+                post_generator =download_from_api (
+                api_url_base ,
+                logger =lambda msg :self .status_update .emit (f"[API Fetch - {creator_name }] {msg }"),
+
+                use_cookie =use_cookie_param ,
+                cookie_text =cookie_text_param ,
+                selected_cookie_file =selected_cookie_file_param ,
+                app_base_dir =app_base_dir_param ,
+                manga_filename_style_for_sort_check =None ,
+                cancellation_event =self .cancellation_flag 
                 )
-                
-                for posts_batch in post_generator:
-                    if self.cancellation_flag.is_set(): # Check event here as well
-                        self.status_update.emit(f"Post fetching for {creator_name} cancelled during pagination.")
+
+                for posts_batch in post_generator :
+                    if self .cancellation_flag .is_set ():
+                        self .status_update .emit (f"Post fetching for {creator_name } cancelled during pagination.")
                         break 
-                    all_posts_for_this_creator.extend(posts_batch)
-                    self.status_update.emit(f"Fetched {len(all_posts_for_this_creator)} posts so far for {creator_name}...")
+                    all_posts_for_this_creator .extend (posts_batch )
+                    self .status_update .emit (f"Fetched {len (all_posts_for_this_creator )} posts so far for {creator_name }...")
 
-                if not self.cancellation_flag.is_set():
-                    self.posts_fetched_signal.emit(creator_data, all_posts_for_this_creator)
-                    self.status_update.emit(f"Finished fetching {len(all_posts_for_this_creator)} posts for {creator_name}.")
-                else:
-                    self.posts_fetched_signal.emit(creator_data, all_posts_for_this_creator) # Emit partial if any
-                    self.status_update.emit(f"Fetching for {creator_name} cancelled. {len(all_posts_for_this_creator)} posts collected.")
+                if not self .cancellation_flag .is_set ():
+                    self .posts_fetched_signal .emit (creator_data ,all_posts_for_this_creator )
+                    self .status_update .emit (f"Finished fetching {len (all_posts_for_this_creator )} posts for {creator_name }.")
+                else :
+                    self .posts_fetched_signal .emit (creator_data ,all_posts_for_this_creator )
+                    self .status_update .emit (f"Fetching for {creator_name } cancelled. {len (all_posts_for_this_creator )} posts collected.")
 
-            except RuntimeError as e: 
-                if "cancelled by user" in str(e).lower() or self.cancellation_flag.is_set():
-                    self.status_update.emit(f"Post fetching for {creator_name} cancelled: {e}")
-                    self.posts_fetched_signal.emit(creator_data, all_posts_for_this_creator) 
-                else:
-                    self.fetch_error_signal.emit(creator_data, f"Runtime error fetching posts for {creator_name}: {e}")
-            except Exception as e:
-                self.fetch_error_signal.emit(creator_data, f"Error fetching posts for {creator_name}: {e}")
-            
-            if self.cancellation_flag.is_set():
-                break
-            QThread.msleep(200)
+            except RuntimeError as e :
+                if "cancelled by user"in str (e ).lower ()or self .cancellation_flag .is_set ():
+                    self .status_update .emit (f"Post fetching for {creator_name } cancelled: {e }")
+                    self .posts_fetched_signal .emit (creator_data ,all_posts_for_this_creator )
+                else :
+                    self .fetch_error_signal .emit (creator_data ,f"Runtime error fetching posts for {creator_name }: {e }")
+            except Exception as e :
+                self .fetch_error_signal .emit (creator_data ,f"Error fetching posts for {creator_name }: {e }")
 
-        if self.cancellation_flag.is_set():
-            self.status_update.emit(self.parent_dialog._tr("post_fetch_cancelled_status_done", "Post fetching cancelled."))
-        else:
-            self.status_update.emit(self.parent_dialog._tr("post_fetch_finished_status", "Finished fetching posts for selected creators."))
-        self.finished_signal.emit()
+            if self .cancellation_flag .is_set ():
+                break 
+            QThread .msleep (200 )
+
+        if self .cancellation_flag .is_set ():
+            self .status_update .emit (self .parent_dialog ._tr ("post_fetch_cancelled_status_done","Post fetching cancelled."))
+        else :
+            self .status_update .emit (self .parent_dialog ._tr ("post_fetch_finished_status","Finished fetching posts for selected creators."))
+        self .finished_signal .emit ()
 
 class CookieHelpDialog (QDialog ):
     """A dialog to explain how to get a cookies.txt file."""
     CHOICE_PROCEED_WITHOUT_COOKIES =1 
     CHOICE_CANCEL_DOWNLOAD =2 
     CHOICE_OK_INFO_ONLY =3 
-    _is_scrolling_titles = False # For scroll synchronization
-    _is_scrolling_dates = False  # For scroll synchronization
+    _is_scrolling_titles =False 
+    _is_scrolling_dates =False 
 
     def __init__ (self ,parent_app ,parent =None ,offer_download_without_option =False ):
         super ().__init__ (parent )
@@ -1805,9 +1805,9 @@ class CookieHelpDialog (QDialog ):
         self .setModal (True )
         self .offer_download_without_option =offer_download_without_option 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
         self .user_choice =None 
         main_layout =QVBoxLayout (self )
 
@@ -1884,192 +1884,192 @@ class CookieHelpDialog (QDialog ):
         self .user_choice =self .CHOICE_OK_INFO_ONLY 
         self .accept ()
 
-class DownloadHistoryDialog(QDialog):
+class DownloadHistoryDialog (QDialog ):
     """Dialog to display download history."""
-    def __init__(self, last_3_downloaded_entries, first_processed_entries, parent_app, parent=None):
-        super().__init__(parent)
-        self.parent_app = parent_app
-        self.last_3_downloaded_entries = last_3_downloaded_entries
-        self.first_processed_entries = first_processed_entries
-        self.setModal(True)
-        
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+    def __init__ (self ,last_3_downloaded_entries ,first_processed_entries ,parent_app ,parent =None ):
+        super ().__init__ (parent )
+        self .parent_app =parent_app 
+        self .last_3_downloaded_entries =last_3_downloaded_entries 
+        self .first_processed_entries =first_processed_entries 
+        self .setModal (True )
 
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 768.0
-        base_min_w, base_min_h = 600, 450
-        # Increase width to accommodate two panes
-        scaled_min_w = int(base_min_w * 1.5 * scale_factor) 
-        scaled_min_h = int(base_min_h * scale_factor)
-        self.setMinimumSize(scaled_min_w, scaled_min_h)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
 
-        self.setWindowTitle(self._tr("download_history_dialog_title_combined", "Download History"))
-                
-        # Main layout for the dialog will be a QVBoxLayout
-        dialog_layout = QVBoxLayout(self)
-        self.setLayout(dialog_layout)
+        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
+        scale_factor =screen_height /768.0 
+        base_min_w ,base_min_h =600 ,450 
 
-        # --- Splitter ---
-        self.main_splitter = QSplitter(Qt.Horizontal)
-        dialog_layout.addWidget(self.main_splitter)
+        scaled_min_w =int (base_min_w *1.5 *scale_factor )
+        scaled_min_h =int (base_min_h *scale_factor )
+        self .setMinimumSize (scaled_min_w ,scaled_min_h )
 
-        # --- Left Pane (Last 3 Downloaded Files) ---
-        left_pane_widget = QWidget()
-        left_layout = QVBoxLayout(left_pane_widget)
-        left_header_label = QLabel(self._tr("history_last_downloaded_header", "Last 3 Files Downloaded:"))
-        left_header_label.setAlignment(Qt.AlignCenter)
-        left_layout.addWidget(left_header_label)
+        self .setWindowTitle (self ._tr ("download_history_dialog_title_combined","Download History"))
 
-        left_scroll_area = QScrollArea()
-        left_scroll_area.setWidgetResizable(True)
-        left_scroll_content_widget = QWidget()
-        left_scroll_layout = QVBoxLayout(left_scroll_content_widget)
 
-        if not self.last_3_downloaded_entries:
-            no_left_history_label = QLabel(self._tr("no_download_history_header", "No Downloads Yet"))
-            no_left_history_label.setAlignment(Qt.AlignCenter)
-            left_scroll_layout.addWidget(no_left_history_label)
-        else:
-            for entry in self.last_3_downloaded_entries:
-                group_box = QGroupBox(f"{self._tr('history_file_label', 'File:')} {entry.get('disk_filename', 'N/A')}")
-                group_layout = QVBoxLayout(group_box)
-                details_text = (
-                    f"<b>{self._tr('history_from_post_label', 'From Post:')}</b> {entry.get('post_title', 'N/A')} (ID: {entry.get('post_id', 'N/A')})<br>"
-                    f"<b>{self._tr('history_creator_series_label', 'Creator/Series:')}</b> {entry.get('creator_display_name', 'N/A')}<br>"
-                    f"<b>{self._tr('history_post_uploaded_label', 'Post Uploaded:')}</b> {entry.get('upload_date_str', 'N/A')}<br>"
-                    f"<b>{self._tr('history_file_downloaded_label', 'File Downloaded:')}</b> {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('download_timestamp', 0)))}<br>"
-                    f"<b>{self._tr('history_saved_in_folder_label', 'Saved In Folder:')}</b> {entry.get('download_path', 'N/A')}"
+        dialog_layout =QVBoxLayout (self )
+        self .setLayout (dialog_layout )
+
+
+        self .main_splitter =QSplitter (Qt .Horizontal )
+        dialog_layout .addWidget (self .main_splitter )
+
+
+        left_pane_widget =QWidget ()
+        left_layout =QVBoxLayout (left_pane_widget )
+        left_header_label =QLabel (self ._tr ("history_last_downloaded_header","Last 3 Files Downloaded:"))
+        left_header_label .setAlignment (Qt .AlignCenter )
+        left_layout .addWidget (left_header_label )
+
+        left_scroll_area =QScrollArea ()
+        left_scroll_area .setWidgetResizable (True )
+        left_scroll_content_widget =QWidget ()
+        left_scroll_layout =QVBoxLayout (left_scroll_content_widget )
+
+        if not self .last_3_downloaded_entries :
+            no_left_history_label =QLabel (self ._tr ("no_download_history_header","No Downloads Yet"))
+            no_left_history_label .setAlignment (Qt .AlignCenter )
+            left_scroll_layout .addWidget (no_left_history_label )
+        else :
+            for entry in self .last_3_downloaded_entries :
+                group_box =QGroupBox (f"{self ._tr ('history_file_label','File:')} {entry .get ('disk_filename','N/A')}")
+                group_layout =QVBoxLayout (group_box )
+                details_text =(
+                f"<b>{self ._tr ('history_from_post_label','From Post:')}</b> {entry .get ('post_title','N/A')} (ID: {entry .get ('post_id','N/A')})<br>"
+                f"<b>{self ._tr ('history_creator_series_label','Creator/Series:')}</b> {entry .get ('creator_display_name','N/A')}<br>"
+                f"<b>{self ._tr ('history_post_uploaded_label','Post Uploaded:')}</b> {entry .get ('upload_date_str','N/A')}<br>"
+                f"<b>{self ._tr ('history_file_downloaded_label','File Downloaded:')}</b> {time .strftime ('%Y-%m-%d %H:%M:%S',time .localtime (entry .get ('download_timestamp',0 )))}<br>"
+                f"<b>{self ._tr ('history_saved_in_folder_label','Saved In Folder:')}</b> {entry .get ('download_path','N/A')}"
                 )
-                details_label = QLabel(details_text)
-                details_label.setWordWrap(True)
-                details_label.setTextFormat(Qt.RichText)
-                group_layout.addWidget(details_label)
-                left_scroll_layout.addWidget(group_box)
-        left_scroll_area.setWidget(left_scroll_content_widget)
-        left_layout.addWidget(left_scroll_area)
-        self.main_splitter.addWidget(left_pane_widget)
+                details_label =QLabel (details_text )
+                details_label .setWordWrap (True )
+                details_label .setTextFormat (Qt .RichText )
+                group_layout .addWidget (details_label )
+                left_scroll_layout .addWidget (group_box )
+        left_scroll_area .setWidget (left_scroll_content_widget )
+        left_layout .addWidget (left_scroll_area )
+        self .main_splitter .addWidget (left_pane_widget )
 
-        # --- Right Pane (First Processed Posts) ---
-        right_pane_widget = QWidget()
-        right_layout = QVBoxLayout(right_pane_widget)
-        right_header_label = QLabel(self._tr("first_files_processed_header", "First {count} Posts Processed This Session:").format(count=len(self.first_processed_entries)))
-        right_header_label.setAlignment(Qt.AlignCenter)
-        right_layout.addWidget(right_header_label)
 
-        right_scroll_area = QScrollArea()
-        right_scroll_area.setWidgetResizable(True)
-        right_scroll_content_widget = QWidget()
-        right_scroll_layout = QVBoxLayout(right_scroll_content_widget)
+        right_pane_widget =QWidget ()
+        right_layout =QVBoxLayout (right_pane_widget )
+        right_header_label =QLabel (self ._tr ("first_files_processed_header","First {count} Posts Processed This Session:").format (count =len (self .first_processed_entries )))
+        right_header_label .setAlignment (Qt .AlignCenter )
+        right_layout .addWidget (right_header_label )
 
-        if not self.first_processed_entries:
-            no_right_history_label = QLabel(self._tr("no_processed_history_header", "No Posts Processed Yet"))
-            no_right_history_label.setAlignment(Qt.AlignCenter)
-            right_scroll_layout.addWidget(no_right_history_label)
-        else:
-            for entry in self.first_processed_entries:
-                # Using 'Post:' for the group title as it's more accurate for this section
-                group_box = QGroupBox(f"{self._tr('history_post_label', 'Post:')} {entry.get('post_title', 'N/A')} (ID: {entry.get('post_id', 'N/A')})")
-                group_layout = QVBoxLayout(group_box)
-                details_text = (
-                    f"<b>{self._tr('history_creator_label', 'Creator:')}</b> {entry.get('creator_name', 'N/A')}<br>"
-                    f"<b>{self._tr('history_top_file_label', 'Top File:')}</b> {entry.get('top_file_name', 'N/A')}<br>"
-                    f"<b>{self._tr('history_num_files_label', 'Num Files in Post:')}</b> {entry.get('num_files', 0)}<br>"
-                    f"<b>{self._tr('history_post_uploaded_label', 'Post Uploaded:')}</b> {entry.get('upload_date_str', 'N/A')}<br>"
-                    f"<b>{self._tr('history_processed_on_label', 'Processed On:')}</b> {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('download_date_timestamp', 0)))}<br>"
-                    f"<b>{self._tr('history_saved_to_folder_label', 'Saved To Folder:')}</b> {entry.get('download_location', 'N/A')}"
+        right_scroll_area =QScrollArea ()
+        right_scroll_area .setWidgetResizable (True )
+        right_scroll_content_widget =QWidget ()
+        right_scroll_layout =QVBoxLayout (right_scroll_content_widget )
+
+        if not self .first_processed_entries :
+            no_right_history_label =QLabel (self ._tr ("no_processed_history_header","No Posts Processed Yet"))
+            no_right_history_label .setAlignment (Qt .AlignCenter )
+            right_scroll_layout .addWidget (no_right_history_label )
+        else :
+            for entry in self .first_processed_entries :
+
+                group_box =QGroupBox (f"{self ._tr ('history_post_label','Post:')} {entry .get ('post_title','N/A')} (ID: {entry .get ('post_id','N/A')})")
+                group_layout =QVBoxLayout (group_box )
+                details_text =(
+                f"<b>{self ._tr ('history_creator_label','Creator:')}</b> {entry .get ('creator_name','N/A')}<br>"
+                f"<b>{self ._tr ('history_top_file_label','Top File:')}</b> {entry .get ('top_file_name','N/A')}<br>"
+                f"<b>{self ._tr ('history_num_files_label','Num Files in Post:')}</b> {entry .get ('num_files',0 )}<br>"
+                f"<b>{self ._tr ('history_post_uploaded_label','Post Uploaded:')}</b> {entry .get ('upload_date_str','N/A')}<br>"
+                f"<b>{self ._tr ('history_processed_on_label','Processed On:')}</b> {time .strftime ('%Y-%m-%d %H:%M:%S',time .localtime (entry .get ('download_date_timestamp',0 )))}<br>"
+                f"<b>{self ._tr ('history_saved_to_folder_label','Saved To Folder:')}</b> {entry .get ('download_location','N/A')}"
                 )
-                details_label = QLabel(details_text)
-                details_label.setWordWrap(True)
-                details_label.setTextFormat(Qt.RichText)
-                group_layout.addWidget(details_label)
-                right_scroll_layout.addWidget(group_box)
-        right_scroll_area.setWidget(right_scroll_content_widget)
-        right_layout.addWidget(right_scroll_area)
-        self.main_splitter.addWidget(right_pane_widget)
+                details_label =QLabel (details_text )
+                details_label .setWordWrap (True )
+                details_label .setTextFormat (Qt .RichText )
+                group_layout .addWidget (details_label )
+                right_scroll_layout .addWidget (group_box )
+        right_scroll_area .setWidget (right_scroll_content_widget )
+        right_layout .addWidget (right_scroll_area )
+        self .main_splitter .addWidget (right_pane_widget )
 
-        # Set initial splitter sizes (e.g., 50/50)
-        QTimer.singleShot(0, lambda: self.main_splitter.setSizes([self.width() // 2, self.width() // 2]))
 
-        # --- Bottom Button Layout ---
-        bottom_button_layout = QHBoxLayout()
-        self.save_history_button = QPushButton(self._tr("history_save_button_text", "Save History to .txt"))
-        self.save_history_button.clicked.connect(self._save_history_to_txt)
-        bottom_button_layout.addStretch(1) # Push to the right
-        bottom_button_layout.addWidget(self.save_history_button)
-        # Add this new layout to the main dialog layout
-        dialog_layout.addLayout(bottom_button_layout)
+        QTimer .singleShot (0 ,lambda :self .main_splitter .setSizes ([self .width ()//2 ,self .width ()//2 ]))
 
-        if self.parent_app and hasattr(self.parent_app, 'get_dark_theme') and self.parent_app.current_theme == "dark":
-            self.setStyleSheet(self.parent_app.get_dark_theme())
 
-    def _tr(self, key, default_text=""):
-        if callable(get_translation) and self.parent_app:
-            return get_translation(self.parent_app.current_selected_language, key, default_text)
-        return default_text
+        bottom_button_layout =QHBoxLayout ()
+        self .save_history_button =QPushButton (self ._tr ("history_save_button_text","Save History to .txt"))
+        self .save_history_button .clicked .connect (self ._save_history_to_txt )
+        bottom_button_layout .addStretch (1 )
+        bottom_button_layout .addWidget (self .save_history_button )
 
-    def _save_history_to_txt(self):
-        if not self.last_3_downloaded_entries and not self.first_processed_entries:
-            QMessageBox.information(self, self._tr("no_download_history_header", "No Downloads Yet"),
-                                    self._tr("history_nothing_to_save_message", "There is no history to save."))
-            return
+        dialog_layout .addLayout (bottom_button_layout )
 
-        main_download_dir = self.parent_app.dir_input.text().strip()
-        default_save_dir = ""
-        if main_download_dir and os.path.isdir(main_download_dir):
-            default_save_dir = main_download_dir
-        else:
-            fallback_dir = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
-            if fallback_dir and os.path.isdir(fallback_dir):
-                default_save_dir = fallback_dir
-            else:
-                default_save_dir = self.parent_app.app_base_dir
+        if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
+            self .setStyleSheet (self .parent_app .get_dark_theme ())
 
-        default_filepath = os.path.join(default_save_dir, "download_history.txt")
+    def _tr (self ,key ,default_text =""):
+        if callable (get_translation )and self .parent_app :
+            return get_translation (self .parent_app .current_selected_language ,key ,default_text )
+        return default_text 
 
-        filepath, _ = QFileDialog.getSaveFileName(
-            self, self._tr("history_save_dialog_title", "Save Download History"),
-            default_filepath, "Text Files (*.txt);;All Files (*)"
+    def _save_history_to_txt (self ):
+        if not self .last_3_downloaded_entries and not self .first_processed_entries :
+            QMessageBox .information (self ,self ._tr ("no_download_history_header","No Downloads Yet"),
+            self ._tr ("history_nothing_to_save_message","There is no history to save."))
+            return 
+
+        main_download_dir =self .parent_app .dir_input .text ().strip ()
+        default_save_dir =""
+        if main_download_dir and os .path .isdir (main_download_dir ):
+            default_save_dir =main_download_dir 
+        else :
+            fallback_dir =QStandardPaths .writableLocation (QStandardPaths .DocumentsLocation )
+            if fallback_dir and os .path .isdir (fallback_dir ):
+                default_save_dir =fallback_dir 
+            else :
+                default_save_dir =self .parent_app .app_base_dir 
+
+        default_filepath =os .path .join (default_save_dir ,"download_history.txt")
+
+        filepath ,_ =QFileDialog .getSaveFileName (
+        self ,self ._tr ("history_save_dialog_title","Save Download History"),
+        default_filepath ,"Text Files (*.txt);;All Files (*)"
         )
 
-        if not filepath:
-            return
+        if not filepath :
+            return 
 
-        history_content = []
-        history_content.append(f"{self._tr('history_last_downloaded_header', 'Last 3 Files Downloaded:')}\n")
-        if self.last_3_downloaded_entries:
-            for entry in self.last_3_downloaded_entries:
-                history_content.append(f"  {self._tr('history_file_label', 'File:')} {entry.get('disk_filename', 'N/A')}")
-                history_content.append(f"    {self._tr('history_from_post_label', 'From Post:')} {entry.get('post_title', 'N/A')} (ID: {entry.get('post_id', 'N/A')})")
-                history_content.append(f"    {self._tr('history_creator_series_label', 'Creator/Series:')} {entry.get('creator_display_name', 'N/A')}")
-                history_content.append(f"    {self._tr('history_post_uploaded_label', 'Post Uploaded:')} {entry.get('upload_date_str', 'N/A')}")
-                history_content.append(f"    {self._tr('history_file_downloaded_label', 'File Downloaded:')} {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('download_timestamp', 0)))}")
-                history_content.append(f"    {self._tr('history_saved_in_folder_label', 'Saved In Folder:')} {entry.get('download_path', 'N/A')}\n")
-        else:
-            history_content.append(f"  ({self._tr('no_download_history_header', 'No Downloads Yet')})\n")
+        history_content =[]
+        history_content .append (f"{self ._tr ('history_last_downloaded_header','Last 3 Files Downloaded:')}\n")
+        if self .last_3_downloaded_entries :
+            for entry in self .last_3_downloaded_entries :
+                history_content .append (f"  {self ._tr ('history_file_label','File:')} {entry .get ('disk_filename','N/A')}")
+                history_content .append (f"    {self ._tr ('history_from_post_label','From Post:')} {entry .get ('post_title','N/A')} (ID: {entry .get ('post_id','N/A')})")
+                history_content .append (f"    {self ._tr ('history_creator_series_label','Creator/Series:')} {entry .get ('creator_display_name','N/A')}")
+                history_content .append (f"    {self ._tr ('history_post_uploaded_label','Post Uploaded:')} {entry .get ('upload_date_str','N/A')}")
+                history_content .append (f"    {self ._tr ('history_file_downloaded_label','File Downloaded:')} {time .strftime ('%Y-%m-%d %H:%M:%S',time .localtime (entry .get ('download_timestamp',0 )))}")
+                history_content .append (f"    {self ._tr ('history_saved_in_folder_label','Saved In Folder:')} {entry .get ('download_path','N/A')}\n")
+        else :
+            history_content .append (f"  ({self ._tr ('no_download_history_header','No Downloads Yet')})\n")
 
-        history_content.append(f"\n{self._tr('first_files_processed_header', 'First {count} Posts Processed This Session:').format(count=len(self.first_processed_entries))}\n")
-        if self.first_processed_entries:
-            for entry in self.first_processed_entries:
-                history_content.append(f"  {self._tr('history_post_label', 'Post:')} {entry.get('post_title', 'N/A')} (ID: {entry.get('post_id', 'N/A')})")
-                history_content.append(f"    {self._tr('history_creator_label', 'Creator:')} {entry.get('creator_name', 'N/A')}")
-                history_content.append(f"    {self._tr('history_top_file_label', 'Top File:')} {entry.get('top_file_name', 'N/A')}")
-                history_content.append(f"    {self._tr('history_num_files_label', 'Num Files in Post:')} {entry.get('num_files', 0)}")
-                history_content.append(f"    {self._tr('history_post_uploaded_label', 'Post Uploaded:')} {entry.get('upload_date_str', 'N/A')}")
-                history_content.append(f"    {self._tr('history_processed_on_label', 'Processed On:')} {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(entry.get('download_date_timestamp', 0)))}")
-                history_content.append(f"    {self._tr('history_saved_to_folder_label', 'Saved To Folder:')} {entry.get('download_location', 'N/A')}\n")
-        else:
-            history_content.append(f"  ({self._tr('no_processed_history_header', 'No Posts Processed Yet')})\n")
+        history_content .append (f"\n{self ._tr ('first_files_processed_header','First {count} Posts Processed This Session:').format (count =len (self .first_processed_entries ))}\n")
+        if self .first_processed_entries :
+            for entry in self .first_processed_entries :
+                history_content .append (f"  {self ._tr ('history_post_label','Post:')} {entry .get ('post_title','N/A')} (ID: {entry .get ('post_id','N/A')})")
+                history_content .append (f"    {self ._tr ('history_creator_label','Creator:')} {entry .get ('creator_name','N/A')}")
+                history_content .append (f"    {self ._tr ('history_top_file_label','Top File:')} {entry .get ('top_file_name','N/A')}")
+                history_content .append (f"    {self ._tr ('history_num_files_label','Num Files in Post:')} {entry .get ('num_files',0 )}")
+                history_content .append (f"    {self ._tr ('history_post_uploaded_label','Post Uploaded:')} {entry .get ('upload_date_str','N/A')}")
+                history_content .append (f"    {self ._tr ('history_processed_on_label','Processed On:')} {time .strftime ('%Y-%m-%d %H:%M:%S',time .localtime (entry .get ('download_date_timestamp',0 )))}")
+                history_content .append (f"    {self ._tr ('history_saved_to_folder_label','Saved To Folder:')} {entry .get ('download_location','N/A')}\n")
+        else :
+            history_content .append (f"  ({self ._tr ('no_processed_history_header','No Posts Processed Yet')})\n")
 
-        try:
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write("\n".join(history_content))
-            QMessageBox.information(self, self._tr("history_export_success_title", "History Export Successful"),
-                                    self._tr("history_export_success_message", "Successfully exported download history to:\n{filepath}").format(filepath=filepath))
-        except Exception as e:
-            QMessageBox.critical(self, self._tr("history_export_error_title", "History Export Error"),
-                                 self._tr("history_export_error_message", "Could not export download history: {error}").format(error=str(e)))
+        try :
+            with open (filepath ,'w',encoding ='utf-8')as f :
+                f .write ("\n".join (history_content ))
+            QMessageBox .information (self ,self ._tr ("history_export_success_title","History Export Successful"),
+            self ._tr ("history_export_success_message","Successfully exported download history to:\n{filepath}").format (filepath =filepath ))
+        except Exception as e :
+            QMessageBox .critical (self ,self ._tr ("history_export_error_title","History Export Error"),
+            self ._tr ("history_export_error_message","Could not export download history: {error}").format (error =str (e )))
 
 class KnownNamesFilterDialog (QDialog ):
     """A dialog to select names from Known.txt to add to the filter input."""
@@ -2079,9 +2079,9 @@ class KnownNamesFilterDialog (QDialog ):
         self .setModal (True )
         self .all_known_name_entries =sorted (known_names_list ,key =lambda x :x ['name'].lower ())
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
         self .selected_entries_to_return =[]
 
         main_layout =QVBoxLayout (self )
@@ -2185,9 +2185,9 @@ class FavoriteArtistsDialog (QDialog ):
         self .cookies_config =cookies_config 
         self .all_fetched_artists =[]
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
         self .selected_artist_urls =[]
 
         self .setModal (True )
@@ -2668,9 +2668,9 @@ class FavoritePostsDialog (QDialog ):
         self .displayable_grouped_posts ={}
         self .fetcher_thread =None 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
 
         self .setModal (True )
         self .setMinimumSize (600 ,600 )
@@ -3066,12 +3066,12 @@ class HelpGuideDialog (QDialog ):
         self .steps_data =steps_data 
         self .parent_app =parent_app 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull(): # Check if icon is valid
-            self.setWindowIcon(app_icon)
-        else: # Fallback to default if icon is null
-            self.setWindowIcon(QIcon())
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
+        else :
+            self .setWindowIcon (QIcon ())
+            self .setWindowIcon (app_icon )
 
         self .setModal (True )
         self .setFixedSize (650 ,600 )
@@ -3250,9 +3250,9 @@ class TourDialog (QDialog ):
         self .current_step =0 
         self .parent_app =parent 
 
-        app_icon = get_app_icon_object()
-        if not app_icon.isNull():
-            self.setWindowIcon(app_icon)
+        app_icon =get_app_icon_object ()
+        if not app_icon .isNull ():
+            self .setWindowIcon (app_icon )
 
         self .setModal (True )
         self .setFixedSize (600 ,620 )
@@ -3575,8 +3575,8 @@ class DownloaderApp (QWidget ):
     log_signal =pyqtSignal (str )
     add_character_prompt_signal =pyqtSignal (str )
     overall_progress_signal =pyqtSignal (int ,int )
-    file_successfully_downloaded_signal = pyqtSignal(dict) # For actually downloaded files    
-    post_processed_for_history_signal = pyqtSignal(dict) # For history data from DownloadThread   
+    file_successfully_downloaded_signal =pyqtSignal (dict )
+    post_processed_for_history_signal =pyqtSignal (dict )
     finished_signal =pyqtSignal (int ,int ,bool ,list )
     external_link_signal =pyqtSignal (str ,str ,str ,str ,str )
     file_progress_signal =pyqtSignal (str ,object )
@@ -3600,18 +3600,18 @@ class DownloaderApp (QWidget ):
         self .total_posts_to_process =0 
         self .dynamic_character_filter_holder =DynamicFilterHolder ()
         self .processed_posts_count =0 
-        self.creator_name_cache = {} # Initialize creator_name_cache
-        self.log_signal.emit(f"ℹ️ App base directory: {self.app_base_dir}")
-        
-        # Persistent History Setup
-        app_data_path = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-        self.last_downloaded_files_details = deque(maxlen=3) # For the new left-pane history       
-        if not app_data_path: # Fallback if AppDataLocation is not available
-            app_data_path = os.path.join(self.app_base_dir, "app_data")
-        self.persistent_history_file = os.path.join(app_data_path, CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN, "download_history.json")
-        self.download_history_candidates = deque(maxlen=8)
-        self.log_signal.emit(f"ℹ️ Persistent history file path set to: {self.persistent_history_file}")     
-        self.final_download_history_entries = []   
+        self .creator_name_cache ={}
+        self .log_signal .emit (f"ℹ️ App base directory: {self .app_base_dir }")
+
+
+        app_data_path =QStandardPaths .writableLocation (QStandardPaths .AppDataLocation )
+        self .last_downloaded_files_details =deque (maxlen =3 )
+        if not app_data_path :
+            app_data_path =os .path .join (self .app_base_dir ,"app_data")
+        self .persistent_history_file =os .path .join (app_data_path ,CONFIG_ORGANIZATION_NAME ,CONFIG_APP_NAME_MAIN ,"download_history.json")
+        self .download_history_candidates =deque (maxlen =8 )
+        self .log_signal .emit (f"ℹ️ Persistent history file path set to: {self .persistent_history_file }")
+        self .final_download_history_entries =[]
         self .favorite_download_queue =deque ()
         self .is_processing_favorites_queue =False 
         self .download_counter =0 
@@ -3621,7 +3621,7 @@ class DownloaderApp (QWidget ):
         self .is_fetcher_thread_running =False 
         self ._restart_pending =False 
         self .is_processing_favorites_queue =False 
-        self.download_history_log = deque(maxlen=50) # For storing recent download history       
+        self .download_history_log =deque (maxlen =50 )
         self .skip_counter =0 
         self .all_kept_original_filenames =[]
         self .cancellation_message_logged_this_session =False 
@@ -3705,23 +3705,23 @@ class DownloaderApp (QWidget ):
 
         print (f"ℹ️ Known.txt will be loaded/saved at: {self .config_file }")
 
-        # Explicitly set window icon for the main app window
-        # This is in addition to QApplication.setWindowIcon in if __name__ == '__main__'
-        try:
-            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-                # PyInstaller-like bundle
-                base_dir_for_icon = sys._MEIPASS
-            else:
-                # Running as a script
-                base_dir_for_icon = os.path.dirname(os.path.abspath(__file__))
 
-            icon_path_for_window = os.path.join(base_dir_for_icon, 'assets', 'Kemono.ico') # <--- This is for QWidget
-            if os.path.exists(icon_path_for_window):
-                self.setWindowIcon(QIcon(icon_path_for_window))
-            else:
-                self.log_signal.emit(f"⚠️ Main window icon 'assets/Kemono.ico' not found at {icon_path_for_window} (tried in DownloaderApp init)")
-        except Exception as e_icon_app:
-            self.log_signal.emit(f"❌ Error setting main window icon in DownloaderApp init: {e_icon_app}")
+
+        try :
+            if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
+
+                base_dir_for_icon =sys ._MEIPASS 
+            else :
+
+                base_dir_for_icon =os .path .dirname (os .path .abspath (__file__ ))
+
+            icon_path_for_window =os .path .join (base_dir_for_icon ,'assets','Kemono.ico')
+            if os .path .exists (icon_path_for_window ):
+                self .setWindowIcon (QIcon (icon_path_for_window ))
+            else :
+                self .log_signal .emit (f"⚠️ Main window icon 'assets/Kemono.ico' not found at {icon_path_for_window } (tried in DownloaderApp init)")
+        except Exception as e_icon_app :
+            self .log_signal .emit (f"❌ Error setting main window icon in DownloaderApp init: {e_icon_app }")
 
         self .url_label_widget =None 
         self .download_location_label_widget =None 
@@ -3746,7 +3746,7 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit (f"ℹ️ Scan post content for images defaults to: {'Enabled'if self .scan_content_images_setting else 'Disabled'}")
         self .log_signal .emit (f"ℹ️ Application language loaded: '{self .current_selected_language .upper ()}' (UI may not reflect this yet).")
         self ._retranslate_main_ui ()
-        self._load_persistent_history() # Load history after UI is mostly set up
+        self ._load_persistent_history ()
 
 
     def _tr (self ,key ,default_text =""):
@@ -3755,15 +3755,15 @@ class DownloaderApp (QWidget ):
             return get_translation (self .current_selected_language ,key ,default_text )
         return default_text 
 
-    def _initialize_persistent_history_path(self):
-        documents_path = QStandardPaths.writableLocation(QStandardPaths.DocumentsLocation)
-        if not documents_path: # Fallback if DocumentsLocation is not available
-            self.log_signal.emit("⚠️ DocumentsLocation not found. Falling back to app base directory for history.")
-            documents_path = self.app_base_dir # Fallback to app's base directory
-        
-        history_folder_name = "history" # User wants a folder named "history"
-        self.persistent_history_file = os.path.join(documents_path, history_folder_name, "download_history.json")
-        self.log_signal.emit(f"ℹ️ Persistent history file path set to: {self.persistent_history_file}")
+    def _initialize_persistent_history_path (self ):
+        documents_path =QStandardPaths .writableLocation (QStandardPaths .DocumentsLocation )
+        if not documents_path :
+            self .log_signal .emit ("⚠️ DocumentsLocation not found. Falling back to app base directory for history.")
+            documents_path =self .app_base_dir 
+
+        history_folder_name ="history"
+        self .persistent_history_file =os .path .join (documents_path ,history_folder_name ,"download_history.json")
+        self .log_signal .emit (f"ℹ️ Persistent history file path set to: {self .persistent_history_file }")
 
     def _retranslate_main_ui (self ):
         """Retranslates static text elements in the main UI."""
@@ -3934,7 +3934,7 @@ class DownloaderApp (QWidget ):
         self .actual_gui_signals .file_progress_signal .connect (self .update_file_progress_display )
         self .actual_gui_signals .missed_character_post_signal .connect (self .handle_missed_character_post )
         self .actual_gui_signals .external_link_signal .connect (self .handle_external_link_signal )
-        self .actual_gui_signals .file_successfully_downloaded_signal.connect(self._handle_actual_file_downloaded) # Connect new signal      
+        self .actual_gui_signals .file_successfully_downloaded_signal .connect (self ._handle_actual_file_downloaded )
         self .actual_gui_signals .file_download_status_signal .connect (lambda status :None )
 
         if hasattr (self ,'character_input'):
@@ -3955,7 +3955,7 @@ class DownloaderApp (QWidget ):
         self .add_character_prompt_signal .connect (self .prompt_add_character )
         self .character_prompt_response_signal .connect (self .receive_add_character_result )
         self .overall_progress_signal .connect (self .update_progress_display )
-        self.post_processed_for_history_signal.connect(self._add_to_history_candidates) # Connect new signal     
+        self .post_processed_for_history_signal .connect (self ._add_to_history_candidates )
         self .finished_signal .connect (self .download_finished )
         if hasattr (self ,'character_search_input'):self .character_search_input .textChanged .connect (self .filter_character_list )
         if hasattr (self ,'external_links_checkbox'):self .external_links_checkbox .toggled .connect (self .update_external_links_setting )
@@ -4012,8 +4012,8 @@ class DownloaderApp (QWidget ):
             self .favorite_mode_posts_button .clicked .connect (self ._show_favorite_posts_dialog )
         if hasattr (self ,'favorite_scope_toggle_button'):
             self .favorite_scope_toggle_button .clicked .connect (self ._cycle_favorite_scope )
-        if hasattr(self, 'history_button'): # Connect history button
-            self.history_button.clicked.connect(self._show_download_history_dialog)       
+        if hasattr (self ,'history_button'):
+            self .history_button .clicked .connect (self ._show_download_history_dialog )
         if hasattr (self ,'error_btn'):
             self .error_btn .clicked .connect (self ._show_error_files_dialog )
 
@@ -4096,10 +4096,10 @@ class DownloaderApp (QWidget ):
                     self .actual_gui_signals .file_progress_signal .emit (*payload )
                 elif signal_type =='missed_character_post':
                     self .actual_gui_signals .missed_character_post_signal .emit (*payload )
-                elif signal_type == 'file_successfully_downloaded': # Handle new signal type from queue
-                    self._handle_actual_file_downloaded(payload[0] if payload else {})               
-                elif signal_type == 'file_successfully_downloaded':
-                    self._handle_file_successfully_downloaded(payload[0]) # payload is (history_entry_dict,)              
+                elif signal_type =='file_successfully_downloaded':
+                    self ._handle_actual_file_downloaded (payload [0 ]if payload else {})
+                elif signal_type =='file_successfully_downloaded':
+                    self ._handle_file_successfully_downloaded (payload [0 ])
                 else :
                     self .log_signal .emit (f"⚠️ Unknown signal type from worker queue: {signal_type }")
                 self .worker_to_gui_queue .task_done ()
@@ -4191,7 +4191,7 @@ class DownloaderApp (QWidget ):
         self .settings .setValue (THEME_KEY ,self .current_theme )
         self .settings .setValue (LANGUAGE_KEY ,self .current_selected_language )
         self .settings .sync ()
-        self._save_persistent_history() # Ensure history is saved on close
+        self ._save_persistent_history ()
 
         should_exit =True 
         is_downloading =self ._is_download_active ()
@@ -4644,7 +4644,7 @@ class DownloaderApp (QWidget ):
         self .known_names_help_button .setStyleSheet ("padding: 4px 6px;")
         self .known_names_help_button .clicked .connect (self ._show_feature_guide )
 
-        self .history_button =QPushButton ("📜") # History emoji
+        self .history_button =QPushButton ("📜")
         self .history_button .setFixedWidth (35 )
         self .history_button .setStyleSheet ("padding: 4px 6px;")
         self .history_button .setToolTip (self ._tr ("history_button_tooltip_text","View download history (Not Implemented Yet)"))
@@ -4656,7 +4656,7 @@ class DownloaderApp (QWidget ):
         char_manage_layout .addWidget (self .add_to_filter_button ,1 )
         char_manage_layout .addWidget (self .delete_char_button ,1 )
         char_manage_layout .addWidget (self .known_names_help_button ,0 )
-        char_manage_layout .addWidget (self .history_button ,0 ) # Add the new history button
+        char_manage_layout .addWidget (self .history_button ,0 )
         char_manage_layout .addWidget (self .future_settings_button ,0 )
         left_layout .addLayout (char_manage_layout )
         left_layout .addStretch (0 )
@@ -4788,8 +4788,8 @@ class DownloaderApp (QWidget ):
         if self .manga_mode_checkbox :
             self .update_ui_for_manga_mode (self .manga_mode_checkbox .isChecked ())
         if hasattr (self ,'link_input'):self .link_input .textChanged .connect (lambda :self .update_ui_for_manga_mode (self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False ))
-        
-        self._load_creator_name_cache_from_json() # Load creator names for history and other features
+
+        self ._load_creator_name_cache_from_json ()
         self .load_known_names_from_util ()
         self ._update_cookie_input_visibility (self .use_cookie_checkbox .isChecked ()if hasattr (self ,'use_cookie_checkbox')else False )
         self ._handle_multithreading_toggle (self .use_multithreading_checkbox .isChecked ())
@@ -4803,143 +4803,143 @@ class DownloaderApp (QWidget ):
             self ._handle_thumbnail_mode_change (self .download_thumbnails_checkbox .isChecked ())
         if hasattr (self ,'favorite_mode_checkbox'):
 
-            self._handle_favorite_mode_toggle(False) # Ensure UI is in non-favorite state after reset
+            self ._handle_favorite_mode_toggle (False )
 
-    def _load_persistent_history(self):
+    def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
-        self._initialize_persistent_history_path() # Ensure path is set before loading
-        file_existed_before_load = os.path.exists(self.persistent_history_file)
-        self.log_signal.emit(f"📜 Attempting to load history from: {self.persistent_history_file}")   
-        if os.path.exists(self.persistent_history_file):
-            try:
-                with open(self.persistent_history_file, 'r', encoding='utf-8') as f:
-                    loaded_history = json.load(f)
-                if isinstance(loaded_history, list):
-                    self.final_download_history_entries = loaded_history
-                    self.log_signal.emit(f"✅ Loaded {len(loaded_history)} entries from persistent download history: {self.persistent_history_file}")
-                elif loaded_history is None and os.path.getsize(self.persistent_history_file) == 0: # Handle empty file
-                    self.log_signal.emit(f"ℹ️ Persistent history file is empty. Initializing with empty history.")
-                    self.final_download_history_entries = []             
-                else:
-                    self.log_signal.emit(f"⚠️ Persistent history file has incorrect format. Expected list, got {type(loaded_history)}. Ignoring.")
-                    self.final_download_history_entries = [] 
-            except json.JSONDecodeError:
-                self.log_signal.emit(f"⚠️ Error decoding persistent history file. It might be corrupted. Ignoring.")
-                self.final_download_history_entries = []          
-            except Exception as e:
-                self.log_signal.emit(f"❌ Error loading persistent history: {e}")
-                self.final_download_history_entries = []      
-        else:
-            self.log_signal.emit(f"⚠️ Persistent history file NOT FOUND at: {self.persistent_history_file}. Starting with empty history.")
-            self.final_download_history_entries = [] # Initialize to empty if not found
-            self._save_persistent_history() # Attempt to create the directory and an empty history file now
+        self ._initialize_persistent_history_path ()
+        file_existed_before_load =os .path .exists (self .persistent_history_file )
+        self .log_signal .emit (f"📜 Attempting to load history from: {self .persistent_history_file }")
+        if os .path .exists (self .persistent_history_file ):
+            try :
+                with open (self .persistent_history_file ,'r',encoding ='utf-8')as f :
+                    loaded_history =json .load (f )
+                if isinstance (loaded_history ,list ):
+                    self .final_download_history_entries =loaded_history 
+                    self .log_signal .emit (f"✅ Loaded {len (loaded_history )} entries from persistent download history: {self .persistent_history_file }")
+                elif loaded_history is None and os .path .getsize (self .persistent_history_file )==0 :
+                    self .log_signal .emit (f"ℹ️ Persistent history file is empty. Initializing with empty history.")
+                    self .final_download_history_entries =[]
+                else :
+                    self .log_signal .emit (f"⚠️ Persistent history file has incorrect format. Expected list, got {type (loaded_history )}. Ignoring.")
+                    self .final_download_history_entries =[]
+            except json .JSONDecodeError :
+                self .log_signal .emit (f"⚠️ Error decoding persistent history file. It might be corrupted. Ignoring.")
+                self .final_download_history_entries =[]
+            except Exception as e :
+                self .log_signal .emit (f"❌ Error loading persistent history: {e }")
+                self .final_download_history_entries =[]
+        else :
+            self .log_signal .emit (f"⚠️ Persistent history file NOT FOUND at: {self .persistent_history_file }. Starting with empty history.")
+            self .final_download_history_entries =[]
+            self ._save_persistent_history ()
 
-    def _save_persistent_history(self):
+    def _save_persistent_history (self ):
         """Saves download history to a persistent file."""
-        if not hasattr(self, 'persistent_history_file') or not self.persistent_history_file:
-            self._initialize_persistent_history_path() # Ensure path is set before saving
-        self.log_signal.emit(f"📜 Attempting to save history to: {self.persistent_history_file}")
-        try:
-            history_dir = os.path.dirname(self.persistent_history_file)
-            self.log_signal.emit(f"   History directory: {history_dir}")            
-            if not os.path.exists(history_dir):
-                os.makedirs(history_dir, exist_ok=True)
-                self.log_signal.emit(f"   Created history directory: {history_dir}")
-            
-            with open(self.persistent_history_file, 'w', encoding='utf-8')as f:
-                json.dump(self.final_download_history_entries, f, indent=2)
-            self.log_signal.emit(f"✅ Saved {len(self.final_download_history_entries)} history entries to: {self.persistent_history_file}")
-        except Exception as e:
-            self.log_signal.emit(f"❌ Error saving persistent history to {self.persistent_history_file}: {e}")
-    def _load_creator_name_cache_from_json(self):
+        if not hasattr (self ,'persistent_history_file')or not self .persistent_history_file :
+            self ._initialize_persistent_history_path ()
+        self .log_signal .emit (f"📜 Attempting to save history to: {self .persistent_history_file }")
+        try :
+            history_dir =os .path .dirname (self .persistent_history_file )
+            self .log_signal .emit (f"   History directory: {history_dir }")
+            if not os .path .exists (history_dir ):
+                os .makedirs (history_dir ,exist_ok =True )
+                self .log_signal .emit (f"   Created history directory: {history_dir }")
+
+            with open (self .persistent_history_file ,'w',encoding ='utf-8')as f :
+                json .dump (self .final_download_history_entries ,f ,indent =2 )
+            self .log_signal .emit (f"✅ Saved {len (self .final_download_history_entries )} history entries to: {self .persistent_history_file }")
+        except Exception as e :
+            self .log_signal .emit (f"❌ Error saving persistent history to {self .persistent_history_file }: {e }")
+    def _load_creator_name_cache_from_json (self ):
         """Loads creator id-name-service mappings from creators.json into self.creator_name_cache."""
-        self.log_signal.emit("ℹ️ Attempting to load creators.json for creator name cache.")
+        self .log_signal .emit ("ℹ️ Attempting to load creators.json for creator name cache.")
 
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            base_path_for_creators = sys._MEIPASS
-        else:
-            base_path_for_creators = self.app_base_dir
+        if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
+            base_path_for_creators =sys ._MEIPASS 
+        else :
+            base_path_for_creators =self .app_base_dir 
 
-        creators_file_path = os.path.join(base_path_for_creators, "creators.json")
+        creators_file_path =os .path .join (base_path_for_creators ,"creators.json")
 
-        if not os.path.exists(creators_file_path):
-            self.log_signal.emit(f"⚠️ 'creators.json' not found at {creators_file_path}. Creator name cache will be empty.")
-            self.creator_name_cache.clear()
-            return
+        if not os .path .exists (creators_file_path ):
+            self .log_signal .emit (f"⚠️ 'creators.json' not found at {creators_file_path }. Creator name cache will be empty.")
+            self .creator_name_cache .clear ()
+            return 
 
-        try:
-            with open(creators_file_path, 'r', encoding='utf-8') as f:
-                loaded_data = json.load(f)
+        try :
+            with open (creators_file_path ,'r',encoding ='utf-8')as f :
+                loaded_data =json .load (f )
 
-            creators_list = []
-            if isinstance(loaded_data, list) and len(loaded_data) > 0 and isinstance(loaded_data[0], list):
-                creators_list = loaded_data[0]
-            elif isinstance(loaded_data, list) and all(isinstance(item, dict) for item in loaded_data):
-                creators_list = loaded_data
-            else:
-                self.log_signal.emit(f"⚠️ 'creators.json' has an unexpected format. Creator name cache may be incomplete.")
+            creators_list =[]
+            if isinstance (loaded_data ,list )and len (loaded_data )>0 and isinstance (loaded_data [0 ],list ):
+                creators_list =loaded_data [0 ]
+            elif isinstance (loaded_data ,list )and all (isinstance (item ,dict )for item in loaded_data ):
+                creators_list =loaded_data 
+            else :
+                self .log_signal .emit (f"⚠️ 'creators.json' has an unexpected format. Creator name cache may be incomplete.")
 
-            for creator_data in creators_list:
-                creator_id = creator_data.get("id")
-                name = creator_data.get("name")
-                service = creator_data.get("service")
-                if creator_id and name and service:
-                    self.creator_name_cache[(service.lower(), str(creator_id))] = name
-            self.log_signal.emit(f"✅ Successfully loaded {len(self.creator_name_cache)} creator names into cache from 'creators.json'.")
-        except Exception as e:
-            self.log_signal.emit(f"❌ Error loading 'creators.json' for name cache: {e}")
-            self.creator_name_cache.clear()
+            for creator_data in creators_list :
+                creator_id =creator_data .get ("id")
+                name =creator_data .get ("name")
+                service =creator_data .get ("service")
+                if creator_id and name and service :
+                    self .creator_name_cache [(service .lower (),str (creator_id ))]=name 
+            self .log_signal .emit (f"✅ Successfully loaded {len (self .creator_name_cache )} creator names into cache from 'creators.json'.")
+        except Exception as e :
+            self .log_signal .emit (f"❌ Error loading 'creators.json' for name cache: {e }")
+            self .creator_name_cache .clear ()
 
-    def _show_download_history_dialog(self):
+    def _show_download_history_dialog (self ):
         """Shows the dialog with the finalized download history."""
-        last_3_downloaded = list(self.last_downloaded_files_details)
-        first_processed = self.final_download_history_entries
+        last_3_downloaded =list (self .last_downloaded_files_details )
+        first_processed =self .final_download_history_entries 
 
-        if not last_3_downloaded and not first_processed:
-            QMessageBox.information(
-                self,
-                self._tr("download_history_dialog_title_empty", "Download History (Empty)"),
-                self._tr("no_download_history_header", "No Downloads Yet")
+        if not last_3_downloaded and not first_processed :
+            QMessageBox .information (
+            self ,
+            self ._tr ("download_history_dialog_title_empty","Download History (Empty)"),
+            self ._tr ("no_download_history_header","No Downloads Yet")
             )
-            return
+            return 
 
-        dialog = DownloadHistoryDialog(last_3_downloaded, first_processed, self, self)
-        dialog.exec_()
+        dialog =DownloadHistoryDialog (last_3_downloaded ,first_processed ,self ,self )
+        dialog .exec_ ()
 
-    def _handle_actual_file_downloaded(self, file_details_dict):
+    def _handle_actual_file_downloaded (self ,file_details_dict ):
         """Handles a successfully downloaded file for the 'last 3 downloaded' history."""
-        if not file_details_dict:
-            return
-        file_details_dict['download_timestamp'] = time.time() # Ensure timestamp is set
-        creator_key = (file_details_dict.get('service', '').lower(), str(file_details_dict.get('user_id', '')))
-        file_details_dict['creator_display_name'] = self.creator_name_cache.get(creator_key, file_details_dict.get('folder_context_name', 'Unknown Creator/Series'))
-        self.last_downloaded_files_details.append(file_details_dict)
-        # self.log_signal.emit(f"💾 Recorded successful download for history: {file_details_dict.get('disk_filename', 'N/A')}")
+        if not file_details_dict :
+            return 
+        file_details_dict ['download_timestamp']=time .time ()
+        creator_key =(file_details_dict .get ('service','').lower (),str (file_details_dict .get ('user_id','')))
+        file_details_dict ['creator_display_name']=self .creator_name_cache .get (creator_key ,file_details_dict .get ('folder_context_name','Unknown Creator/Series'))
+        self .last_downloaded_files_details .append (file_details_dict )
 
-    def _handle_file_successfully_downloaded(self, history_entry_dict):
+
+    def _handle_file_successfully_downloaded (self ,history_entry_dict ):
         """Handles a successfully downloaded file for history logging."""
-        if len(self.download_history_log) >= self.download_history_log.maxlen:
-            self.download_history_log.popleft() # Remove oldest if full
-        self.download_history_log.append(history_entry_dict)
-        # self.log_signal.emit(f"📜 Added to history log: {history_entry_dict.get('post_title', 'N/A')}")
+        if len (self .download_history_log )>=self .download_history_log .maxlen :
+            self .download_history_log .popleft ()
+        self .download_history_log .append (history_entry_dict )
 
-    def _handle_actual_file_downloaded(self, file_details_dict):
+
+    def _handle_actual_file_downloaded (self ,file_details_dict ):
         """Handles a successfully downloaded file for the 'last 3 downloaded' history."""
-        if not file_details_dict:
-            return
+        if not file_details_dict :
+            return 
 
-        file_details_dict['download_timestamp'] = time.time() # Ensure timestamp is set
+        file_details_dict ['download_timestamp']=time .time ()
 
-        # Resolve creator name for display
-        creator_key = (
-            file_details_dict.get('service', '').lower(),
-            str(file_details_dict.get('user_id', ''))
+
+        creator_key =(
+        file_details_dict .get ('service','').lower (),
+        str (file_details_dict .get ('user_id',''))
         )
-        creator_display_name = self.creator_name_cache.get(creator_key, file_details_dict.get('folder_context_name', 'Unknown Creator'))
-        file_details_dict['creator_display_name'] = creator_display_name
+        creator_display_name =self .creator_name_cache .get (creator_key ,file_details_dict .get ('folder_context_name','Unknown Creator'))
+        file_details_dict ['creator_display_name']=creator_display_name 
 
-        self.last_downloaded_files_details.append(file_details_dict)
-        # self.log_signal.emit(f"💾 Recorded successful download for history: {file_details_dict.get('disk_filename', 'N/A')}")
+        self .last_downloaded_files_details .append (file_details_dict )
+
 
     def _handle_favorite_mode_toggle (self ,checked ):
         if not self .url_or_placeholder_stack or not self .bottom_action_buttons_stack :
@@ -6059,8 +6059,8 @@ class DownloaderApp (QWidget ):
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_date_based_text","Name: Date Based"))
 
 
-            elif self.manga_filename_style == STYLE_DATE_POST_TITLE: # New style
-                self.manga_rename_toggle_button.setText(self._tr("manga_style_date_post_title_text", "Name: Date + Title")) # Key from languages.py
+            elif self .manga_filename_style ==STYLE_DATE_POST_TITLE :
+                self .manga_rename_toggle_button .setText (self ._tr ("manga_style_date_post_title_text","Name: Date + Title"))
 
             else :
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_unknown_text","Name: Unknown Style"))
@@ -6075,12 +6075,12 @@ class DownloaderApp (QWidget ):
         if current_style ==STYLE_POST_TITLE :
             new_style =STYLE_ORIGINAL_NAME 
         elif current_style ==STYLE_ORIGINAL_NAME :
-            new_style =STYLE_DATE_POST_TITLE # Cycle to new style
-        elif current_style == STYLE_DATE_POST_TITLE: # New style in cycle
+            new_style =STYLE_DATE_POST_TITLE 
+        elif current_style ==STYLE_DATE_POST_TITLE :
             new_style =STYLE_POST_TITLE_GLOBAL_NUMBERING 
         elif current_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
             new_style =STYLE_DATE_BASED 
-        elif current_style == STYLE_DATE_BASED: # Last style in old cycle
+        elif current_style ==STYLE_DATE_BASED :
             new_style =STYLE_POST_TITLE 
         else :
             self .log_signal .emit (f"⚠️ Unknown current manga filename style: {current_style }. Resetting to default ('{STYLE_POST_TITLE }').")
@@ -6180,8 +6180,8 @@ class DownloaderApp (QWidget ):
 
         show_date_prefix_input =(
         manga_mode_effectively_on and 
-        (current_filename_style == STYLE_DATE_BASED or 
-         current_filename_style == STYLE_ORIGINAL_NAME) and # Prefix input not for Date+Title
+        (current_filename_style ==STYLE_DATE_BASED or 
+        current_filename_style ==STYLE_ORIGINAL_NAME )and 
         not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode )
         )
         if hasattr (self ,'manga_date_prefix_input'):
@@ -6278,198 +6278,198 @@ class DownloaderApp (QWidget ):
             QMessageBox .warning (self ,"Busy","A download is already running.")
             return False 
 
-        # If this call to start_download is not for a specific URL (e.g., user clicked main "Download" button)
-        # AND there are items in the favorite queue AND we are not already processing it.
-        if not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
-            self.log_signal.emit(f"ℹ️ Detected {len(self.favorite_download_queue)} item(s) in the queue. Starting processing...")
-            self.cancellation_message_logged_this_session = False # Reset for new queue processing session
-            self._process_next_favorite_download() # Directly call this to start processing the queue
-            return True # Indicate that the download process has been initiated via the queue
 
-        # If we reach here, it means either:
-        # 1. direct_api_url was provided (e.g., recursive call from _process_next_favorite_download)
-        # 2. The favorite_download_queue was empty or already being processed, so we fall back to link_input.
-        api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
-        self.download_history_candidates.clear() # Clear candidates buffer for new download session
-        # self.final_download_history_entries.clear() # DO NOT CLEAR HERE - loaded history should persist until a new download successfully finalizes new history
 
-        if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url and not api_url: # Check api_url here too
-            QMessageBox.information(self, "Favorite Mode Active",
-                                    "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
-            self.set_ui_enabled(True)
-            return False
+        if not direct_api_url and self .favorite_download_queue and not self .is_processing_favorites_queue :
+            self .log_signal .emit (f"ℹ️ Detected {len (self .favorite_download_queue )} item(s) in the queue. Starting processing...")
+            self .cancellation_message_logged_this_session =False 
+            self ._process_next_favorite_download ()
+            return True 
 
-        main_ui_download_dir = self.dir_input.text().strip()
 
-        if not api_url and not self.favorite_download_queue: # If still no api_url and queue is empty
-            QMessageBox.critical(self, "Input Error", "URL is required.")
-            return False
-        elif not api_url and self.favorite_download_queue: # Safeguard: if URL input is empty but queue has items
-            self.log_signal.emit("ℹ️ URL input is empty, but queue has items. Processing queue...")
-            self.cancellation_message_logged_this_session = False
-            self._process_next_favorite_download() # This was the line with the unexpected indent
-            return True
 
-        self.cancellation_message_logged_this_session = False
-        use_subfolders = self.use_subfolders_checkbox.isChecked()
-        use_post_subfolders = self.use_subfolder_per_post_checkbox.isChecked()
-        compress_images = self.compress_images_checkbox.isChecked()
-        download_thumbnails = self.download_thumbnails_checkbox.isChecked()
 
-        use_multithreading_enabled_by_checkbox = self.use_multithreading_checkbox.isChecked()
-        try:
-            num_threads_from_gui = int(self.thread_count_input.text().strip())
-            if num_threads_from_gui < 1: num_threads_from_gui = 1
-        except ValueError:
-            QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
-            return False
+        api_url =direct_api_url if direct_api_url else self .link_input .text ().strip ()
+        self .download_history_candidates .clear ()
 
-        if use_multithreading_enabled_by_checkbox:
-            if num_threads_from_gui > MAX_THREADS:
-                hard_warning_msg = (
-                    f"You've entered a thread count ({num_threads_from_gui}) exceeding the maximum of {MAX_THREADS}.\n\n"
-                    "Using an extremely high number of threads can lead to:\n"
-                    "  - Diminishing returns (no significant speed increase).\n"
-                    "  - Increased system instability or application crashes.\n"
-                    "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
-                    f"The thread count has been automatically capped to {MAX_THREADS} for stability."
+
+        if self .favorite_mode_checkbox and self .favorite_mode_checkbox .isChecked ()and not direct_api_url and not api_url :
+            QMessageBox .information (self ,"Favorite Mode Active",
+            "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
+            self .set_ui_enabled (True )
+            return False 
+
+        main_ui_download_dir =self .dir_input .text ().strip ()
+
+        if not api_url and not self .favorite_download_queue :
+            QMessageBox .critical (self ,"Input Error","URL is required.")
+            return False 
+        elif not api_url and self .favorite_download_queue :
+            self .log_signal .emit ("ℹ️ URL input is empty, but queue has items. Processing queue...")
+            self .cancellation_message_logged_this_session =False 
+            self ._process_next_favorite_download ()
+            return True 
+
+        self .cancellation_message_logged_this_session =False 
+        use_subfolders =self .use_subfolders_checkbox .isChecked ()
+        use_post_subfolders =self .use_subfolder_per_post_checkbox .isChecked ()
+        compress_images =self .compress_images_checkbox .isChecked ()
+        download_thumbnails =self .download_thumbnails_checkbox .isChecked ()
+
+        use_multithreading_enabled_by_checkbox =self .use_multithreading_checkbox .isChecked ()
+        try :
+            num_threads_from_gui =int (self .thread_count_input .text ().strip ())
+            if num_threads_from_gui <1 :num_threads_from_gui =1 
+        except ValueError :
+            QMessageBox .critical (self ,"Thread Count Error","Invalid number of threads. Please enter a positive number.")
+            return False 
+
+        if use_multithreading_enabled_by_checkbox :
+            if num_threads_from_gui >MAX_THREADS :
+                hard_warning_msg =(
+                f"You've entered a thread count ({num_threads_from_gui }) exceeding the maximum of {MAX_THREADS }.\n\n"
+                "Using an extremely high number of threads can lead to:\n"
+                "  - Diminishing returns (no significant speed increase).\n"
+                "  - Increased system instability or application crashes.\n"
+                "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
+                f"The thread count has been automatically capped to {MAX_THREADS } for stability."
                 )
-                QMessageBox.warning(self, "High Thread Count Warning", hard_warning_msg)
-                num_threads_from_gui = MAX_THREADS
-                self.thread_count_input.setText(str(MAX_THREADS))
-                self.log_signal.emit(f"⚠️ User attempted {num_threads_from_gui} threads, capped to {MAX_THREADS}.")
-            if SOFT_WARNING_THREAD_THRESHOLD < num_threads_from_gui <= MAX_THREADS:
-                soft_warning_msg_box = QMessageBox(self)
-                soft_warning_msg_box.setIcon(QMessageBox.Question)
-                soft_warning_msg_box.setWindowTitle("Thread Count Advisory")
-                soft_warning_msg_box.setText(
-                    f"You've set the thread count to {num_threads_from_gui}.\n\n"
-                    "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
-                    "  - Increased errors or failed file downloads.\n"
-                    "  - Connection issues with the server.\n"
-                    "  - Higher system resource usage.\n\n"
-                    "For most users and connections, 10-30 threads provide a good balance.\n\n"
-                    f"Do you want to proceed with {num_threads_from_gui} threads, or would you like to change the value?"
+                QMessageBox .warning (self ,"High Thread Count Warning",hard_warning_msg )
+                num_threads_from_gui =MAX_THREADS 
+                self .thread_count_input .setText (str (MAX_THREADS ))
+                self .log_signal .emit (f"⚠️ User attempted {num_threads_from_gui } threads, capped to {MAX_THREADS }.")
+            if SOFT_WARNING_THREAD_THRESHOLD <num_threads_from_gui <=MAX_THREADS :
+                soft_warning_msg_box =QMessageBox (self )
+                soft_warning_msg_box .setIcon (QMessageBox .Question )
+                soft_warning_msg_box .setWindowTitle ("Thread Count Advisory")
+                soft_warning_msg_box .setText (
+                f"You've set the thread count to {num_threads_from_gui }.\n\n"
+                "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
+                "  - Increased errors or failed file downloads.\n"
+                "  - Connection issues with the server.\n"
+                "  - Higher system resource usage.\n\n"
+                "For most users and connections, 10-30 threads provide a good balance.\n\n"
+                f"Do you want to proceed with {num_threads_from_gui } threads, or would you like to change the value?"
                 )
-                proceed_button = soft_warning_msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
-                change_button = soft_warning_msg_box.addButton("Change Thread Value", QMessageBox.RejectRole)
-                soft_warning_msg_box.setDefaultButton(proceed_button)
-                soft_warning_msg_box.setEscapeButton(change_button)
-                soft_warning_msg_box.exec_()
+                proceed_button =soft_warning_msg_box .addButton ("Proceed Anyway",QMessageBox .AcceptRole )
+                change_button =soft_warning_msg_box .addButton ("Change Thread Value",QMessageBox .RejectRole )
+                soft_warning_msg_box .setDefaultButton (proceed_button )
+                soft_warning_msg_box .setEscapeButton (change_button )
+                soft_warning_msg_box .exec_ ()
 
-                if soft_warning_msg_box.clickedButton() == change_button:
-                    self.log_signal.emit(f"ℹ️ User opted to change thread count from {num_threads_from_gui} after advisory.")
-                    self.thread_count_input.setFocus()
-                    self.thread_count_input.selectAll()
-                    return False
+                if soft_warning_msg_box .clickedButton ()==change_button :
+                    self .log_signal .emit (f"ℹ️ User opted to change thread count from {num_threads_from_gui } after advisory.")
+                    self .thread_count_input .setFocus ()
+                    self .thread_count_input .selectAll ()
+                    return False 
 
-        raw_skip_words = self.skip_words_input.text().strip()
-        skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
+        raw_skip_words =self .skip_words_input .text ().strip ()
+        skip_words_list =[word .strip ().lower ()for word in raw_skip_words .split (',')if word .strip ()]
 
-        raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
-        allow_multipart = self.allow_multipart_download_setting
-        remove_from_filename_words_list = [word.strip() for word in raw_remove_filename_words.split(',') if word.strip()]
-        scan_content_for_images = self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False
-        use_cookie_from_checkbox = self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False
-        app_base_dir_for_cookies = os.path.dirname(self.config_file)
-        cookie_text_from_input = self.cookie_text_input.text().strip() if hasattr(self, 'cookie_text_input') and use_cookie_from_checkbox else ""
+        raw_remove_filename_words =self .remove_from_filename_input .text ().strip ()if hasattr (self ,'remove_from_filename_input')else ""
+        allow_multipart =self .allow_multipart_download_setting 
+        remove_from_filename_words_list =[word .strip ()for word in raw_remove_filename_words .split (',')if word .strip ()]
+        scan_content_for_images =self .scan_content_images_checkbox .isChecked ()if hasattr (self ,'scan_content_images_checkbox')else False 
+        use_cookie_from_checkbox =self .use_cookie_checkbox .isChecked ()if hasattr (self ,'use_cookie_checkbox')else False 
+        app_base_dir_for_cookies =os .path .dirname (self .config_file )
+        cookie_text_from_input =self .cookie_text_input .text ().strip ()if hasattr (self ,'cookie_text_input')and use_cookie_from_checkbox else ""
 
-        use_cookie_for_this_run = use_cookie_from_checkbox
-        selected_cookie_file_path_for_backend = self.selected_cookie_filepath if use_cookie_from_checkbox and self.selected_cookie_filepath else None
+        use_cookie_for_this_run =use_cookie_from_checkbox 
+        selected_cookie_file_path_for_backend =self .selected_cookie_filepath if use_cookie_from_checkbox and self .selected_cookie_filepath else None 
 
-        if use_cookie_from_checkbox and not direct_api_url: # Only show cookie help if it's a fresh download start from UI
-            temp_cookies_for_check = prepare_cookies_for_request(
-                use_cookie_for_this_run,
-                cookie_text_from_input,
-                selected_cookie_file_path_for_backend,
-                app_base_dir_for_cookies,
-                lambda msg: self.log_signal.emit(f"[UI Cookie Check] {msg}")
+        if use_cookie_from_checkbox and not direct_api_url :
+            temp_cookies_for_check =prepare_cookies_for_request (
+            use_cookie_for_this_run ,
+            cookie_text_from_input ,
+            selected_cookie_file_path_for_backend ,
+            app_base_dir_for_cookies ,
+            lambda msg :self .log_signal .emit (f"[UI Cookie Check] {msg }")
             )
-            if temp_cookies_for_check is None:
-                cookie_dialog = CookieHelpDialog(self, self, offer_download_without_option=True)
-                dialog_exec_result = cookie_dialog.exec_()
+            if temp_cookies_for_check is None :
+                cookie_dialog =CookieHelpDialog (self ,self ,offer_download_without_option =True )
+                dialog_exec_result =cookie_dialog .exec_ ()
 
-                if cookie_dialog.user_choice == CookieHelpDialog.CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result == QDialog.Accepted:
-                    self.log_signal.emit("ℹ️ User chose to download without cookies for this session.")
-                    use_cookie_for_this_run = False
-                elif cookie_dialog.user_choice == CookieHelpDialog.CHOICE_CANCEL_DOWNLOAD or dialog_exec_result == QDialog.Rejected:
-                    self.log_signal.emit("❌ Download cancelled by user at cookie prompt.")
-                    return False
-                else: # Should not happen if dialog is modal and choices are handled
-                    self.log_signal.emit("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
-                    return False
+                if cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result ==QDialog .Accepted :
+                    self .log_signal .emit ("ℹ️ User chose to download without cookies for this session.")
+                    use_cookie_for_this_run =False 
+                elif cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_CANCEL_DOWNLOAD or dialog_exec_result ==QDialog .Rejected :
+                    self .log_signal .emit ("❌ Download cancelled by user at cookie prompt.")
+                    return False 
+                else :
+                    self .log_signal .emit ("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
+                    return False 
 
-        current_skip_words_scope = self.get_skip_words_scope()
-        manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
+        current_skip_words_scope =self .get_skip_words_scope ()
+        manga_mode_is_checked =self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False 
 
-        extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
-        backend_filter_mode = self.get_filter_mode()
-        checked_radio_button = self.radio_group.checkedButton()
-        user_selected_filter_text = checked_radio_button.text() if checked_radio_button else "All"
+        extract_links_only =(self .radio_only_links and self .radio_only_links .isChecked ())
+        backend_filter_mode =self .get_filter_mode ()
+        checked_radio_button =self .radio_group .checkedButton ()
+        user_selected_filter_text =checked_radio_button .text ()if checked_radio_button else "All"
 
-        effective_output_dir_for_run = ""
+        effective_output_dir_for_run =""
 
-        if selected_cookie_file_path_for_backend: # If a file is selected, cookie_text_from_input should be ignored by backend
-            cookie_text_from_input = ""
+        if selected_cookie_file_path_for_backend :
+            cookie_text_from_input =""
 
-        if backend_filter_mode == 'archive':
-            effective_skip_zip = False
-            effective_skip_rar = False
-        else:
-            effective_skip_zip = self.skip_zip_checkbox.isChecked()
-            effective_skip_rar = self.skip_rar_checkbox.isChecked()
-            if backend_filter_mode == 'audio': # Ensure audio mode doesn't force skip_zip/rar off
-                effective_skip_zip = self.skip_zip_checkbox.isChecked()
-                effective_skip_rar = self.skip_rar_checkbox.isChecked()
+        if backend_filter_mode =='archive':
+            effective_skip_zip =False 
+            effective_skip_rar =False 
+        else :
+            effective_skip_zip =self .skip_zip_checkbox .isChecked ()
+            effective_skip_rar =self .skip_rar_checkbox .isChecked ()
+            if backend_filter_mode =='audio':
+                effective_skip_zip =self .skip_zip_checkbox .isChecked ()
+                effective_skip_rar =self .skip_rar_checkbox .isChecked ()
 
-        if not api_url: # This check is now after the queue processing
-            QMessageBox.critical(self, "Input Error", "URL is required.")
-            return False
+        if not api_url :
+            QMessageBox .critical (self ,"Input Error","URL is required.")
+            return False 
 
-        if override_output_dir: # This is for items from the queue that need specific artist folders
-            if not main_ui_download_dir: # Main download dir must be set for this
-                QMessageBox.critical(self, "Configuration Error",
-                                     "The main 'Download Location' must be set in the UI "
-                                     "before downloading favorites with 'Artist Folders' scope.")
-                if self.is_processing_favorites_queue:
-                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory not set.")
-                return False # Stop this specific item
+        if override_output_dir :
+            if not main_ui_download_dir :
+                QMessageBox .critical (self ,"Configuration Error",
+                "The main 'Download Location' must be set in the UI "
+                "before downloading favorites with 'Artist Folders' scope.")
+                if self .is_processing_favorites_queue :
+                    self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory not set.")
+                return False 
 
-            if not os.path.isdir(main_ui_download_dir):
-                QMessageBox.critical(self, "Directory Error",
-                                     f"The main 'Download Location' ('{main_ui_download_dir}') "
-                                     "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
-                if self.is_processing_favorites_queue:
-                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory invalid.")
-                return False # Stop this specific item
-            effective_output_dir_for_run = os.path.normpath(override_output_dir)
-        else: # For direct URL input or items not needing override
-            if not extract_links_only and not main_ui_download_dir:
-                QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode.")
-                return False
+            if not os .path .isdir (main_ui_download_dir ):
+                QMessageBox .critical (self ,"Directory Error",
+                f"The main 'Download Location' ('{main_ui_download_dir }') "
+                "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
+                if self .is_processing_favorites_queue :
+                    self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory invalid.")
+                return False 
+            effective_output_dir_for_run =os .path .normpath (override_output_dir )
+        else :
+            if not extract_links_only and not main_ui_download_dir :
+                QMessageBox .critical (self ,"Input Error","Download Directory is required when not in 'Only Links' mode.")
+                return False 
 
-            if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
-                reply = QMessageBox.question(self, "Create Directory?",
-                                             f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
-                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-                if reply == QMessageBox.Yes:
-                    try:
-                        os.makedirs(main_ui_download_dir, exist_ok=True)
-                        self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
-                    except Exception as e:
-                        QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
-                        return False
-                else:
-                    self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
-                    return False
-            effective_output_dir_for_run = os.path.normpath(main_ui_download_dir)
+            if not extract_links_only and main_ui_download_dir and not os .path .isdir (main_ui_download_dir ):
+                reply =QMessageBox .question (self ,"Create Directory?",
+                f"The directory '{main_ui_download_dir }' does not exist.\nCreate it now?",
+                QMessageBox .Yes |QMessageBox .No ,QMessageBox .Yes )
+                if reply ==QMessageBox .Yes :
+                    try :
+                        os .makedirs (main_ui_download_dir ,exist_ok =True )
+                        self .log_signal .emit (f"ℹ️ Created directory: {main_ui_download_dir }")
+                    except Exception as e :
+                        QMessageBox .critical (self ,"Directory Error",f"Could not create directory: {e }")
+                        return False 
+                else :
+                    self .log_signal .emit ("❌ Download cancelled: Output directory does not exist and was not created.")
+                    return False 
+            effective_output_dir_for_run =os .path .normpath (main_ui_download_dir )
 
-        service, user_id, post_id_from_url = extract_post_info(api_url)
-        if not service or not user_id: # This check is fine here
-            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
-            return False
+        service ,user_id ,post_id_from_url =extract_post_info (api_url )
+        if not service or not user_id :
+            QMessageBox .critical (self ,"Input Error","Invalid or unsupported URL format.")
+            return False 
 
-        # ... (rest of the start_download method remains the same)
+
             self ._process_next_favorite_download ()
             return True 
 
@@ -7044,14 +7044,14 @@ class DownloaderApp (QWidget ):
             if hasattr (self .download_thread ,'missed_character_post_signal'):
                 self .download_thread .missed_character_post_signal .connect (self .handle_missed_character_post )
             if hasattr (self .download_thread ,'retryable_file_failed_signal'):
-                # Connect the new history signal from DownloadThread
-                if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): # Connect new signal for actual downloads
-                    self.download_thread.file_successfully_downloaded_signal.connect(self._handle_actual_file_downloaded)               
-                if hasattr(self.download_thread, 'post_processed_for_history_signal'): # Check if signal exists
-                    self.download_thread.post_processed_for_history_signal.connect(self._add_to_history_candidates)               
+
+                if hasattr (self .download_thread ,'file_successfully_downloaded_signal'):
+                    self .download_thread .file_successfully_downloaded_signal .connect (self ._handle_actual_file_downloaded )
+                if hasattr (self .download_thread ,'post_processed_for_history_signal'):
+                    self .download_thread .post_processed_for_history_signal .connect (self ._add_to_history_candidates )
                 self .download_thread .retryable_file_failed_signal .connect (self ._handle_retryable_file_failure )
-                if hasattr(self.download_thread, 'permanent_file_failed_signal'): # Ensure this signal exists on BackendDownloadThread
-                    self.download_thread.permanent_file_failed_signal.connect(self._handle_permanent_file_failure_from_thread)
+                if hasattr (self .download_thread ,'permanent_file_failed_signal'):
+                    self .download_thread .permanent_file_failed_signal .connect (self ._handle_permanent_file_failure_from_thread )
             self .download_thread .start ()
             self .log_signal .emit ("✅ Single download thread (for posts) started.")
         except Exception as e :
@@ -7079,11 +7079,11 @@ class DownloaderApp (QWidget ):
         if list_of_retry_details :
             self .retryable_failed_files_info .extend (list_of_retry_details )
 
-    def _handle_permanent_file_failure_from_thread(self, list_of_permanent_failure_details):
+    def _handle_permanent_file_failure_from_thread (self ,list_of_permanent_failure_details ):
         """Handles permanently failed files signaled by the single BackendDownloadThread."""
-        if list_of_permanent_failure_details:
-            self.permanently_failed_files_for_dialog.extend(list_of_permanent_failure_details)
-            self.log_signal.emit(f"ℹ️ {len(list_of_permanent_failure_details)} file(s) from single-thread download marked as permanently failed for this session.")
+        if list_of_permanent_failure_details :
+            self .permanently_failed_files_for_dialog .extend (list_of_permanent_failure_details )
+            self .log_signal .emit (f"ℹ️ {len (list_of_permanent_failure_details )} file(s) from single-thread download marked as permanently failed for this session.")
 
     def _submit_post_to_worker_pool (self ,post_data_item ,worker_args_template ,num_file_dl_threads_for_each_worker ,emitter_for_worker ,ppw_expected_keys ,ppw_optional_keys_with_defaults ):
         """Helper to prepare and submit a single post processing task to the thread pool."""
@@ -7172,17 +7172,17 @@ class DownloaderApp (QWidget ):
             start_page =worker_args_template .get ('start_page'),
             end_page =worker_args_template .get ('end_page'),
             manga_mode =manga_mode_active_for_fetch ,
-                cancellation_event=self.cancellation_event,
-                pause_event=worker_args_template.get('pause_event'),
-                use_cookie=worker_args_template.get('use_cookie'),
-                cookie_text=worker_args_template.get('cookie_text'),
-                selected_cookie_file=worker_args_template.get('selected_cookie_file'),
-                app_base_dir=worker_args_template.get('app_base_dir'),
-                manga_filename_style_for_sort_check=(
-                    worker_args_template.get('manga_filename_style')
-                    if manga_mode_active_for_fetch
-                        else None
-                )
+            cancellation_event =self .cancellation_event ,
+            pause_event =worker_args_template .get ('pause_event'),
+            use_cookie =worker_args_template .get ('use_cookie'),
+            cookie_text =worker_args_template .get ('cookie_text'),
+            selected_cookie_file =worker_args_template .get ('selected_cookie_file'),
+            app_base_dir =worker_args_template .get ('app_base_dir'),
+            manga_filename_style_for_sort_check =(
+            worker_args_template .get ('manga_filename_style')
+            if manga_mode_active_for_fetch 
+            else None 
+            )
             )
 
             for posts_batch in post_generator :
@@ -7358,16 +7358,14 @@ class DownloaderApp (QWidget ):
             elif future .exception ():
                 self .log_signal .emit (f"❌ Post processing worker error: {future .exception ()}")
             else :
-                # unpack the new history_data from the future's result
-                result_tuple = future.result()
-                downloaded_files_from_future, skipped_files_from_future, \
-                kept_originals_from_future, retryable_failures_from_post, \
-                permanent_failures_from_post, history_data_from_worker = result_tuple
-                if history_data_from_worker: # if worker returned history data
-                    self._add_to_history_candidates(history_data_from_worker)
+
+                result_tuple =future .result ()
+                downloaded_files_from_future ,skipped_files_from_future ,kept_originals_from_future ,retryable_failures_from_post ,permanent_failures_from_post ,history_data_from_worker =result_tuple 
+                if history_data_from_worker :
+                    self ._add_to_history_candidates (history_data_from_worker )
             with self .downloaded_files_lock :
                 self .download_counter +=downloaded_files_from_future 
-                self .skip_counter +=skipped_files_from_future  # type: ignore
+                self .skip_counter +=skipped_files_from_future 
 
             if kept_originals_from_future :
                 self .all_kept_original_filenames .extend (kept_originals_from_future )
@@ -7384,50 +7382,50 @@ class DownloaderApp (QWidget ):
                 self .log_signal .emit ("🏁 All submitted post tasks have completed or failed.")
                 self .finished_signal .emit (self .download_counter ,self .skip_counter ,self .cancellation_event .is_set (),self .all_kept_original_filenames )
 
-    def _add_to_history_candidates(self, history_data):
+    def _add_to_history_candidates (self ,history_data ):
         """Adds processed post data to the history candidates list."""
-        if history_data and len(self.download_history_candidates) < 8:
-            history_data['download_date_timestamp'] = time.time()
-            creator_key = (history_data.get('service', '').lower(), str(history_data.get('user_id', '')))
-            history_data['creator_name'] = self.creator_name_cache.get(creator_key, history_data.get('user_id', 'Unknown'))
-            self.download_history_candidates.append(history_data)
+        if history_data and len (self .download_history_candidates )<8 :
+            history_data ['download_date_timestamp']=time .time ()
+            creator_key =(history_data .get ('service','').lower (),str (history_data .get ('user_id','')))
+            history_data ['creator_name']=self .creator_name_cache .get (creator_key ,history_data .get ('user_id','Unknown'))
+            self .download_history_candidates .append (history_data )
 
-    def _finalize_download_history(self):
+    def _finalize_download_history (self ):
         """Processes candidates and selects the final 3 history entries.
         Only updates final_download_history_entries if new candidates are available.
         """
-        if not self.download_history_candidates:
-            # No new candidates from this session, so don't touch existing
-            # final_download_history_entries (which might be from a previous session).
-            self.log_signal.emit("ℹ️ No new history candidates from this session. Preserving existing history.")
-            # It's important to clear the candidates buffer for the next session,
-            # even if we don't use them this time.
-            self.download_history_candidates.clear()
-            return
+        if not self .download_history_candidates :
 
-        candidates = list(self.download_history_candidates)
-        now = datetime.datetime.now(datetime.timezone.utc) # Use timezone-aware now
 
-        def get_sort_key(entry):
-            upload_date_str = entry.get('upload_date_str')
-            if not upload_date_str:
-                return datetime.timedelta.max # Push entries with no date to the end
-            try:
-                # Attempt to parse ISO format, make it offset-naive if necessary
-                upload_dt = datetime.datetime.fromisoformat(upload_date_str.replace('Z', '+00:00'))
-                if upload_dt.tzinfo is None: # If still naive, assume UTC
-                    upload_dt = upload_dt.replace(tzinfo=datetime.timezone.utc)
-                return abs(now - upload_dt)
-            except ValueError:
-                return datetime.timedelta.max # Push unparseable dates to the end
+            self .log_signal .emit ("ℹ️ No new history candidates from this session. Preserving existing history.")
 
-        candidates.sort(key=get_sort_key)
-        self.final_download_history_entries = candidates[:3]
-        self.log_signal.emit(f"ℹ️ Finalized download history: {len(self.final_download_history_entries)} entries selected.")
-        self.download_history_candidates.clear() # Clear candidates after processing
 
-        # Always save the current state of final_download_history_entries
-        self._save_persistent_history() 
+            self .download_history_candidates .clear ()
+            return 
+
+        candidates =list (self .download_history_candidates )
+        now =datetime .datetime .now (datetime .timezone .utc )
+
+        def get_sort_key (entry ):
+            upload_date_str =entry .get ('upload_date_str')
+            if not upload_date_str :
+                return datetime .timedelta .max 
+            try :
+
+                upload_dt =datetime .datetime .fromisoformat (upload_date_str .replace ('Z','+00:00'))
+                if upload_dt .tzinfo is None :
+                    upload_dt =upload_dt .replace (tzinfo =datetime .timezone .utc )
+                return abs (now -upload_dt )
+            except ValueError :
+                return datetime .timedelta .max 
+
+        candidates .sort (key =get_sort_key )
+        self .final_download_history_entries =candidates [:3 ]
+        self .log_signal .emit (f"ℹ️ Finalized download history: {len (self .final_download_history_entries )} entries selected.")
+        self .download_history_candidates .clear ()
+
+
+        self ._save_persistent_history ()
 
     def _get_configurable_widgets_on_pause (self ):
         """Returns a list of widgets that should be re-enabled when paused."""
@@ -7704,13 +7702,13 @@ class DownloaderApp (QWidget ):
             self .last_link_input_text_for_queue_sync =self .link_input .text ()
         self .cancellation_message_logged_this_session =False 
 
-    def _get_domain_for_service(self, service_name: str) -> str:
+    def _get_domain_for_service (self ,service_name :str )->str :
         """Determines the base domain for a given service."""
-        if not isinstance(service_name, str): # Basic type check
-            return "kemono.su" # Default fallback
-        service_lower = service_name.lower()
-        coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans', 'gumroad', 'patreon', 'subscribestar', 'dlsite', 'discord', 'fantia', 'boosty', 'pixiv', 'fanbox'} # Added more from your general usage
-        if service_lower in coomer_primary_services and service_lower not in ['patreon', 'discord', 'fantia', 'boosty', 'pixiv', 'fanbox']: # Explicitly keep these on kemono
+        if not isinstance (service_name ,str ):
+            return "kemono.su"
+        service_lower =service_name .lower ()
+        coomer_primary_services ={'onlyfans','fansly','manyvids','candfans','gumroad','patreon','subscribestar','dlsite','discord','fantia','boosty','pixiv','fanbox'}
+        if service_lower in coomer_primary_services and service_lower not in ['patreon','discord','fantia','boosty','pixiv','fanbox']:
             return "coomer.su"
         return "kemono.su"
 
@@ -7720,7 +7718,7 @@ class DownloaderApp (QWidget ):
         if kept_original_names_list is None :
             kept_original_names_list =[]
 
-        self._finalize_download_history() # Finalize history before UI updates
+        self ._finalize_download_history ()
         status_message =self ._tr ("status_cancelled_by_user","Cancelled by user")if cancelled_by_user else self ._tr ("status_completed","Completed")
         if cancelled_by_user and self .retryable_failed_files_info :
             self .log_signal .emit (f"    Download cancelled, discarding {len (self .retryable_failed_files_info )} file(s) that were pending retry.")
@@ -7759,10 +7757,10 @@ class DownloaderApp (QWidget ):
                     self .download_thread .missed_character_post_signal .disconnect (self .handle_missed_character_post )
                 if hasattr (self .download_thread ,'retryable_file_failed_signal'):
                     self .download_thread .retryable_file_failed_signal .disconnect (self ._handle_retryable_file_failure )
-                if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): # Disconnect new signal
-                    self.download_thread.file_successfully_downloaded_signal.disconnect(self._handle_actual_file_downloaded)              
-                if hasattr(self.download_thread, 'post_processed_for_history_signal'): # Disconnect new signal
-                    self.download_thread.post_processed_for_history_signal.disconnect(self._add_to_history_candidates)          
+                if hasattr (self .download_thread ,'file_successfully_downloaded_signal'):
+                    self .download_thread .file_successfully_downloaded_signal .disconnect (self ._handle_actual_file_downloaded )
+                if hasattr (self .download_thread ,'post_processed_for_history_signal'):
+                    self .download_thread .post_processed_for_history_signal .disconnect (self ._add_to_history_candidates )
             except (TypeError ,RuntimeError )as e :
                 self .log_signal .emit (f"ℹ️ Note during single-thread signal disconnection: {e }")
 
@@ -8149,8 +8147,8 @@ class DownloaderApp (QWidget ):
         ("help_guide_step7_title","help_guide_step7_content"),
         ("help_guide_step8_title","help_guide_step8_content"),
         ("help_guide_step9_title","help_guide_step9_content"),
-        ("column_header_post_title", "Post Title"), # For EmptyPopupDialog
-        ("column_header_date_uploaded", "Date Uploaded"), # For EmptyPopupDialog
+        ("column_header_post_title","Post Title"),
+        ("column_header_date_uploaded","Date Uploaded"),
         ]
 
         steps =[
@@ -8440,7 +8438,7 @@ class DownloaderApp (QWidget ):
                     queue_item ={
                     'url':direct_post_url ,
                     'name':post_data ['title'],
-                        'name_for_folder': post_data['creator_name_resolved'], # Use resolved name
+                    'name_for_folder':post_data ['creator_name_resolved'],
                     'type':'post'
                     }
                     self .favorite_download_queue .append (queue_item )
@@ -8471,7 +8469,7 @@ class DownloaderApp (QWidget ):
         next_url =self .current_processing_favorite_item_info ['url']
         item_display_name =self .current_processing_favorite_item_info .get ('name','Unknown Item')
 
-        item_type = self.current_processing_favorite_item_info.get('type', 'artist')
+        item_type =self .current_processing_favorite_item_info .get ('type','artist')
         self .log_signal .emit (f"▶️ Processing next favorite from queue: '{item_display_name }' ({next_url })")
 
         override_dir =None 
@@ -8480,17 +8478,17 @@ class DownloaderApp (QWidget ):
             item_scope =self .favorite_download_scope 
 
         main_download_dir =self .dir_input .text ().strip ()
-        
-        # Determine if folder override is needed based on scope
-        # For 'creator_popup_selection', the scope is determined by dialog.current_scope_mode
-        # For 'artist' or 'single_post_from_popup' (queued from Favorite Artists/Posts dialogs), it's self.favorite_download_scope
-        should_create_artist_folder = False
-        if item_type == 'creator_popup_selection' and item_scope == EmptyPopupDialog.SCOPE_CREATORS:
-            should_create_artist_folder = True
-        elif item_type != 'creator_popup_selection' and self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS:
-            should_create_artist_folder = True
 
-        if should_create_artist_folder and main_download_dir:
+
+
+
+        should_create_artist_folder =False 
+        if item_type =='creator_popup_selection'and item_scope ==EmptyPopupDialog .SCOPE_CREATORS :
+            should_create_artist_folder =True 
+        elif item_type !='creator_popup_selection'and self .favorite_download_scope ==FAVORITE_SCOPE_ARTIST_FOLDERS :
+            should_create_artist_folder =True 
+
+        if should_create_artist_folder and main_download_dir :
             folder_name_key =self .current_processing_favorite_item_info .get ('name_for_folder','Unknown_Folder')
             item_specific_folder_name =clean_folder_name (folder_name_key )
             override_dir =os .path .normpath (os .path .join (main_download_dir ,item_specific_folder_name ))
@@ -8508,43 +8506,43 @@ if __name__ =='__main__':
     import os 
     import time 
 
-    def handle_uncaught_exception(exc_type, exc_value, exc_traceback):
+    def handle_uncaught_exception (exc_type ,exc_value ,exc_traceback ):
         """Handles uncaught exceptions by logging them to a file."""
-        # Determine base_dir for logs
-        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-            # PyInstaller-like bundle
-            base_dir_for_log = sys._MEIPASS
-        else:
-            # Running as a script
-            base_dir_for_log = os.path.dirname(os.path.abspath(__file__))
-        
-        log_dir = os.path.join(base_dir_for_log, "logs") 
-        log_file_path = os.path.join(log_dir, "uncaught_exceptions.log")
 
-        try:
-            os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
-            with open(log_file_path, "a", encoding="utf-8") as f:
-                f.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-                traceback.print_exception(exc_type, exc_value, exc_traceback, file=f)
-                f.write("-" * 80 + "\n\n")
-        except Exception as log_ex:
-            # If logging itself fails, print to stderr
-            print(f"CRITICAL: Failed to write to uncaught_exceptions.log: {log_ex}", file=sys.stderr)
-            traceback.print_exception(exc_type, exc_value, exc_traceback, file=sys.stderr) # Log original exception to stderr
-        sys.__excepthook__(exc_type, exc_value, exc_traceback) # Call the default excepthook
+        if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
 
-    sys.excepthook = handle_uncaught_exception # Set the custom excepthook
+            base_dir_for_log =sys ._MEIPASS 
+        else :
+
+            base_dir_for_log =os .path .dirname (os .path .abspath (__file__ ))
+
+        log_dir =os .path .join (base_dir_for_log ,"logs")
+        log_file_path =os .path .join (log_dir ,"uncaught_exceptions.log")
+
+        try :
+            os .makedirs (os .path .dirname (log_file_path ),exist_ok =True )
+            with open (log_file_path ,"a",encoding ="utf-8")as f :
+                f .write (f"Timestamp: {time .strftime ('%Y-%m-%d %H:%M:%S')}\n")
+                traceback .print_exception (exc_type ,exc_value ,exc_traceback ,file =f )
+                f .write ("-"*80 +"\n\n")
+        except Exception as log_ex :
+
+            print (f"CRITICAL: Failed to write to uncaught_exceptions.log: {log_ex }",file =sys .stderr )
+            traceback .print_exception (exc_type ,exc_value ,exc_traceback ,file =sys .stderr )
+        sys .__excepthook__ (exc_type ,exc_value ,exc_traceback )
+
+    sys .excepthook =handle_uncaught_exception 
 
     try :
         qt_app =QApplication (sys .argv )
-        # Set these after QApplication is initialized and before they might be needed
-        QCoreApplication.setOrganizationName(CONFIG_ORGANIZATION_NAME)
-        QCoreApplication.setApplicationName(CONFIG_APP_NAME_MAIN) # Using the same name as for QSettings path part    
-        if getattr (sys ,'frozen',False ) and hasattr(sys, '_MEIPASS'): # Check for _MEIPASS for PyInstaller
+
+        QCoreApplication .setOrganizationName (CONFIG_ORGANIZATION_NAME )
+        QCoreApplication .setApplicationName (CONFIG_APP_NAME_MAIN )
+        if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
             base_dir =sys ._MEIPASS 
-        else: # This 'else' now correctly follows its 'if'
+        else :
             base_dir =os .path .dirname (os .path .abspath (__file__ ))
-        icon_path =os .path .join (base_dir , 'assets', 'Kemono.ico')
+        icon_path =os .path .join (base_dir ,'assets','Kemono.ico')
         if os .path .exists (icon_path ):qt_app .setWindowIcon (QIcon (icon_path ))
         else :print (f"Warning: Application icon 'assets/Kemono.ico' not found at {icon_path }")
 
