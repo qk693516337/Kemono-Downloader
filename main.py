@@ -1610,12 +1610,21 @@ class EmptyPopupDialog (QDialog ):
             if self.parent_app and hasattr(self.parent_app, 'favorite_download_queue'):
                 for qi in selected_posts_for_queue:
                     self.parent_app.favorite_download_queue.append(qi)
-                self.parent_app.log_signal.emit(f"ℹ️ Added {len(selected_posts_for_queue)} selected posts to the download queue.")
+                
+                num_just_added_posts = len(selected_posts_for_queue)
+                total_in_queue = len(self.parent_app.favorite_download_queue)
+
+                self.parent_app.log_signal.emit(f"ℹ️ Added {num_just_added_posts} selected posts to the download queue. Total in queue: {total_in_queue}.")
+                
                 if self.parent_app.link_input:
-                    self.parent_app.link_input.setPlaceholderText(
-                        self._tr("items_in_queue_placeholder", "{count} items in queue from popup.").format(count=len(self.parent_app.favorite_download_queue))
+                    self.parent_app.link_input.blockSignals(True)
+                    self.parent_app.link_input.setText(
+                        self.parent_app._tr("popup_posts_selected_text", "Posts - {count} selected").format(count=num_just_added_posts)
                     )
-                    self.parent_app.link_input.clear()
+                    self.parent_app.link_input.blockSignals(False)
+                    self.parent_app.link_input.setPlaceholderText(
+                        self.parent_app._tr("items_in_queue_placeholder", "{count} items in queue from popup.").format(count=total_in_queue)
+                    )
             self.accept()
         else:
             QMessageBox.information(self, self._tr("no_selection_title", "No Selection"),
