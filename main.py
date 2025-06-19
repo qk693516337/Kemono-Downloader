@@ -178,6 +178,7 @@ CHAR_FILTER_SCOPE_KEY ="charFilterScopeV1"
 THEME_KEY ="currentThemeV2"
 SCAN_CONTENT_IMAGES_KEY ="scanContentForImagesV1"
 LANGUAGE_KEY ="currentLanguageV1"
+DOWNLOAD_LOCATION_KEY ="downloadLocationV1"
 
 CONFIRM_ADD_ALL_ACCEPTED =1 
 FAVORITE_SCOPE_SELECTED_LOCATION ="selected_location"
@@ -719,6 +720,11 @@ class FutureSettingsDialog (QDialog ):
         layout .addWidget (self .language_group_box )
 
 
+        self .save_path_button =QPushButton ()
+        self .save_path_button .clicked .connect (self ._save_download_path )
+        layout .addWidget (self .save_path_button )
+
+
         layout .addStretch (1 )
 
         self .ok_button =QPushButton ()
@@ -740,6 +746,9 @@ class FutureSettingsDialog (QDialog ):
         self .language_label .setText (self ._tr ("language_label","Language:"))
         self ._update_theme_toggle_button_text ()
         self ._populate_language_combo_box ()
+        if hasattr (self ,'save_path_button'):
+            self .save_path_button .setText (self ._tr ("settings_save_path_button","Save Current Download Path"))
+            self .save_path_button .setToolTip (self ._tr ("settings_save_path_tooltip","Save the current 'Download Location' from the main window for future sessions."))
         self .ok_button .setText (self ._tr ("ok_button","OK"))
     def _update_theme_toggle_button_text (self ):
         if self .parent_app .current_theme =="dark":
@@ -811,6 +820,29 @@ class FutureSettingsDialog (QDialog ):
 
             if msg_box .clickedButton ()==restart_button :
                 self .parent_app ._request_restart_application ()
+
+    def _save_download_path (self ):
+        if self .parent_app and hasattr (self .parent_app ,'dir_input')and self .parent_app .dir_input :
+            current_path =self .parent_app .dir_input .text ().strip ()
+            if current_path :
+                if os .path .isdir (current_path ):
+                    self .parent_app .settings .setValue (DOWNLOAD_LOCATION_KEY ,current_path )
+                    self .parent_app .settings .sync ()
+                    QMessageBox .information (self ,
+                    self ._tr ("settings_save_path_success_title","Path Saved"),
+                    self ._tr ("settings_save_path_success_message",f"Download location '{current_path }' saved successfully."))
+                    if hasattr (self .parent_app ,'log_signal'):
+                        self .parent_app .log_signal .emit (f"💾 Download location '{current_path }' saved.")
+                else :
+                    QMessageBox .warning (self ,
+                    self ._tr ("settings_save_path_invalid_title","Invalid Path"),
+                    self ._tr ("settings_save_path_invalid_message",f"The path '{current_path }' is not a valid directory. Please select a valid directory first."))
+            else :
+                QMessageBox .warning (self ,
+                self ._tr ("settings_save_path_empty_title","Empty Path"),
+                self ._tr ("settings_save_path_empty_message","Download location cannot be empty. Please select a path first."))
+        else :
+            QMessageBox .critical (self ,"Error","Could not access download path input from main application.")
 
 class EmptyPopupDialog (QDialog ):
     """A simple empty popup dialog."""
@@ -1145,8 +1177,6 @@ class EmptyPopupDialog (QDialog ):
             self .all_creators_data =[]
             self .progress_bar .setVisible (False );QCoreApplication .processEvents ();return 
 
-
-
         self ._filter_list ()
 
     def _populate_list_widget (self ,creators_to_display ):
@@ -1219,15 +1249,7 @@ class EmptyPopupDialog (QDialog ):
 
             norm_search_casefolded =unicodedata .normalize ('NFKC',raw_search_input ).casefold ().strip ()
 
-
-
-
-
-
-
-
             scored_matches =[]
-
 
             parsed_service_from_url ,parsed_user_id_from_url ,_ =extract_post_info (raw_search_input )
 
@@ -2116,8 +2138,24 @@ class KnownNamesFilterDialog (QDialog ):
         self ._retranslate_ui ()
         self ._populate_list_widget ()
 
-        self .setMinimumWidth (350 )
-        self .setMinimumHeight (400 )
+
+        screen_geometry =QApplication .primaryScreen ().availableGeometry ()
+        base_width ,base_height =460 ,450 
+
+
+
+        reference_screen_height =1080 
+        scale_factor_w =screen_geometry .width ()/1920 
+        scale_factor_h =screen_geometry .height ()/reference_screen_height 
+
+
+
+
+        effective_scale_factor =max (0.75 ,min (scale_factor_h ,1.5 ))
+
+        self .setMinimumSize (int (base_width *effective_scale_factor ),int (base_height *effective_scale_factor ))
+        self .resize (int (base_width *effective_scale_factor *1.1 ),int (base_height *effective_scale_factor *1.1 ))
+
         if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
             self .setStyleSheet (self .parent_app .get_dark_theme ())
         self .add_button .setDefault (True )
@@ -2137,6 +2175,12 @@ class KnownNamesFilterDialog (QDialog ):
         self .cancel_button .setText (self ._tr ("fav_posts_cancel_button","Cancel"))
 
     def _populate_list_widget (self ,names_to_display =None ):
+
+
+        if hasattr (self ,'_items_populated')and self ._items_populated and names_to_display is not None :
+
+            return 
+
         self .names_list_widget .clear ()
         current_entries_source =names_to_display if names_to_display is not None else self .all_known_name_entries 
         for entry_obj in current_entries_source :
@@ -2145,16 +2189,15 @@ class KnownNamesFilterDialog (QDialog ):
             item .setCheckState (Qt .Unchecked )
             item .setData (Qt .UserRole ,entry_obj )
             self .names_list_widget .addItem (item )
+        self ._items_populated =True 
 
     def _filter_list_display (self ):
         search_text =self .search_input .text ().lower ()
-        if not search_text :
-            self ._populate_list_widget ()
-            return 
-        filtered_entries =[
-        entry_obj for entry_obj in self .all_known_name_entries if search_text in entry_obj ['name'].lower ()
-        ]
-        self ._populate_list_widget (filtered_entries )
+        for i in range (self .names_list_widget .count ()):
+            item =self .names_list_widget .item (i )
+            entry_obj =item .data (Qt .UserRole )
+            matches_search =not search_text or search_text in entry_obj ['name'].lower ()
+            item .setHidden (not matches_search )
 
     def _accept_selection_action (self ):
         self .selected_entries_to_return =[]
@@ -3747,6 +3790,7 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit (f"ℹ️ Application language loaded: '{self .current_selected_language .upper ()}' (UI may not reflect this yet).")
         self ._retranslate_main_ui ()
         self ._load_persistent_history ()
+        self ._load_saved_download_location ()
 
 
     def _tr (self ,key ,default_text =""):
@@ -3754,6 +3798,18 @@ class DownloaderApp (QWidget ):
         if callable (get_translation ):
             return get_translation (self .current_selected_language ,key ,default_text )
         return default_text 
+
+    def _load_saved_download_location (self ):
+        saved_location =self .settings .value (DOWNLOAD_LOCATION_KEY ,"",type =str )
+        if saved_location and os .path .isdir (saved_location ):
+            if hasattr (self ,'dir_input')and self .dir_input :
+                self .dir_input .setText (saved_location )
+                self .log_signal .emit (f"ℹ️ Loaded saved download location: {saved_location }")
+            else :
+                self .log_signal .emit (f"⚠️ Found saved download location '{saved_location }', but dir_input not ready.")
+        elif saved_location :
+            self .log_signal .emit (f"⚠️ Found saved download location '{saved_location }', but it's not a valid directory. Ignoring.")
+
 
     def _initialize_persistent_history_path (self ):
         documents_path =QStandardPaths .writableLocation (QStandardPaths .DocumentsLocation )
@@ -5990,7 +6046,7 @@ class DownloaderApp (QWidget ):
         is_only_archives =self .radio_only_archives and self .radio_only_archives .isChecked ()
         is_only_audio =hasattr (self ,'radio_only_audio')and self .radio_only_audio .isChecked ()
 
-        can_enable_subfolder_per_post_checkbox =not is_only_links and not is_only_archives 
+        can_enable_subfolder_per_post_checkbox =not is_only_links 
 
         if self .use_subfolder_per_post_checkbox :
             self .use_subfolder_per_post_checkbox .setEnabled (can_enable_subfolder_per_post_checkbox )
@@ -7363,8 +7419,8 @@ class DownloaderApp (QWidget ):
                 downloaded_files_from_future ,skipped_files_from_future ,kept_originals_from_future ,retryable_failures_from_post ,permanent_failures_from_post ,history_data_from_worker =result_tuple 
                 if history_data_from_worker :
                     self ._add_to_history_candidates (history_data_from_worker )
-                if permanent_failures_from_post:
-                    self.permanently_failed_files_for_dialog.extend(permanent_failures_from_post)
+                if permanent_failures_from_post :
+                    self .permanently_failed_files_for_dialog .extend (permanent_failures_from_post )
                     self ._add_to_history_candidates (history_data_from_worker )
             with self .downloaded_files_lock :
                 self .download_counter +=downloaded_files_from_future 

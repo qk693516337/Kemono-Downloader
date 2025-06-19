@@ -1689,7 +1689,48 @@ class PostProcessorWorker :
 
         if not self .extract_links_only and self .use_post_subfolders :
             cleaned_post_title_for_sub =clean_folder_name (post_title )
-            determined_post_save_path_for_history =os .path .join (determined_post_save_path_for_history ,cleaned_post_title_for_sub )
+            post_id_for_fallback = self.post.get('id', 'unknown_id') # Ensure post_id is available
+
+            # Fallback to a more unique name if the cleaned title is generic
+            if not cleaned_post_title_for_sub or cleaned_post_title_for_sub == "untitled_folder":
+                self.logger(f"   ⚠️ Post title '{post_title}' resulted in a generic subfolder name. Using 'post_{post_id_for_fallback}' as base.")
+                original_cleaned_post_title_for_sub = f"post_{post_id_for_fallback}"
+            else:
+                original_cleaned_post_title_for_sub = cleaned_post_title_for_sub
+
+            # Path before adding the post-specific subfolder
+            base_path_for_post_subfolder = determined_post_save_path_for_history
+            
+            suffix_counter = 0  # 0 for no suffix, 1 for _1, etc.
+            final_post_subfolder_name = ""
+
+            while True:
+                if suffix_counter == 0:
+                    name_candidate = original_cleaned_post_title_for_sub
+                else:
+                    name_candidate = f"{original_cleaned_post_title_for_sub}_{suffix_counter}"
+                
+                potential_post_subfolder_path = os.path.join(base_path_for_post_subfolder, name_candidate)
+                
+                try:
+                    os.makedirs(potential_post_subfolder_path, exist_ok=False)
+                    final_post_subfolder_name = name_candidate
+                    if suffix_counter > 0: # Log only if a suffix was actually needed and used
+                         self.logger(f"   Post subfolder name conflict: Using '{final_post_subfolder_name}' instead of '{original_cleaned_post_title_for_sub}' to avoid mixing posts.")
+                    break 
+                except FileExistsError:
+                    suffix_counter += 1
+                    if suffix_counter > 100: # Safety break
+                        self.logger(f"   ⚠️ Exceeded 100 attempts to find unique subfolder name for '{original_cleaned_post_title_for_sub}'. Using UUID.")
+                        final_post_subfolder_name = f"{original_cleaned_post_title_for_sub}_{uuid.uuid4().hex[:8]}"
+                        os.makedirs(os.path.join(base_path_for_post_subfolder, final_post_subfolder_name), exist_ok=True) # Create with exist_ok=True as a last resort
+                        break
+                except OSError as e_mkdir:
+                    self.logger(f"   ❌ Error creating directory '{potential_post_subfolder_path}': {e_mkdir}. Files for this post might be saved in parent or fail.")
+                    final_post_subfolder_name = original_cleaned_post_title_for_sub # Fallback
+                    break 
+            
+            determined_post_save_path_for_history = os.path.join(base_path_for_post_subfolder, final_post_subfolder_name)
 
         if not self .extract_links_only and self .use_subfolders and self .skip_words_list :
             if self ._check_pause (f"Folder keyword skip check for post {post_id }"):return 0 ,num_potential_files_in_post ,[],[],[],None 
@@ -1952,8 +1993,8 @@ class PostProcessorWorker :
                     if self .use_subfolders and target_base_folder_name_for_instance :
                         current_path_for_file_instance =os .path .join (current_path_for_file_instance ,target_base_folder_name_for_instance )
                     if self .use_post_subfolders :
-                        cleaned_title_for_subfolder_instance =clean_folder_name (post_title )
-                        current_path_for_file_instance =os .path .join (current_path_for_file_instance ,cleaned_title_for_subfolder_instance )
+                        # Use the final_post_subfolder_name determined earlier, which includes suffix if needed
+                        current_path_for_file_instance =os .path .join (current_path_for_file_instance ,final_post_subfolder_name )
 
                     manga_date_counter_to_pass =self .manga_date_file_counter_ref if self .manga_mode_active and self .manga_filename_style ==STYLE_DATE_BASED else None 
                     manga_global_counter_to_pass =self .manga_global_file_counter_ref if self .manga_mode_active and self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING else None 
@@ -2021,6 +2062,22 @@ class PostProcessorWorker :
             }
         if self .check_cancel ():self .logger (f"   Post {post_id } processing interrupted/cancelled.");
         else :self .logger (f"   Post {post_id } Summary: Downloaded={total_downloaded_this_post }, Skipped Files={total_skipped_this_post }")
+       
+        # Cleanup: Remove empty post-specific subfolder if created and no files were downloaded
+        if not self.extract_links_only and self.use_post_subfolders and total_downloaded_this_post == 0:
+            # determined_post_save_path_for_history at this point holds the full path to the post-specific subfolder
+            # if self.use_post_subfolders was true and it was applied.
+            # base_path_for_post_subfolder was the path *before* the post-specific segment.
+            # final_post_subfolder_name was the segment itself.
+            # So, determined_post_save_path_for_history is the correct path to check.
+            path_to_check_for_emptiness = determined_post_save_path_for_history
+            try:
+                if os.path.isdir(path_to_check_for_emptiness) and not os.listdir(path_to_check_for_emptiness):
+                    self.logger(f"   🗑️ Removing empty post-specific subfolder: '{path_to_check_for_emptiness}'")
+                    os.rmdir(path_to_check_for_emptiness)
+            except OSError as e_rmdir:
+                self.logger(f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
+       
         return total_downloaded_this_post ,total_skipped_this_post ,kept_original_filenames_for_log ,retryable_failures_this_post ,permanent_failures_this_post ,history_data_for_this_post 
 class DownloadThread (QThread ):
     progress_signal =pyqtSignal (str )
