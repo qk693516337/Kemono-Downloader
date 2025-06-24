@@ -6882,14 +6882,6 @@ class DownloaderApp (QWidget ):
         creator_folder_ignore_words_for_run =None 
         is_full_creator_download =not post_id_from_url 
 
-
-
-
-
-
-
-
-
         if compress_images and Image is None :
             QMessageBox .warning (self ,"Missing Dependency","Pillow library (for image compression) not found. Compression will be disabled.")
             compress_images =False ;self .compress_images_checkbox .setChecked (False )
