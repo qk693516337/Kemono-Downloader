@@ -3636,7 +3636,11 @@ class DownloaderApp (QWidget ):
 
         self .download_thread =None 
         self .thread_pool =None 
-        self .cancellation_event =threading .Event ()
+        self .cancellation_event =threading .Event ()      
+        self.session_file_path = os.path.join(self.app_base_dir, "session.json")
+        self.session_lock = threading.Lock()
+        self.interrupted_session_data = None
+        self.is_restore_pending = False
         self .external_link_download_thread =None 
         self .pause_event =threading .Event ()
         self .active_futures =[]
@@ -3647,11 +3651,8 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit (f"ℹ️ App base directory: {self .app_base_dir }")
 
 
-        app_data_path =QStandardPaths .writableLocation (QStandardPaths .AppDataLocation )
+        self.persistent_history_file = os.path.join(self.app_base_dir, "download_history.json")
         self .last_downloaded_files_details =deque (maxlen =3 )
-        if not app_data_path :
-            app_data_path =os .path .join (self .app_base_dir ,"app_data")
-        self .persistent_history_file =os .path .join (app_data_path ,CONFIG_ORGANIZATION_NAME ,CONFIG_APP_NAME_MAIN ,"download_history.json")
         self .download_history_candidates =deque (maxlen =8 )
         self .log_signal .emit (f"ℹ️ Persistent history file path set to: {self .persistent_history_file }")
         self .final_download_history_entries =[]
@@ -3772,7 +3773,7 @@ class DownloaderApp (QWidget ):
         self .remove_from_filename_label_widget =None 
         self .skip_words_label_widget =None 
 
-        self .setWindowTitle ("Kemono Downloader v5.0.0")
+        self .setWindowTitle ("Kemono Downloader v5.5.0")
 
         self .init_ui ()
         self ._connect_signals ()
@@ -3791,6 +3792,59 @@ class DownloaderApp (QWidget ):
         self ._retranslate_main_ui ()
         self ._load_persistent_history ()
         self ._load_saved_download_location ()
+        self._update_button_states_and_connections() # Initial button state setup        
+        self._check_for_interrupted_session()
+
+    def get_checkbox_map(self):
+        """Returns a mapping of checkbox attribute names to their corresponding settings key."""
+        return {
+            'skip_zip_checkbox': 'skip_zip',
+            'skip_rar_checkbox': 'skip_rar',
+            'download_thumbnails_checkbox': 'download_thumbnails',
+            'compress_images_checkbox': 'compress_images',
+            'use_subfolders_checkbox': 'use_subfolders',
+            'use_subfolder_per_post_checkbox': 'use_post_subfolders',
+            'use_multithreading_checkbox': 'use_multithreading',
+            'external_links_checkbox': 'show_external_links',
+            'manga_mode_checkbox': 'manga_mode_active',
+            'scan_content_images_checkbox': 'scan_content_for_images',
+            'use_cookie_checkbox': 'use_cookie',
+            'favorite_mode_checkbox': 'favorite_mode_active'
+        }
+
+    def _get_current_ui_settings_as_dict(self, api_url_override=None, output_dir_override=None):
+        """Gathers all relevant UI settings into a JSON-serializable dictionary."""
+        settings = {}
+        
+        settings['api_url'] = api_url_override if api_url_override is not None else self.link_input.text().strip()
+        settings['output_dir'] = output_dir_override if output_dir_override is not None else self.dir_input.text().strip()
+        settings['character_filter_text'] = self.character_input.text().strip()
+        settings['skip_words_text'] = self.skip_words_input.text().strip()
+        settings['remove_words_text'] = self.remove_from_filename_input.text().strip()
+        settings['custom_folder_name'] = self.custom_folder_input.text().strip()
+        settings['cookie_text'] = self.cookie_text_input.text().strip()
+        if hasattr(self, 'manga_date_prefix_input'):
+            settings['manga_date_prefix'] = self.manga_date_prefix_input.text().strip()
+        
+        try: settings['num_threads'] = int(self.thread_count_input.text().strip())
+        except (ValueError, AttributeError): settings['num_threads'] = 4
+        try: settings['start_page'] = int(self.start_page_input.text().strip()) if self.start_page_input.text().strip() else None
+        except (ValueError, AttributeError): settings['start_page'] = None
+        try: settings['end_page'] = int(self.end_page_input.text().strip()) if self.end_page_input.text().strip() else None
+        except (ValueError, AttributeError): settings['end_page'] = None
+
+        for checkbox_name, key in self.get_checkbox_map().items():
+            if checkbox := getattr(self, checkbox_name, None): settings[key] = checkbox.isChecked()
+
+        settings['filter_mode'] = self.get_filter_mode()
+        settings['only_links'] = self.radio_only_links.isChecked()
+
+        settings['skip_words_scope'] = self.skip_words_scope
+        settings['char_filter_scope'] = self.char_filter_scope
+        settings['manga_filename_style'] = self.manga_filename_style
+        settings['allow_multipart_download'] = self.allow_multipart_download_setting
+        
+        return settings
 
 
     def _tr (self ,key ,default_text =""):
@@ -3810,16 +3864,129 @@ class DownloaderApp (QWidget ):
         elif saved_location :
             self .log_signal .emit (f"⚠️ Found saved download location '{saved_location }', but it's not a valid directory. Ignoring.")
 
+    def _check_for_interrupted_session(self):
+        """Checks for an incomplete session file on startup and prepares the UI for restore if found."""
+        if os.path.exists(self.session_file_path):
+            try:
+                with open(self.session_file_path, 'r', encoding='utf-8') as f:
+                    session_data = json.load(f)
+                
+                if "ui_settings" not in session_data or "download_state" not in session_data:
+                    raise ValueError("Invalid session file structure.")
 
-    def _initialize_persistent_history_path (self ):
-        documents_path =QStandardPaths .writableLocation (QStandardPaths .DocumentsLocation )
-        if not documents_path :
-            self .log_signal .emit ("⚠️ DocumentsLocation not found. Falling back to app base directory for history.")
-            documents_path =self .app_base_dir 
+                self.interrupted_session_data = session_data
+                self.log_signal.emit("ℹ️ Incomplete download session found. UI updated for restore.")
+                self._prepare_ui_for_restore()
 
-        history_folder_name ="history"
-        self .persistent_history_file =os .path .join (documents_path ,history_folder_name ,"download_history.json")
-        self .log_signal .emit (f"ℹ️ Persistent history file path set to: {self .persistent_history_file }")
+            except Exception as e:
+                self.log_signal.emit(f"❌ Error reading session file: {e}. Deleting corrupt session file.")
+                os.remove(self.session_file_path)
+                self.interrupted_session_data = None
+                self.is_restore_pending = False
+
+    def _prepare_ui_for_restore(self):
+        """Configures the UI to a 'restore pending' state."""
+        if not self.interrupted_session_data:
+            return
+
+        self.log_signal.emit("   UI updated for session restore.")
+        settings = self.interrupted_session_data.get("ui_settings", {})
+        self._load_ui_from_settings_dict(settings)
+        
+        self.is_restore_pending = True
+        self._update_button_states_and_connections() # Update buttons for restore state, UI remains editable
+
+    def _clear_session_and_reset_ui(self):
+        """Clears the session file and resets the UI to its default state."""
+        self._clear_session_file()
+        self.interrupted_session_data = None
+        self.is_restore_pending = False
+        self._update_button_states_and_connections() # Ensure buttons are updated to idle state
+        self.reset_application_state()
+
+    def _clear_session_file(self):
+        """Safely deletes the session file."""
+        if os.path.exists(self.session_file_path):
+            try:
+                os.remove(self.session_file_path)
+                self.log_signal.emit("ℹ️ Interrupted session file cleared.")
+            except Exception as e:
+                self.log_signal.emit(f"❌ Failed to clear session file: {e}")
+
+    def _save_session_file(self, session_data):
+        """Safely saves the session data to the session file using an atomic write pattern."""
+        temp_session_file_path = self.session_file_path + ".tmp"
+        try:
+            with open(temp_session_file_path, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, indent=2)
+            os.replace(temp_session_file_path, self.session_file_path)
+        except Exception as e:
+            self.log_signal.emit(f"❌ Failed to save session state: {e}")
+            if os.path.exists(temp_session_file_path):
+                try:
+                    os.remove(temp_session_file_path)
+                except Exception as e_rem:
+                    self.log_signal.emit(f"❌ Failed to remove temp session file: {e_rem}")
+
+    def _update_button_states_and_connections(self):
+        """
+        Updates the text and click connections of the main action buttons
+        based on the current application state (downloading, paused, restore pending, idle).
+        """
+        # Disconnect all signals first to prevent multiple connections
+        try: self.download_btn.clicked.disconnect()
+        except TypeError: pass
+        try: self.pause_btn.clicked.disconnect()
+        except TypeError: pass
+        try: self.cancel_btn.clicked.disconnect()
+        except TypeError: pass
+
+        is_download_active = self._is_download_active()
+
+        if self.is_restore_pending:
+            # State: Restore Pending
+            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.download_btn.setEnabled(True)
+            self.download_btn.clicked.connect(self.start_download)
+            self.download_btn.setToolTip(self._tr("start_download_discard_tooltip", "Click to start a new download, discarding the previous session."))
+
+            self.pause_btn.setText(self._tr("restore_download_button_text", "🔄 Restore Download"))
+            self.pause_btn.setEnabled(True)
+            self.pause_btn.clicked.connect(self.restore_download)
+            self.pause_btn.setToolTip(self._tr("restore_download_button_tooltip", "Click to restore the interrupted download."))
+            self.cancel_btn.setEnabled(True)
+
+            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+            self.cancel_btn.setEnabled(False) # Nothing to cancel yet
+            self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+        elif is_download_active:
+            # State: Downloading / Paused
+            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.download_btn.setEnabled(False) # Cannot start new download while one is active
+
+            self.pause_btn.setText(self._tr("resume_download_button_text", "▶️ Resume Download") if self.is_paused else self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setEnabled(True)
+            self.pause_btn.clicked.connect(self._handle_pause_resume_action)
+            self.pause_btn.setToolTip(self._tr("resume_download_button_tooltip", "Click to resume the download.") if self.is_paused else self._tr("pause_download_button_tooltip", "Click to pause the download."))
+
+            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+            self.cancel_btn.setEnabled(True)
+            self.cancel_btn.clicked.connect(self.cancel_download_button_action)
+            self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+        else:
+            # State: Idle (No download, no restore pending)
+            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            self.download_btn.setEnabled(True)
+            self.download_btn.clicked.connect(self.start_download)
+
+            self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setEnabled(False) # No active download to pause
+            self.pause_btn.setToolTip(self._tr("pause_download_button_tooltip", "Click to pause the ongoing download process."))
+
+            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
+            self.cancel_btn.setEnabled(False) # No active download to cancel
+            self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+
 
     def _retranslate_main_ui (self ):
         """Retranslates static text elements in the main UI."""
@@ -4703,7 +4870,7 @@ class DownloaderApp (QWidget ):
         self .history_button =QPushButton ("📜")
         self .history_button .setFixedWidth (35 )
         self .history_button .setStyleSheet ("padding: 4px 6px;")
-        self .history_button .setToolTip (self ._tr ("history_button_tooltip_text","View download history (Not Implemented Yet)"))
+        self .history_button .setToolTip (self ._tr ("history_button_tooltip_text","View download history"))
 
         self .future_settings_button =QPushButton ("⚙️")
         self .future_settings_button .setFixedWidth (35 )
@@ -4863,19 +5030,26 @@ class DownloaderApp (QWidget ):
 
     def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
-        self ._initialize_persistent_history_path ()
-        file_existed_before_load =os .path .exists (self .persistent_history_file )
         self .log_signal .emit (f"📜 Attempting to load history from: {self .persistent_history_file }")
         if os .path .exists (self .persistent_history_file ):
             try :
                 with open (self .persistent_history_file ,'r',encoding ='utf-8')as f :
-                    loaded_history =json .load (f )
-                if isinstance (loaded_history ,list ):
-                    self .final_download_history_entries =loaded_history 
-                    self .log_signal .emit (f"✅ Loaded {len (loaded_history )} entries from persistent download history: {self .persistent_history_file }")
-                elif loaded_history is None and os .path .getsize (self .persistent_history_file )==0 :
+                    loaded_data =json .load (f )
+                
+                if isinstance (loaded_data ,dict ):
+                    self .last_downloaded_files_details .clear ()
+                    self .last_downloaded_files_details .extend (loaded_data .get ("last_downloaded_files",[]))
+                    self .final_download_history_entries =loaded_data .get ("first_processed_posts",[])
+                    self .log_signal .emit (f"✅ Loaded {len (self .last_downloaded_files_details )} last downloaded files and {len (self .final_download_history_entries )} first processed posts from persistent history.")
+                elif loaded_data is None and os .path .getsize (self .persistent_history_file )==0 :
                     self .log_signal .emit (f"ℹ️ Persistent history file is empty. Initializing with empty history.")
                     self .final_download_history_entries =[]
+                    self .last_downloaded_files_details .clear ()
+                elif isinstance(loaded_data, list): # Handle old format where only first_processed_posts was saved
+                    self.log_signal.emit("⚠️ Persistent history file is in old format (only first_processed_posts). Converting to new format.")
+                    self.final_download_history_entries = loaded_data
+                    self.last_downloaded_files_details.clear()
+                    self._save_persistent_history() # Save in new format immediately
                 else :
                     self .log_signal .emit (f"⚠️ Persistent history file has incorrect format. Expected list, got {type (loaded_history )}. Ignoring.")
                     self .final_download_history_entries =[]
@@ -4892,8 +5066,6 @@ class DownloaderApp (QWidget ):
 
     def _save_persistent_history (self ):
         """Saves download history to a persistent file."""
-        if not hasattr (self ,'persistent_history_file')or not self .persistent_history_file :
-            self ._initialize_persistent_history_path ()
         self .log_signal .emit (f"📜 Attempting to save history to: {self .persistent_history_file }")
         try :
             history_dir =os .path .dirname (self .persistent_history_file )
@@ -4901,9 +5073,13 @@ class DownloaderApp (QWidget ):
             if not os .path .exists (history_dir ):
                 os .makedirs (history_dir ,exist_ok =True )
                 self .log_signal .emit (f"   Created history directory: {history_dir }")
-
+            
+            history_data = {
+                "last_downloaded_files": list(self.last_downloaded_files_details),
+                "first_processed_posts": self.final_download_history_entries
+            }
             with open (self .persistent_history_file ,'w',encoding ='utf-8')as f :
-                json .dump (self .final_download_history_entries ,f ,indent =2 )
+                json .dump (history_data ,f ,indent =2 )
             self .log_signal .emit (f"✅ Saved {len (self .final_download_history_entries )} history entries to: {self .persistent_history_file }")
         except Exception as e :
             self .log_signal .emit (f"❌ Error saving persistent history to {self .persistent_history_file }: {e }")
@@ -6327,11 +6503,11 @@ class DownloaderApp (QWidget ):
             self .file_progress_label .setText ("")
 
 
-    def start_download (self ,direct_api_url =None ,override_output_dir =None ):
+    def start_download (self ,direct_api_url =None ,override_output_dir =None, is_restore=False ):
         global KNOWN_NAMES ,BackendDownloadThread ,PostProcessorWorker ,extract_post_info ,clean_folder_name ,MAX_FILE_THREADS_PER_POST_OR_WORKER 
 
         if self ._is_download_active ():
-            QMessageBox .warning (self ,"Busy","A download is already running.")
+            QMessageBox.warning(self, "Busy", "A download is already in progress.")
             return False 
 
 
@@ -6342,11 +6518,14 @@ class DownloaderApp (QWidget ):
             self ._process_next_favorite_download ()
             return True 
 
-
-
-
+        if not is_restore and self.interrupted_session_data:
+            self.log_signal.emit("ℹ️ New download started. Discarding previous interrupted session.")
+            self._clear_session_file()
+            self.interrupted_session_data = None
+            self.is_restore_pending = False
         api_url =direct_api_url if direct_api_url else self .link_input .text ().strip ()
         self .download_history_candidates .clear ()
+        self._update_button_states_and_connections() # Ensure buttons are updated to active state
 
 
         if self .favorite_mode_checkbox and self .favorite_mode_checkbox .isChecked ()and not direct_api_url and not api_url :
@@ -7047,6 +7226,8 @@ class DownloaderApp (QWidget ):
         'manga_global_file_counter_ref':manga_global_file_counter_ref_for_thread ,
         'app_base_dir':app_base_dir_for_cookies ,
         'use_cookie':use_cookie_for_this_run ,
+        'session_file_path': self.session_file_path,
+        'session_lock': self.session_lock,
         'creator_download_folder_ignore_words':creator_folder_ignore_words_for_run ,
         }
 
@@ -7064,7 +7245,8 @@ class DownloaderApp (QWidget ):
                 'use_subfolders','use_post_subfolders','custom_folder_name',
                 'compress_images','download_thumbnails','service','user_id',
                 'downloaded_files','downloaded_file_hashes','pause_event','remove_from_filename_words_list',
-                'downloaded_files_lock','downloaded_file_hashes_lock','dynamic_character_filter_holder',
+                'downloaded_files_lock','downloaded_file_hashes_lock','dynamic_character_filter_holder', 'session_file_path',
+                'session_lock',
                 'skip_words_list','skip_words_scope','char_filter_scope',
                 'show_external_links','extract_links_only','num_file_threads_for_worker',
                 'start_page','end_page','target_post_id_from_initial_url',
@@ -7077,6 +7259,7 @@ class DownloaderApp (QWidget ):
                 single_thread_args ={key :args_template [key ]for key in dt_expected_keys if key in args_template }
                 self .start_single_threaded_download (**single_thread_args )
         except Exception as e :
+            self._update_button_states_and_connections() # Re-enable UI if start fails           
             self .log_signal .emit (f"❌ CRITICAL ERROR preparing download: {e }\n{traceback .format_exc ()}")
             QMessageBox .critical (self ,"Start Error",f"Failed to start process:\n{e }")
             self .download_finished (0 ,0 ,False ,[])
@@ -7084,6 +7267,21 @@ class DownloaderApp (QWidget ):
             self .is_paused =False 
         return True 
 
+    def restore_download(self):
+        """Initiates the download restoration process."""
+        if self._is_download_active():
+            QMessageBox.warning(self, "Busy", "A download is already in progress.")
+            return
+        
+        if not self.interrupted_session_data:
+            self.log_signal.emit("❌ No session data to restore.")
+            self._clear_session_and_reset_ui()
+            return
+
+        self.log_signal.emit("🔄 Restoring download session...")
+        # The main start_download function now handles the restore logic
+        self.is_restore_pending = True # Set state to indicate restore is in progress       
+        self.start_download(is_restore=True)
 
     def start_single_threaded_download (self ,**kwargs ):
         global BackendDownloadThread 
@@ -7110,6 +7308,7 @@ class DownloaderApp (QWidget ):
                     self .download_thread .permanent_file_failed_signal .connect (self ._handle_permanent_file_failure_from_thread )
             self .download_thread .start ()
             self .log_signal .emit ("✅ Single download thread (for posts) started.")
+            self._update_button_states_and_connections() # Update buttons after thread starts      
         except Exception as e :
             self .log_signal .emit (f"❌ CRITICAL ERROR starting single-thread: {e }\n{traceback .format_exc ()}")
             QMessageBox .critical (self ,"Thread Start Error",f"Failed to start download process: {e }")
@@ -7187,6 +7386,52 @@ class DownloaderApp (QWidget ):
             self .cancellation_event .set ()
             return False 
 
+    def _load_ui_from_settings_dict(self, settings: dict):
+        """Populates the UI with values from a settings dictionary."""
+        # Text inputs
+        self.link_input.setText(settings.get('api_url', ''))
+        self.dir_input.setText(settings.get('output_dir', ''))
+        self.character_input.setText(settings.get('character_filter_text', ''))
+        self.skip_words_input.setText(settings.get('skip_words_text', ''))
+        self.remove_from_filename_input.setText(settings.get('remove_words_text', ''))
+        self.custom_folder_input.setText(settings.get('custom_folder_name', ''))
+        self.cookie_text_input.setText(settings.get('cookie_text', ''))
+        if hasattr(self, 'manga_date_prefix_input'):
+            self.manga_date_prefix_input.setText(settings.get('manga_date_prefix', ''))
+
+        # Numeric inputs
+        self.thread_count_input.setText(str(settings.get('num_threads', 4)))
+        self.start_page_input.setText(str(settings.get('start_page', '')) if settings.get('start_page') is not None else '')
+        self.end_page_input.setText(str(settings.get('end_page', '')) if settings.get('end_page') is not None else '')
+        
+        # Checkboxes
+        for checkbox_name, key in self.get_checkbox_map().items():
+            checkbox = getattr(self, checkbox_name, None)
+            if checkbox:
+                checkbox.setChecked(settings.get(key, False))
+
+        # Radio buttons
+        if settings.get('only_links'): self.radio_only_links.setChecked(True)
+        else:
+            filter_mode = settings.get('filter_mode', 'all')
+            if filter_mode == 'image': self.radio_images.setChecked(True)
+            elif filter_mode == 'video': self.radio_videos.setChecked(True)
+            elif filter_mode == 'archive': self.radio_only_archives.setChecked(True)
+            elif filter_mode == 'audio' and hasattr(self, 'radio_only_audio'): self.radio_only_audio.setChecked(True)
+            else: self.radio_all.setChecked(True)
+
+        # Toggle button states
+        self.skip_words_scope = settings.get('skip_words_scope', SKIP_SCOPE_POSTS)
+        self.char_filter_scope = settings.get('char_filter_scope', CHAR_SCOPE_TITLE)
+        self.manga_filename_style = settings.get('manga_filename_style', STYLE_POST_TITLE)
+        self.allow_multipart_download_setting = settings.get('allow_multipart_download', False)
+        
+        # Update button texts after setting states
+        self._update_skip_scope_button_text()
+        self._update_char_filter_scope_button_text()
+        self._update_manga_filename_style_button_text()
+        self._update_multipart_toggle_button_text()
+
     def start_multi_threaded_download (self ,num_post_workers ,**kwargs ):
         global PostProcessorWorker 
         if self .thread_pool is None :
@@ -7207,7 +7452,7 @@ class DownloaderApp (QWidget ):
         )
         fetcher_thread .start ()
         self .log_signal .emit (f"✅ Post fetcher thread started. {num_post_workers } post worker threads initializing...")
-
+        self._update_button_states_and_connections() # Update buttons after fetcher thread starts
 
     def _fetch_and_queue_posts (self ,api_url_input_for_fetcher ,worker_args_template ,num_post_workers ):
         global PostProcessorWorker ,download_from_api 
@@ -7215,45 +7460,80 @@ class DownloaderApp (QWidget ):
         fetch_error_occurred =False 
         manga_mode_active_for_fetch =worker_args_template .get ('manga_mode_active',False )
         emitter_for_worker =worker_args_template .get ('emitter')
+       
+        is_restore = self.interrupted_session_data is not None
+        if is_restore:
+            all_posts_data = self.interrupted_session_data['download_state']['all_posts_data']
+            processed_ids = set(self.interrupted_session_data['download_state']['processed_post_ids'])
+            posts_to_process = [p for p in all_posts_data if p.get('id') not in processed_ids]
+            self.log_signal.emit(f"Restoring session. {len(posts_to_process)} posts remaining out of {len(all_posts_data)}.")
+            self.total_posts_to_process = len(all_posts_data)
+            self.processed_posts_count = len(processed_ids)
+            self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
+            
+            # Re-assign all_posts_data to only what needs processing
+            all_posts_data = posts_to_process
+       
         if not emitter_for_worker :
             self .log_signal .emit ("❌ CRITICAL ERROR: Emitter (queue) missing for worker in _fetch_and_queue_posts.");
             self .finished_signal .emit (0 ,0 ,True ,[]);
             return 
 
-        try :
-            self .log_signal .emit ("    Fetching post data from API (this may take a moment for large feeds)...")
-            post_generator =download_from_api (
-            api_url_input_for_fetcher ,
-            logger =lambda msg :self .log_signal .emit (f"[Fetcher] {msg }"),
-            start_page =worker_args_template .get ('start_page'),
-            end_page =worker_args_template .get ('end_page'),
-            manga_mode =manga_mode_active_for_fetch ,
-            cancellation_event =self .cancellation_event ,
-            pause_event =worker_args_template .get ('pause_event'),
-            use_cookie =worker_args_template .get ('use_cookie'),
-            cookie_text =worker_args_template .get ('cookie_text'),
-            selected_cookie_file =worker_args_template .get ('selected_cookie_file'),
-            app_base_dir =worker_args_template .get ('app_base_dir'),
-            manga_filename_style_for_sort_check =(
-            worker_args_template .get ('manga_filename_style')
-            if manga_mode_active_for_fetch 
-            else None 
-            )
-            )
+        try:
+            self.log_signal.emit("    Fetching post data from API (this may take a moment for large feeds)...")
+            if not is_restore: # Only fetch new data if not restoring
+                post_generator = download_from_api(
+                    api_url_input_for_fetcher,
+                    logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"),
+                    start_page=worker_args_template.get('start_page'),
+                    end_page=worker_args_template.get('end_page'),
+                    manga_mode=manga_mode_active_for_fetch,
+                    cancellation_event=self.cancellation_event,
+                    pause_event=worker_args_template.get('pause_event'),
+                    use_cookie=worker_args_template.get('use_cookie'),
+                    cookie_text=worker_args_template.get('cookie_text'),
+                    selected_cookie_file=worker_args_template.get('selected_cookie_file'),
+                    app_base_dir=worker_args_template.get('app_base_dir'),
+                    manga_filename_style_for_sort_check=(
+                        worker_args_template.get('manga_filename_style')
+                        if manga_mode_active_for_fetch
+                        else None
+                    )
+                )
 
-            for posts_batch in post_generator :
-                if self .cancellation_event .is_set ():
-                    fetch_error_occurred =True ;self .log_signal .emit ("    Post fetching cancelled by user.");break 
-                if isinstance (posts_batch ,list ):
-                    all_posts_data .extend (posts_batch )
-                    self .total_posts_to_process =len (all_posts_data )
-                    if self .total_posts_to_process >0 and self .total_posts_to_process %100 ==0 :
-                        self .log_signal .emit (f"    Fetched {self .total_posts_to_process } posts so far...")
-                else :
-                    fetch_error_occurred =True ;self .log_signal .emit (f"❌ API fetcher returned non-list type: {type (posts_batch )}");break 
+                for posts_batch in post_generator:
+                    if self.cancellation_event.is_set():
+                        fetch_error_occurred = True; self.log_signal.emit("    Post fetching cancelled by user."); break
+                    if isinstance(posts_batch, list):
+                        all_posts_data.extend(posts_batch)
+                        self.total_posts_to_process = len(all_posts_data)
+                        if self.total_posts_to_process > 0 and self.total_posts_to_process % 100 == 0:
+                            self.log_signal.emit(f"    Fetched {self.total_posts_to_process} posts so far...")
+                    else:
+                        fetch_error_occurred = True; self.log_signal.emit(f"❌ API fetcher returned non-list type: {type(posts_batch)}"); break
 
-            if not fetch_error_occurred and not self .cancellation_event .is_set ():
-                self .log_signal .emit (f"✅ Post fetching complete. Total posts to process: {self .total_posts_to_process }")
+                if not fetch_error_occurred and not self.cancellation_event.is_set():
+                    self.log_signal.emit(f"✅ Post fetching complete. Total posts to process: {self.total_posts_to_process}")
+
+                # Get a clean, serializable dictionary of UI settings
+                output_dir_for_session = worker_args_template.get('output_dir', self.dir_input.text().strip())
+                ui_settings_for_session = self._get_current_ui_settings_as_dict(
+                    api_url_override=api_url_input_for_fetcher,
+                    output_dir_override=output_dir_for_session
+                )
+
+                # Save initial session state
+                session_data = {
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "ui_settings": ui_settings_for_session,
+                    "download_state": {
+                        "all_posts_data": all_posts_data,
+                        "processed_post_ids": []
+                    }
+                }
+                self._save_session_file(session_data)
+
+            # From here, all_posts_data is the list of posts to process (either new or restored)
             unique_posts_dict ={}
             for post in all_posts_data :
                 post_id =post .get ('id')
@@ -7263,12 +7543,14 @@ class DownloaderApp (QWidget ):
                 else :
                     self .log_signal .emit (f"⚠️ Skipping post with no ID: {post .get ('title','Untitled')}")
 
-            all_posts_data =list (unique_posts_dict .values ())
+            posts_to_process_final = list(unique_posts_dict.values())
 
-            self .total_posts_to_process =len (all_posts_data )
-            self .log_signal .emit (f"    Processed {len (unique_posts_dict )} unique posts after de-duplication.")
-            if len (unique_posts_dict )<len (all_posts_data ):
-                self .log_signal .emit (f"    Note: {len (all_posts_data )-len (unique_posts_dict )} duplicate post IDs were removed.")
+            if not is_restore:
+                self.total_posts_to_process = len(posts_to_process_final)
+                self.log_signal.emit(f"    Processed {len(posts_to_process_final)} unique posts after de-duplication.")
+                if len(posts_to_process_final) < len(all_posts_data):
+                    self.log_signal.emit(f"    Note: {len(all_posts_data) - len(posts_to_process_final)} duplicate post IDs were removed.")
+            all_posts_data = posts_to_process_final
 
         except TypeError as te :
             self .log_signal .emit (f"❌ TypeError calling download_from_api: {te }\n    Check 'downloader_utils.py' signature.\n{traceback .format_exc (limit =2 )}");fetch_error_occurred =True 
@@ -7286,14 +7568,15 @@ class DownloaderApp (QWidget ):
             if self .thread_pool :self .thread_pool .shutdown (wait =False ,cancel_futures =True );self .thread_pool =None 
             return 
 
-        if self .total_posts_to_process ==0 :
+        if not all_posts_data:
             self .log_signal .emit ("😕 No posts found or fetched to process.")
             self .finished_signal .emit (0 ,0 ,False ,[])
             return 
 
         self .log_signal .emit (f"    Preparing to submit {self .total_posts_to_process } post processing tasks to thread pool...")
-        self .processed_posts_count =0 
-        self .overall_progress_signal .emit (self .total_posts_to_process ,0 )
+        if not is_restore:
+            self.processed_posts_count = 0
+        self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
         num_file_dl_threads_for_each_worker =worker_args_template .get ('num_file_threads_for_worker',1 )
 
@@ -7312,6 +7595,7 @@ class DownloaderApp (QWidget ):
         'manga_mode_active','manga_filename_style','manga_date_prefix',
         'manga_global_file_counter_ref'
         ,'creator_download_folder_ignore_words'
+        , 'session_file_path', 'session_lock'
         ]
 
         ppw_optional_keys_with_defaults ={
@@ -7668,11 +7952,14 @@ class DownloaderApp (QWidget ):
         self .external_link_queue .clear ();self .extracted_links_cache =[]
         self ._is_processing_external_link_queue =False ;self ._current_link_post_title =None 
         if self .pause_event :self .pause_event .clear ()
+        self.is_restore_pending = False
         self .total_posts_to_process =0 ;self .processed_posts_count =0 
         self .download_counter =0 ;self .skip_counter =0 
         self .all_kept_original_filenames =[]
         self .is_paused =False 
         self ._handle_multithreading_toggle (self .use_multithreading_checkbox .isChecked ())
+     
+        self._update_button_states_and_connections() # Reset button states and connections
         self .favorite_download_queue .clear ()
         self .is_processing_favorites_queue =False 
 
@@ -7689,6 +7976,7 @@ class DownloaderApp (QWidget ):
         self ._update_favorite_scope_button_text ()
 
         self .set_ui_enabled (True )
+        self.interrupted_session_data = None # Clear session data from memory      
         self .update_custom_folder_visibility (self .link_input .text ())
         self .update_page_range_enabled_state ()
         self ._update_cookie_input_visibility (self .use_cookie_checkbox .isChecked ()if hasattr (self ,'use_cookie_checkbox')else False )
@@ -7723,6 +8011,7 @@ class DownloaderApp (QWidget ):
         if not self .cancel_btn .isEnabled ()and not self .cancellation_event .is_set ():self .log_signal .emit ("ℹ️ No active download to cancel or already cancelling.");return 
         self .log_signal .emit ("⚠️ Requesting cancellation of download process (soft reset)...")
 
+        self._clear_session_file() # Clear session file on explicit cancel
         if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
             self .log_signal .emit ("    Cancelling active External Link download thread...")
             self .external_link_download_thread .cancel ()
@@ -7776,6 +8065,11 @@ class DownloaderApp (QWidget ):
             kept_original_names_list =list (self .all_kept_original_filenames )if hasattr (self ,'all_kept_original_filenames')else []
         if kept_original_names_list is None :
             kept_original_names_list =[]
+
+        if not cancelled_by_user and not self.retryable_failed_files_info:
+            self._clear_session_file()
+            self.interrupted_session_data = None
+            self.is_restore_pending = False
 
         self ._finalize_download_history ()
         status_message =self ._tr ("status_cancelled_by_user","Cancelled by user")if cancelled_by_user else self ._tr ("status_completed","Completed")
@@ -8361,6 +8655,12 @@ class DownloaderApp (QWidget ):
 
     def _show_empty_popup (self ):
         """Creates and shows the empty popup dialog."""
+        if self.is_restore_pending:
+            QMessageBox.information(self, self._tr("restore_pending_title", "Restore Pending"),
+                                    self._tr("restore_pending_message_creator_selection",
+                                             "Please 'Restore Download' or 'Discard Session' before selecting new creators."))
+            return
+
         dialog =EmptyPopupDialog (self .app_base_dir ,self ,self )
         if dialog .exec_ ()==QDialog .Accepted :
             if hasattr (dialog ,'selected_creators_for_queue')and dialog .selected_creators_for_queue :

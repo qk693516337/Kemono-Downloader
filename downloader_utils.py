@@ -3,6 +3,7 @@ import time
 import requests 
 import re 
 import threading 
+import json
 import queue 
 import hashlib 
 import http .client 
@@ -456,27 +457,56 @@ def fetch_posts_paginated (api_url_base ,headers ,offset ,logger ,cancellation_e
             time .sleep (0.5 )
         logger ("   Post fetching resumed.")
     paginated_url =f'{api_url_base }?o={offset }'
-    logger (f"   Fetching: {paginated_url } (Page approx. {offset //50 +1 })")
-    try :
-        response =requests .get (paginated_url ,headers =headers ,timeout =(10 ,60 ),cookies =cookies_dict )
-        response .raise_for_status ()
-        if 'application/json'not in response .headers .get ('Content-Type','').lower ():
-            logger (f"⚠️ Unexpected content type from API: {response .headers .get ('Content-Type')}. Body: {response .text [:200 ]}")
-            return []
-        return response .json ()
-    except requests .exceptions .Timeout :
-        raise RuntimeError (f"Timeout fetching offset {offset } from {paginated_url }")
-    except requests .exceptions .RequestException as e :
-        err_msg =f"Error fetching offset {offset } from {paginated_url }: {e }"
-        if e .response is not None :
-            err_msg +=f" (Status: {e .response .status_code }, Body: {e .response .text [:200 ]})"
-        if isinstance (e ,requests .exceptions .ConnectionError )and ("Failed to resolve"in str (e )or "NameResolutionError"in str (e )):
-            err_msg +="\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
-        raise RuntimeError (err_msg )
-    except ValueError as e :
-        raise RuntimeError (f"Error decoding JSON from offset {offset } ({paginated_url }): {e }. Response text: {response .text [:200 ]}")
-    except Exception as e :
-        raise RuntimeError (f"Unexpected error fetching offset {offset } ({paginated_url }): {e }")
+    max_retries =3 
+    retry_delay =5 
+
+    for attempt in range (max_retries +1 ):
+        if cancellation_event and cancellation_event .is_set ():
+            raise RuntimeError ("Fetch operation cancelled by user during retry loop.")
+
+        log_message =f"   Fetching: {paginated_url } (Page approx. {offset //50 +1 })"
+        if attempt >0 :
+            log_message +=f" (Attempt {attempt +1 }/{max_retries +1 })"
+        logger (log_message )
+
+        try :
+            response =requests .get (paginated_url ,headers =headers ,timeout =(15 ,90 ),cookies =cookies_dict )
+            response .raise_for_status ()
+
+            if 'application/json'not in response .headers .get ('Content-Type','').lower ():
+                logger (f"⚠️ Unexpected content type from API: {response .headers .get ('Content-Type')}. Body: {response .text [:200 ]}")
+                return []
+
+            return response .json ()
+
+        except (requests .exceptions .Timeout ,requests .exceptions .ConnectionError )as e :
+            logger (f"   ⚠️ Retryable network error on page fetch (Attempt {attempt +1 }): {e }")
+            if attempt <max_retries :
+                delay =retry_delay *(2 **attempt )
+                logger (f"      Retrying in {delay } seconds...")
+                sleep_start =time .time ()
+                while time .time ()-sleep_start <delay :
+                    if cancellation_event and cancellation_event .is_set ():
+                        raise RuntimeError ("Fetch operation cancelled by user during retry delay.")
+                    time .sleep (0.1 )
+                continue 
+            else :
+                logger (f"   ❌ Failed to fetch page after {max_retries +1 } attempts.")
+                raise RuntimeError (f"Timeout or connection error fetching offset {offset } from {paginated_url }")
+
+        except requests .exceptions .RequestException as e :
+            err_msg =f"Error fetching offset {offset } from {paginated_url }: {e }"
+            if e .response is not None :
+                err_msg +=f" (Status: {e .response .status_code }, Body: {e .response .text [:200 ]})"
+            if isinstance (e ,requests .exceptions .ConnectionError )and ("Failed to resolve"in str (e )or "NameResolutionError"in str (e )):
+                err_msg +="\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
+            raise RuntimeError (err_msg )
+        except ValueError as e :
+            raise RuntimeError (f"Error decoding JSON from offset {offset } ({paginated_url }): {e }. Response text: {response .text [:200 ]}")
+        except Exception as e :
+            raise RuntimeError (f"Unexpected error fetching offset {offset } ({paginated_url }): {e }")
+
+    raise RuntimeError (f"Failed to fetch page {paginated_url } after all attempts.")
 def fetch_post_comments (api_domain ,service ,user_id ,post_id ,headers ,logger ,cancellation_event =None ,pause_event =None ,cookies_dict =None ):
     if cancellation_event and cancellation_event .is_set ():
         logger ("   Comment fetch cancelled before request.")
@@ -490,27 +520,56 @@ def fetch_post_comments (api_domain ,service ,user_id ,post_id ,headers ,logger 
             time .sleep (0.5 )
         logger ("   Comment fetching resumed.")
     comments_api_url =f"https://{api_domain }/api/v1/{service }/user/{user_id }/post/{post_id }/comments"
-    logger (f"   Fetching comments: {comments_api_url }")
-    try :
-        response =requests .get (comments_api_url ,headers =headers ,timeout =(10 ,30 ),cookies =cookies_dict )
-        response .raise_for_status ()
-        if 'application/json'not in response .headers .get ('Content-Type','').lower ():
-            logger (f"⚠️ Unexpected content type from comments API: {response .headers .get ('Content-Type')}. Body: {response .text [:200 ]}")
-            return []
-        return response .json ()
-    except requests .exceptions .Timeout :
-        raise RuntimeError (f"Timeout fetching comments for post {post_id } from {comments_api_url }")
-    except requests .exceptions .RequestException as e :
-        err_msg =f"Error fetching comments for post {post_id } from {comments_api_url }: {e }"
-        if e .response is not None :
-            err_msg +=f" (Status: {e .response .status_code }, Body: {e .response .text [:200 ]})"
-        if isinstance (e ,requests .exceptions .ConnectionError )and ("Failed to resolve"in str (e )or "NameResolutionError"in str (e )):
-            err_msg +="\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
-        raise RuntimeError (err_msg )
-    except ValueError as e :
-        raise RuntimeError (f"Error decoding JSON from comments API for post {post_id } ({comments_api_url }): {e }. Response text: {response .text [:200 ]}")
-    except Exception as e :
-        raise RuntimeError (f"Unexpected error fetching comments for post {post_id } ({comments_api_url }): {e }")
+    max_retries =2 
+    retry_delay =3 
+
+    for attempt in range (max_retries +1 ):
+        if cancellation_event and cancellation_event .is_set ():
+            raise RuntimeError ("Comment fetch operation cancelled by user during retry loop.")
+
+        log_message =f"   Fetching comments: {comments_api_url }"
+        if attempt >0 :
+            log_message +=f" (Attempt {attempt +1 }/{max_retries +1 })"
+        logger (log_message )
+
+        try :
+            response =requests .get (comments_api_url ,headers =headers ,timeout =(10 ,30 ),cookies =cookies_dict )
+            response .raise_for_status ()
+
+            if 'application/json'not in response .headers .get ('Content-Type','').lower ():
+                logger (f"⚠️ Unexpected content type from comments API: {response .headers .get ('Content-Type')}. Body: {response .text [:200 ]}")
+                return []
+
+            return response .json ()
+
+        except (requests .exceptions .Timeout ,requests .exceptions .ConnectionError )as e :
+            logger (f"   ⚠️ Retryable network error on comment fetch (Attempt {attempt +1 }): {e }")
+            if attempt <max_retries :
+                delay =retry_delay *(2 **attempt )
+                logger (f"      Retrying in {delay } seconds...")
+                sleep_start =time .time ()
+                while time .time ()-sleep_start <delay :
+                    if cancellation_event and cancellation_event .is_set ():
+                        raise RuntimeError ("Comment fetch operation cancelled by user during retry delay.")
+                    time .sleep (0.1 )
+                continue 
+            else :
+                logger (f"   ❌ Failed to fetch comments for post {post_id } after {max_retries +1 } attempts.")
+                raise RuntimeError (f"Timeout or connection error fetching comments for post {post_id } from {comments_api_url }")
+
+        except requests .exceptions .RequestException as e :
+            err_msg =f"Error fetching comments for post {post_id } from {comments_api_url }: {e }"
+            if e .response is not None :
+                err_msg +=f" (Status: {e .response .status_code }, Body: {e .response .text [:200 ]})"
+            if isinstance (e ,requests .exceptions .ConnectionError )and ("Failed to resolve"in str (e )or "NameResolutionError"in str (e )):
+                err_msg +="\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
+            raise RuntimeError (err_msg )
+        except ValueError as e :
+            raise RuntimeError (f"Error decoding JSON from comments API for post {post_id } ({comments_api_url }): {e }. Response text: {response .text [:200 ]}")
+        except Exception as e :
+            raise RuntimeError (f"Unexpected error fetching comments for post {post_id } ({comments_api_url }): {e }")
+
+    raise RuntimeError (f"Failed to fetch comments for post {post_id } after all attempts.")
 def download_from_api (
 api_url_input ,
 logger =print ,
@@ -785,6 +844,8 @@ class PostProcessorWorker :
     scan_content_for_images =False ,
     creator_download_folder_ignore_words =None ,
     manga_global_file_counter_ref =None ,
+    session_file_path=None,
+    session_lock=None,
     ):
         self .post =post_data 
         self .download_root =download_root 
@@ -834,6 +895,8 @@ class PostProcessorWorker :
         self .override_output_dir =override_output_dir 
         self .scan_content_for_images =scan_content_for_images 
         self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
+        self.session_file_path = session_file_path
+        self.session_lock = session_lock
         if self .compress_images and Image is None :
 
             self .logger ("⚠️ Image compression disabled: Pillow library not found.")
@@ -1689,48 +1752,48 @@ class PostProcessorWorker :
 
         if not self .extract_links_only and self .use_post_subfolders :
             cleaned_post_title_for_sub =clean_folder_name (post_title )
-            post_id_for_fallback = self.post.get('id', 'unknown_id') # Ensure post_id is available
+            post_id_for_fallback =self .post .get ('id','unknown_id')
 
-            # Fallback to a more unique name if the cleaned title is generic
-            if not cleaned_post_title_for_sub or cleaned_post_title_for_sub == "untitled_folder":
-                self.logger(f"   ⚠️ Post title '{post_title}' resulted in a generic subfolder name. Using 'post_{post_id_for_fallback}' as base.")
-                original_cleaned_post_title_for_sub = f"post_{post_id_for_fallback}"
-            else:
-                original_cleaned_post_title_for_sub = cleaned_post_title_for_sub
 
-            # Path before adding the post-specific subfolder
-            base_path_for_post_subfolder = determined_post_save_path_for_history
-            
-            suffix_counter = 0  # 0 for no suffix, 1 for _1, etc.
-            final_post_subfolder_name = ""
+            if not cleaned_post_title_for_sub or cleaned_post_title_for_sub =="untitled_folder":
+                self .logger (f"   ⚠️ Post title '{post_title }' resulted in a generic subfolder name. Using 'post_{post_id_for_fallback }' as base.")
+                original_cleaned_post_title_for_sub =f"post_{post_id_for_fallback }"
+            else :
+                original_cleaned_post_title_for_sub =cleaned_post_title_for_sub 
 
-            while True:
-                if suffix_counter == 0:
-                    name_candidate = original_cleaned_post_title_for_sub
-                else:
-                    name_candidate = f"{original_cleaned_post_title_for_sub}_{suffix_counter}"
-                
-                potential_post_subfolder_path = os.path.join(base_path_for_post_subfolder, name_candidate)
-                
-                try:
-                    os.makedirs(potential_post_subfolder_path, exist_ok=False)
-                    final_post_subfolder_name = name_candidate
-                    if suffix_counter > 0: # Log only if a suffix was actually needed and used
-                         self.logger(f"   Post subfolder name conflict: Using '{final_post_subfolder_name}' instead of '{original_cleaned_post_title_for_sub}' to avoid mixing posts.")
+
+            base_path_for_post_subfolder =determined_post_save_path_for_history 
+
+            suffix_counter =0 
+            final_post_subfolder_name =""
+
+            while True :
+                if suffix_counter ==0 :
+                    name_candidate =original_cleaned_post_title_for_sub 
+                else :
+                    name_candidate =f"{original_cleaned_post_title_for_sub }_{suffix_counter }"
+
+                potential_post_subfolder_path =os .path .join (base_path_for_post_subfolder ,name_candidate )
+
+                try :
+                    os .makedirs (potential_post_subfolder_path ,exist_ok =False )
+                    final_post_subfolder_name =name_candidate 
+                    if suffix_counter >0 :
+                         self .logger (f"   Post subfolder name conflict: Using '{final_post_subfolder_name }' instead of '{original_cleaned_post_title_for_sub }' to avoid mixing posts.")
                     break 
-                except FileExistsError:
-                    suffix_counter += 1
-                    if suffix_counter > 100: # Safety break
-                        self.logger(f"   ⚠️ Exceeded 100 attempts to find unique subfolder name for '{original_cleaned_post_title_for_sub}'. Using UUID.")
-                        final_post_subfolder_name = f"{original_cleaned_post_title_for_sub}_{uuid.uuid4().hex[:8]}"
-                        os.makedirs(os.path.join(base_path_for_post_subfolder, final_post_subfolder_name), exist_ok=True) # Create with exist_ok=True as a last resort
-                        break
-                except OSError as e_mkdir:
-                    self.logger(f"   ❌ Error creating directory '{potential_post_subfolder_path}': {e_mkdir}. Files for this post might be saved in parent or fail.")
-                    final_post_subfolder_name = original_cleaned_post_title_for_sub # Fallback
+                except FileExistsError :
+                    suffix_counter +=1 
+                    if suffix_counter >100 :
+                        self .logger (f"   ⚠️ Exceeded 100 attempts to find unique subfolder name for '{original_cleaned_post_title_for_sub }'. Using UUID.")
+                        final_post_subfolder_name =f"{original_cleaned_post_title_for_sub }_{uuid .uuid4 ().hex [:8 ]}"
+                        os .makedirs (os .path .join (base_path_for_post_subfolder ,final_post_subfolder_name ),exist_ok =True )
+                        break 
+                except OSError as e_mkdir :
+                    self .logger (f"   ❌ Error creating directory '{potential_post_subfolder_path }': {e_mkdir }. Files for this post might be saved in parent or fail.")
+                    final_post_subfolder_name =original_cleaned_post_title_for_sub 
                     break 
-            
-            determined_post_save_path_for_history = os.path.join(base_path_for_post_subfolder, final_post_subfolder_name)
+
+            determined_post_save_path_for_history =os .path .join (base_path_for_post_subfolder ,final_post_subfolder_name )
 
         if not self .extract_links_only and self .use_subfolders and self .skip_words_list :
             if self ._check_pause (f"Folder keyword skip check for post {post_id }"):return 0 ,num_potential_files_in_post ,[],[],[],None 
@@ -1993,7 +2056,7 @@ class PostProcessorWorker :
                     if self .use_subfolders and target_base_folder_name_for_instance :
                         current_path_for_file_instance =os .path .join (current_path_for_file_instance ,target_base_folder_name_for_instance )
                     if self .use_post_subfolders :
-                        # Use the final_post_subfolder_name determined earlier, which includes suffix if needed
+
                         current_path_for_file_instance =os .path .join (current_path_for_file_instance ,final_post_subfolder_name )
 
                     manga_date_counter_to_pass =self .manga_date_file_counter_ref if self .manga_mode_active and self .manga_filename_style ==STYLE_DATE_BASED else None 
@@ -2036,6 +2099,29 @@ class PostProcessorWorker :
                     total_skipped_this_post +=1 
         self ._emit_signal ('file_progress',"",None )
 
+        # After a post's files are all processed, update the session file to mark this post as done.
+        if self.session_file_path and self.session_lock:
+            try:
+                with self.session_lock:
+                    if os.path.exists(self.session_file_path): # Only update if the session file exists
+                        # Read current state
+                        with open(self.session_file_path, 'r', encoding='utf-8') as f:
+                            session_data = json.load(f)
+                        
+                        # Modify in memory
+                        if not isinstance(session_data.get('download_state', {}).get('processed_post_ids'), list):
+                            if 'download_state' not in session_data:
+                                session_data['download_state'] = {}
+                            session_data['download_state']['processed_post_ids'] = []
+                        session_data['download_state']['processed_post_ids'].append(self.post.get('id'))
+                        # Write to temp file and then atomically replace
+                        temp_file_path = self.session_file_path + ".tmp"
+                        with open(temp_file_path, 'w', encoding='utf-8') as f_tmp:
+                            json.dump(session_data, f_tmp, indent=2)
+                        os.replace(temp_file_path, self.session_file_path)
+            except Exception as e:
+                self.logger(f"⚠️ Could not update session file for post {post_id}: {e}")
+
 
 
 
@@ -2062,22 +2148,22 @@ class PostProcessorWorker :
             }
         if self .check_cancel ():self .logger (f"   Post {post_id } processing interrupted/cancelled.");
         else :self .logger (f"   Post {post_id } Summary: Downloaded={total_downloaded_this_post }, Skipped Files={total_skipped_this_post }")
-       
-        # Cleanup: Remove empty post-specific subfolder if created and no files were downloaded
-        if not self.extract_links_only and self.use_post_subfolders and total_downloaded_this_post == 0:
-            # determined_post_save_path_for_history at this point holds the full path to the post-specific subfolder
-            # if self.use_post_subfolders was true and it was applied.
-            # base_path_for_post_subfolder was the path *before* the post-specific segment.
-            # final_post_subfolder_name was the segment itself.
-            # So, determined_post_save_path_for_history is the correct path to check.
-            path_to_check_for_emptiness = determined_post_save_path_for_history
-            try:
-                if os.path.isdir(path_to_check_for_emptiness) and not os.listdir(path_to_check_for_emptiness):
-                    self.logger(f"   🗑️ Removing empty post-specific subfolder: '{path_to_check_for_emptiness}'")
-                    os.rmdir(path_to_check_for_emptiness)
-            except OSError as e_rmdir:
-                self.logger(f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
-       
+
+
+        if not self .extract_links_only and self .use_post_subfolders and total_downloaded_this_post ==0 :
+
+
+
+
+
+            path_to_check_for_emptiness =determined_post_save_path_for_history 
+            try :
+                if os .path .isdir (path_to_check_for_emptiness )and not os .listdir (path_to_check_for_emptiness ):
+                    self .logger (f"   🗑️ Removing empty post-specific subfolder: '{path_to_check_for_emptiness }'")
+                    os .rmdir (path_to_check_for_emptiness )
+            except OSError as e_rmdir :
+                self .logger (f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness }': {e_rmdir }")
+
         return total_downloaded_this_post ,total_skipped_this_post ,kept_original_filenames_for_log ,retryable_failures_this_post ,permanent_failures_this_post ,history_data_for_this_post 
 class DownloadThread (QThread ):
     progress_signal =pyqtSignal (str )
@@ -2123,6 +2209,8 @@ class DownloadThread (QThread ):
     scan_content_for_images =False ,
     creator_download_folder_ignore_words =None ,
     cookie_text ="",
+    session_file_path=None,
+    session_lock=None,
     ):
         super ().__init__ ()
         self .api_url_input =api_url_input 
@@ -2173,7 +2261,9 @@ class DownloadThread (QThread ):
         self .scan_content_for_images =scan_content_for_images 
         self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
         self .manga_global_file_counter_ref =manga_global_file_counter_ref 
-        self .history_candidates_buffer =deque (maxlen =8 )
+        self.session_file_path = session_file_path
+        self.session_lock = session_lock
+        self.history_candidates_buffer =deque (maxlen =8 )
         if self .compress_images and Image is None :
             self .logger ("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
             self .compress_images =False 
@@ -2303,6 +2393,8 @@ class DownloadThread (QThread ):
                     use_cookie =self .use_cookie ,
                     manga_date_file_counter_ref =self .manga_date_file_counter_ref ,
                     creator_download_folder_ignore_words =self .creator_download_folder_ignore_words ,
+                    session_file_path=self.session_file_path,
+                    session_lock=self.session_lock,
                     )
                     try :
                         dl_count ,skip_count ,kept_originals_this_post ,retryable_failures ,permanent_failures ,history_data =post_processing_worker .process ()
