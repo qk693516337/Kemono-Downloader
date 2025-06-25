@@ -214,7 +214,7 @@ Controls for how downloaded content is structured into folders.
         -   **⤵️ Add to Filter Button:** Opens a dialog displaying all entries from `Known.txt` (with a search bar). Select one or more entries to add them to the "**🎯 Filter by Character(s)**" input field. Grouped names from `Known.txt` are added with the `~` syntax if applicable.
         -   **🗑️ Delete Selected Button:** Removes the currently selected name(s) from the list display and from the `Known.txt` file.
         -   **Open Known.txt Button:** Opens your `Known.txt` file in the system's default text editor for manual editing.
-        -   **❓ Help Button (Known.txt):** Opens a guide or tooltip explaining the `Known.txt` feature and syntax.
+        -   **❓ Help Button:** Opens a guide or tooltip explaining the app feature
 
 ---
 
