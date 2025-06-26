@@ -3,31 +3,26 @@
 <table align="center">
   <tr>
     <td align="center">
-      <img src="Read/Read.png" alt="Post Downloader Tab" width="400"/>
-      <br>
+      <img src="Read/Read.png" alt="Default Mode" width="400"/><br>
       <strong>Default</strong>
     </td>
     <td align="center">
-      <img src="Read/Read1.png" alt="Creator Downloader Tab" width="400"/>
-      <br>
+      <img src="Read/Read1.png" alt="Favorite Mode" width="400"/><br>
       <strong>Favorite mode</strong>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="Read/Read2.png" alt="Settings Tab" width="400"/>
-      <br>
+      <img src="Read/Read2.png" alt="Single Post" width="400"/><br>
       <strong>Single Post</strong>
     </td>
     <td align="center">
-      <img src="Read/Read3.png" alt="Settings Tab" width="400"/>
-      <br>
+      <img src="Read/Read3.png" alt="Manga/Comic Mode" width="400"/><br>
       <strong>Manga/Comic Mode</strong>
-    </td>
-    <td align="center">
     </td>
   </tr>
 </table>
+
 ---
 
 A powerful, feature-rich GUI application for downloading content from **[Kemono.su](https://kemono.su)** (and its mirrors like kemono.party) and **[Coomer.party](https://coomer.party)** (and its mirrors like coomer.su).
