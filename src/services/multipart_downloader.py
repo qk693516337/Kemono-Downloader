@@ -1,6 +1,6 @@
+# --- Standard Library Imports ---
 import os
 import time
-import requests
 import hashlib
 import http.client
 import traceback
@@ -8,21 +8,38 @@ import threading
 import queue
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+# --- Third-Party Library Imports ---
+import requests
+
+# --- Module Constants ---
 CHUNK_DOWNLOAD_RETRY_DELAY = 2
 MAX_CHUNK_DOWNLOAD_RETRIES = 1
-DOWNLOAD_CHUNK_SIZE_ITER = 1024 * 256  
+DOWNLOAD_CHUNK_SIZE_ITER = 1024 * 256  # 256 KB per iteration chunk
+
+# Flag to indicate if this module and its dependencies are available.
+# This was missing and caused the ImportError.
+MULTIPART_DOWNLOADER_AVAILABLE = True
 
 
-def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, headers,
-                               part_num, total_parts, progress_data, cancellation_event, skip_event, pause_event, global_emit_time_ref, cookies_for_chunk,
-                               logger_func, emitter=None, api_original_filename=None):
+def _download_individual_chunk(
+    chunk_url, temp_file_path, start_byte, end_byte, headers,
+    part_num, total_parts, progress_data, cancellation_event,
+    skip_event, pause_event, global_emit_time_ref, cookies_for_chunk,
+    logger_func, emitter=None, api_original_filename=None
+):
+    """
+    Downloads a single segment (chunk) of a larger file. This function is
+    intended to be run in a separate thread by a ThreadPoolExecutor.
+
+    It handles retries, pauses, and cancellations for its specific chunk.
+    """
+    # --- Pre-download checks for control events ---
     if cancellation_event and cancellation_event.is_set():
         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download cancelled before start.")
         return 0, False
     if skip_event and skip_event.is_set():
         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Skip event triggered before start.")
         return 0, False
-
     if pause_event and pause_event.is_set():
         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download paused before start...")
         while pause_event.is_set():
@@ -32,83 +49,66 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
             time.sleep(0.2)
         logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Download resumed.")
 
+    # Prepare headers for the specific byte range of this chunk
     chunk_headers = headers.copy()
-    if end_byte != -1 :
+    if end_byte != -1:
         chunk_headers['Range'] = f"bytes={start_byte}-{end_byte}"
-    elif start_byte == 0 and end_byte == -1:
-        pass
-
+    
     bytes_this_chunk = 0
     last_speed_calc_time = time.time()
     bytes_at_last_speed_calc = 0
 
+    # --- Retry Loop ---
     for attempt in range(MAX_CHUNK_DOWNLOAD_RETRIES + 1):
         if cancellation_event and cancellation_event.is_set():
-            logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Cancelled during retry loop.")
             return bytes_this_chunk, False
-        if skip_event and skip_event.is_set():
-            logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Skip event during retry loop.")
-            return bytes_this_chunk, False
-        if pause_event and pause_event.is_set():
-            logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Paused during retry loop...")
-            while pause_event.is_set():
-                if cancellation_event and cancellation_event.is_set():
-                    logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Cancelled while paused in retry loop.")
-                    return bytes_this_chunk, False
-                time.sleep(0.2)
-            logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Resumed from retry loop pause.")
 
         try:
             if attempt > 0:
-                logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Retrying download (Attempt {attempt}/{MAX_CHUNK_DOWNLOAD_RETRIES})...")
+                logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Retrying (Attempt {attempt + 1}/{MAX_CHUNK_DOWNLOAD_RETRIES + 1})...")
                 time.sleep(CHUNK_DOWNLOAD_RETRY_DELAY * (2 ** (attempt - 1)))
                 last_speed_calc_time = time.time()
                 bytes_at_last_speed_calc = bytes_this_chunk
-            log_msg = f"   🚀 [Chunk {part_num + 1}/{total_parts}] Starting download: bytes {start_byte}-{end_byte if end_byte != -1 else 'EOF'}"
-            logger_func(log_msg)
+
+            logger_func(f"   🚀 [Chunk {part_num + 1}/{total_parts}] Starting download: bytes {start_byte}-{end_byte if end_byte != -1 else 'EOF'}")
+            
             response = requests.get(chunk_url, headers=chunk_headers, timeout=(10, 120), stream=True, cookies=cookies_for_chunk)
             response.raise_for_status()
-            if start_byte == 0 and end_byte == -1 and int(response.headers.get('Content-Length', 0)) == 0:
-                logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Confirmed 0-byte file.")
-                with progress_data['lock']:
-                    progress_data['chunks_status'][part_num]['active'] = False
-                    progress_data['chunks_status'][part_num]['speed_bps'] = 0
-                return 0, True
 
+            # --- Data Writing Loop ---
             with open(temp_file_path, 'r+b') as f:
                 f.seek(start_byte)
                 for data_segment in response.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE_ITER):
                     if cancellation_event and cancellation_event.is_set():
-                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Cancelled during data iteration.")
-                        return bytes_this_chunk, False
-                    if skip_event and skip_event.is_set():
-                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Skip event during data iteration.")
                         return bytes_this_chunk, False
                     if pause_event and pause_event.is_set():
-                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Paused during data iteration...")
+                        # Handle pausing during the download stream
+                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Paused...")
                         while pause_event.is_set():
-                            if cancellation_event and cancellation_event.is_set():
-                                logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Cancelled while paused in data iteration.")
-                                return bytes_this_chunk, False
+                            if cancellation_event and cancellation_event.is_set(): return bytes_this_chunk, False
                             time.sleep(0.2)
-                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Resumed from data iteration pause.")
+                        logger_func(f"   [Chunk {part_num + 1}/{total_parts}] Resumed.")
+
                     if data_segment:
                         f.write(data_segment)
                         bytes_this_chunk += len(data_segment)
                         
+                        # Update shared progress data structure
                         with progress_data['lock']:
                             progress_data['total_downloaded_so_far'] += len(data_segment)
                             progress_data['chunks_status'][part_num]['downloaded'] = bytes_this_chunk
-                            progress_data['chunks_status'][part_num]['active'] = True
-
+                            
+                            # Calculate and update speed for this chunk
                             current_time = time.time()
-                            time_delta_speed = current_time - last_speed_calc_time
-                            if time_delta_speed > 0.5:
+                            time_delta = current_time - last_speed_calc_time
+                            if time_delta > 0.5:
                                 bytes_delta = bytes_this_chunk - bytes_at_last_speed_calc
-                                current_speed_bps = (bytes_delta * 8) / time_delta_speed if time_delta_speed > 0 else 0
+                                current_speed_bps = (bytes_delta * 8) / time_delta if time_delta > 0 else 0
                                 progress_data['chunks_status'][part_num]['speed_bps'] = current_speed_bps
                                 last_speed_calc_time = current_time
-                                bytes_at_last_speed_calc = bytes_this_chunk                            
+                                bytes_at_last_speed_calc = bytes_this_chunk
+                            
+                            # Emit progress signal to the UI via the queue
                             if emitter and (current_time - global_emit_time_ref[0] > 0.25):
                                 global_emit_time_ref[0] = current_time
                                 status_list_copy = [dict(s) for s in progress_data['chunks_status']]
@@ -116,28 +116,19 @@ def _download_individual_chunk(chunk_url, temp_file_path, start_byte, end_byte, 
                                     emitter.put({'type': 'file_progress', 'payload': (api_original_filename, status_list_copy)})
                                 elif hasattr(emitter, 'file_progress_signal'):
                                     emitter.file_progress_signal.emit(api_original_filename, status_list_copy)
+            
+            # If we reach here, the download for this chunk was successful
             return bytes_this_chunk, True
 
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout, http.client.IncompleteRead) as e:
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Retryable error: {e}")
-            if isinstance(e, requests.exceptions.ConnectionError) and \
-               ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
-                logger_func("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
-            if attempt == MAX_CHUNK_DOWNLOAD_RETRIES:
-                logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Failed after {MAX_CHUNK_DOWNLOAD_RETRIES} retries.")
-                return bytes_this_chunk, False
         except requests.exceptions.RequestException as e:
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Non-retryable error: {e}")
-            if ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
-                logger_func("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
-            return bytes_this_chunk, False
+            return bytes_this_chunk, False # Break loop on non-retryable errors
         except Exception as e:
             logger_func(f"   ❌ [Chunk {part_num + 1}/{total_parts}] Unexpected error: {e}\n{traceback.format_exc(limit=1)}")
-
             return bytes_this_chunk, False
-    with progress_data['lock']:
-        progress_data['chunks_status'][part_num]['active'] = False
-        progress_data['chunks_status'][part_num]['speed_bps'] = 0
+
     return bytes_this_chunk, False
 
 

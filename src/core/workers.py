@@ -1,813 +1,46 @@
-import os 
-import time 
-import requests 
-import re 
-import threading 
+# --- Standard Library Imports ---
+import os
+import queue
+import re
+import threading
+import time
+import traceback
+import uuid
+import http
+import html
 import json
-import queue 
-import hashlib 
-import http .client 
-import traceback 
-from concurrent .futures import ThreadPoolExecutor ,Future ,CancelledError ,as_completed 
-from collections import deque 
-import html 
-from PyQt5 .QtCore import QObject ,pyqtSignal ,QThread ,QMutex ,QMutexLocker 
+from collections import deque
+import hashlib
+from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError, Future
+from io import BytesIO
 from urllib .parse import urlparse 
-import uuid 
-try :
-    from mega import Mega 
+import requests
+# --- Third-Party Library Imports ---
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+# --- PyQt5 Imports ---
+from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess 
+# --- Local Application Imports ---
+from .api_client import download_from_api, fetch_post_comments
+from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
+from ..services.drive_downloader import (
+    download_mega_file, download_gdrive_file, download_dropbox_file
+)
+# Corrected Imports:
+from ..utils.file_utils import (
+    is_image, is_video, is_zip, is_rar, is_archive, is_audio, KNOWN_NAMES,
+    clean_filename, clean_folder_name
+)
+from ..utils.network_utils import prepare_cookies_for_request, get_link_platform
+from ..utils.text_utils import (
+    is_title_match_for_character, is_filename_match_for_character, strip_html_tags,
+    extract_folder_name_from_title, # This was the function causing the error
+    match_folders_from_title, match_folders_from_filename_enhanced
+)
+from ..config.constants import *
 
-
-    try :
-        from drive import download_mega_file as drive_download_mega_file ,download_gdrive_file ,download_dropbox_file 
-
-
-
-    except ImportError as drive_import_err :
-        print (f"ERROR importing from drive.py: {drive_import_err }. External drive downloads will fail.")
-except ImportError :
-    print ("ERROR: mega.py library not found. Please install it: pip install mega.py")
-try :
-    from PIL import Image 
-except ImportError :
-    print ("ERROR: Pillow library not found. Please install it: pip install Pillow")
-    Image =None 
-try :
-    from multipart_downloader import download_file_in_parts 
-    MULTIPART_DOWNLOADER_AVAILABLE =True 
-except ImportError as e :
-    print (f"Warning: multipart_downloader.py not found or import error: {e }. Multi-part downloads will be disabled.")
-    MULTIPART_DOWNLOADER_AVAILABLE =False 
-    def download_file_in_parts (*args ,**kwargs ):return False ,0 ,None ,None 
-from io import BytesIO 
-STYLE_POST_TITLE ="post_title"
-STYLE_ORIGINAL_NAME ="original_name"
-STYLE_DATE_BASED ="date_based"
-STYLE_DATE_POST_TITLE ="date_post_title"
-MANGA_DATE_PREFIX_DEFAULT =""
-STYLE_POST_TITLE_GLOBAL_NUMBERING ="post_title_global_numbering"
-SKIP_SCOPE_FILES ="files"
-SKIP_SCOPE_POSTS ="posts"
-SKIP_SCOPE_BOTH ="both"
-CHAR_SCOPE_TITLE ="title"
-CHAR_SCOPE_FILES ="files"
-CHAR_SCOPE_BOTH ="both"
-CHAR_SCOPE_COMMENTS ="comments"
-FILE_DOWNLOAD_STATUS_SUCCESS ="success"
-FILE_DOWNLOAD_STATUS_SKIPPED ="skipped"
-FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER ="failed_retry_later"
-FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION ="failed_permanent_session"
-fastapi_app =None 
-KNOWN_NAMES =[]
-MIN_SIZE_FOR_MULTIPART_DOWNLOAD =10 *1024 *1024 
-GOFILE_GUEST_TOKEN =None 
-MAX_PARTS_FOR_MULTIPART_DOWNLOAD =15 
-MAX_FILENAME_COMPONENT_LENGTH =150 
-IMAGE_EXTENSIONS ={
-'.jpg','.jpeg','.png','.gif','.bmp','.tiff','.tif','.webp',
-'.heic','.heif','.svg','.ico','.jfif','.pjpeg','.pjp','.avif'
-}
-VIDEO_EXTENSIONS ={
-'.mp4','.mov','.mkv','.webm','.avi','.wmv','.flv','.mpeg',
-'.mpg','.m4v','.3gp','.ogv','.ts','.vob'
-}
-ARCHIVE_EXTENSIONS ={
-'.zip','.rar','.7z','.tar','.gz','.bz2'
-}
-AUDIO_EXTENSIONS ={
-'.mp3','.wav','.aac','.flac','.ogg','.wma','.m4a','.opus',
-'.aiff','.ape','.mid','.midi'
-}
-FOLDER_NAME_STOP_WORDS ={
-"a","alone","am","an","and","at","be","blues","but","by","com",
-"for","grown","hard","he","her","his","hitting","i","im","in","is","it","its",
-"me","much","my","net","not","of","on","or","org","our","please",
-"right","s","she","so","technically","tell","the","their","they","this",
-"to","ve","was","we","well","were","with","www","year","you","your",
-}
-
-CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS ={
-"poll","cover","fan-art","fanart","requests","request","holiday","suggest","suggestions",
-"batch","open","closed","winner","loser","minor","adult","wip",
-"update","news","discussion","question","stream","video","sketchbook","artwork",
-
-"1","2","3","4","5","6","7","8","9","10",
-"11","12","13","14","15","16","17","18","19","20",
-"one","two","three","four","five","six","seven","eight","nine","ten",
-"eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen",
-"eighteen","nineteen","twenty",
-
-"jan","january","feb","february","mar","march","apr","april",
-"may","jun","june","jul","july","aug","august","sep","september",
-"oct","october","nov","november","dec","december",
-
-"mon","monday","tue","tuesday","wed","wednesday","thu","thursday",
-"fri","friday","sat","saturday","sun","sunday"
-}
-
-
-KNOWN_TXT_MATCH_CLEANUP_PATTERNS =[
-r'\bcum\b',
-r'\bnsfw\b',
-r'\bsfw\b',
-r'\bweb\b',
-r'\bhd\b',
-r'\bhi\s*res\b',
-r'\bhigh\s*res\b',
-r'\b\d+p\b',
-r'\b\d+k\b',
-r'\[OC\]',
-r'\[Request(?:s)?\]',
-r'\bCommission\b',
-r'\bComm\b',
-r'\bPreview\b',
-]
-
-def parse_cookie_string (cookie_string ):
-    """Parses a 'name=value; name2=value2' cookie string into a dict."""
-    cookies ={}
-    if cookie_string :
-        for item in cookie_string .split (';'):
-            parts =item .split ('=',1 )
-            if len (parts )==2 :
-                name =parts [0 ].strip ()
-                value =parts [1 ].strip ()
-                if name :
-                    cookies [name ]=value 
-    return cookies if cookies else None 
-def load_cookies_from_netscape_file (filepath ,logger_func ,target_domain_filter =None ):
-    """Loads cookies from a Netscape-formatted cookies.txt file.
-    If target_domain_filter is provided, only cookies for that domain (or its subdomains) are returned.
-    """
-    cookies ={}
-    loaded_for_target_domain_count =0 
-    total_cookies_in_file =0 
-    try :
-        with open (filepath ,'r',encoding ='utf-8')as f :
-            for line_num ,line in enumerate (f ,1 ):
-                line =line .strip ()
-                if not line or line .startswith ('#'):
-                    continue 
-                parts =line .split ('\t')
-                total_cookies_in_file +=1 
-                if len (parts )==7 :
-                    cookie_domain_from_file =parts [0 ]
-                    name =parts [5 ]
-                    value =parts [6 ]
-                    if name :
-                        if target_domain_filter :
-
-
-
-                            host_to_match =target_domain_filter .lower ()
-                            cookie_domain_norm =cookie_domain_from_file .lower ()
-                            is_match =False 
-                            if cookie_domain_norm .startswith ('.'):
-
-
-
-                                if host_to_match ==cookie_domain_norm [1 :]or host_to_match .endswith (cookie_domain_norm ):
-                                    is_match =True 
-                            else :
-
-
-                                if host_to_match ==cookie_domain_norm :
-                                    is_match =True 
-                            if is_match :
-                                cookies [name ]=value 
-                                loaded_for_target_domain_count +=1 
-                        else :
-                            cookies [name ]=value 
-        if target_domain_filter :
-            logger_func (f"   🍪 Scanned {total_cookies_in_file } cookies in '{os .path .basename (filepath )}'. Loaded {loaded_for_target_domain_count } for domain '{target_domain_filter }'.")
-        else :
-            logger_func (f"   🍪 Loaded {len (cookies )} cookies from '{os .path .basename (filepath )}' (no domain filter).")
-        return cookies if cookies else None 
-    except FileNotFoundError :
-        logger_func (f"   🍪 Cookie file '{os .path .basename (filepath )}' not found at expected location.")
-        return None 
-    except Exception as e :
-        logger_func (f"   🍪 Error parsing cookie file '{os .path .basename (filepath )}': {e }")
-        return None 
-def is_title_match_for_character (post_title ,character_name_filter ):
-    if not post_title or not character_name_filter :
-        return False 
-    safe_filter =str (character_name_filter ).strip ()
-    if not safe_filter :
-        return False 
-    pattern =r"(?i)\b"+re .escape (safe_filter )+r"\b"
-    match_result =bool (re .search (pattern ,post_title ))
-    return match_result 
-def is_filename_match_for_character (filename ,character_name_filter ):
-    if not filename or not character_name_filter :
-        return False 
-    safe_filter =str (character_name_filter ).strip ().lower ()
-    if not safe_filter :
-        return False 
-    match_result =safe_filter in filename .lower ()
-    return match_result 
-def clean_folder_name (name ):
-    if not isinstance (name ,str ):name =str (name )
-    cleaned =re .sub (r'[^\w\s\-\_\.\(\)]','',name )
-    cleaned =cleaned .strip ()
-    cleaned =re .sub (r'\s+',' ',cleaned )
-    if cleaned :
-        words =cleaned .split (' ')
-        filtered_words =[word for word in words if word .lower ()not in FOLDER_NAME_STOP_WORDS and word ]
-        cleaned =' '.join (filtered_words )
-        cleaned =cleaned .strip ()
-    if not cleaned :
-        return "untitled_folder"
-    if len (cleaned )>MAX_FILENAME_COMPONENT_LENGTH :
-        cleaned =cleaned [:MAX_FILENAME_COMPONENT_LENGTH ]
-    temp_name =cleaned 
-    while len (temp_name )>0 and (temp_name .endswith ('.')or temp_name .endswith (' ')):
-        temp_name =temp_name [:-1 ]
-    return temp_name if temp_name else "untitled_folder"
-def clean_filename (name ):
-    if not isinstance (name ,str ):name =str (name )
-    cleaned =re .sub (r'[^\w\s\-\_\.\(\)]','',name )
-    cleaned =cleaned .strip ()
-    cleaned =re .sub (r'\s+',' ',cleaned )
-    if not cleaned :return "untitled_file"
-    base_name ,ext =os .path .splitext (cleaned )
-    max_base_len =MAX_FILENAME_COMPONENT_LENGTH -len (ext )
-    if len (base_name )>max_base_len :
-        if max_base_len >0 :
-            base_name =base_name [:max_base_len ]
-        else :
-            return cleaned [:MAX_FILENAME_COMPONENT_LENGTH ]if cleaned else "untitled_file"
-    final_name =base_name +ext 
-    return final_name if final_name else "untitled_file"
-def strip_html_tags (html_text ):
-    if not html_text :return ""
-    text =html .unescape (str (html_text ))
-    text_after_tag_removal =re .sub (r'<[^>]+>',' ',text )
-    cleaned_text =re .sub (r'\s+',' ',text_after_tag_removal ).strip ()
-    return cleaned_text 
-def extract_folder_name_from_title (title ,unwanted_keywords ):
-    if not title :return 'Uncategorized'
-    title_lower =title .lower ()
-    tokens =re .findall (r'\b[\w\-]+\b',title_lower )
-    for token in tokens :
-        clean_token =clean_folder_name (token )
-        if clean_token and clean_token .lower ()not in unwanted_keywords :
-            return clean_token 
-    cleaned_full_title =clean_folder_name (title )
-    return cleaned_full_title if cleaned_full_title else 'Uncategorized'
-def match_folders_from_title (title ,names_to_match ,unwanted_keywords ):
-    """
-    Matches folder names from a title based on a list of known name objects.
-    Each name object in names_to_match is expected to be a dict:
-    {'name': 'PrimaryFolderName', 'aliases': ['alias1', 'alias2', ...]}
-    """
-    if not title or not names_to_match :
-        return []
-
-
-    cleaned_title_for_matching =title 
-    for pat_str in KNOWN_TXT_MATCH_CLEANUP_PATTERNS :
-        cleaned_title_for_matching =re .sub (pat_str ,' ',cleaned_title_for_matching ,flags =re .IGNORECASE )
-
-
-    cleaned_title_for_matching =re .sub (r'\s+',' ',cleaned_title_for_matching ).strip ()
-
-    title_lower =cleaned_title_for_matching .lower ()
-    matched_cleaned_names =set ()
-    sorted_name_objects =sorted (names_to_match ,key =lambda x :len (x .get ("name","")),reverse =True )
-    for name_obj in sorted_name_objects :
-        primary_folder_name =name_obj .get ("name")
-        aliases =name_obj .get ("aliases",[])
-        if not primary_folder_name or not aliases :
-            continue 
-        for alias in aliases :
-            alias_lower =alias .lower ()
-            if not alias_lower :continue 
-            pattern =r'\b'+re .escape (alias_lower )+r'\b'
-            if re .search (pattern ,title_lower ):
-                cleaned_primary_name =clean_folder_name (primary_folder_name )
-                if cleaned_primary_name .lower ()not in unwanted_keywords :
-                    matched_cleaned_names .add (cleaned_primary_name )
-                    break 
-    return sorted (list (matched_cleaned_names ))
-
-def match_folders_from_filename_enhanced (filename ,names_to_match ,unwanted_keywords ):
-    if not filename or not names_to_match :
-        return []
-
-    filename_lower =filename .lower ()
-    matched_primary_names =set ()
-
-
-
-    alias_map_to_primary =[]
-    for name_obj in names_to_match :
-        primary_folder_name =name_obj .get ("name")
-        if not primary_folder_name :
-            continue 
-
-        cleaned_primary_name =clean_folder_name (primary_folder_name )
-
-        if not cleaned_primary_name or cleaned_primary_name .lower ()in unwanted_keywords :
-            continue 
-
-        aliases_for_obj =name_obj .get ("aliases",[])
-        for alias in aliases_for_obj :
-            alias_lower =alias .lower ()
-            if alias_lower :
-                alias_map_to_primary .append ((alias_lower ,cleaned_primary_name ))
-
-    alias_map_to_primary .sort (key =lambda x :len (x [0 ]),reverse =True )
-
-    for alias_lower ,primary_name_for_alias in alias_map_to_primary :
-        if filename_lower .startswith (alias_lower ):
-            if primary_name_for_alias not in matched_primary_names :
-                 matched_primary_names .add (primary_name_for_alias )
-
-    return sorted (list (matched_primary_names ))
-
-def is_image (filename ):
-    if not filename :return False 
-    _ ,ext =os .path .splitext (filename )
-    return ext .lower ()in IMAGE_EXTENSIONS 
-def is_video (filename ):
-    if not filename :return False 
-    _ ,ext =os .path .splitext (filename )
-    return ext .lower ()in VIDEO_EXTENSIONS 
-def is_zip (filename ):
-    if not filename :return False 
-    return filename .lower ().endswith ('.zip')
-def is_rar (filename ):
-    if not filename :return False 
-    return filename .lower ().endswith ('.rar')
-def is_archive (filename ):
-    if not filename :return False 
-    _ ,ext =os .path .splitext (filename )
-    return ext .lower ()in ARCHIVE_EXTENSIONS 
-def is_audio (filename ):
-    if not filename :return False 
-    _ ,ext =os .path .splitext (filename )
-    return ext .lower ()in AUDIO_EXTENSIONS 
-def is_post_url (url ):
-    if not isinstance (url ,str ):return False 
-    return '/post/'in urlparse (url ).path 
-def extract_post_info (url_string ):
-    service ,user_id ,post_id =None ,None ,None 
-    if not isinstance (url_string ,str )or not url_string .strip ():return None ,None ,None 
-    try :
-        parsed_url =urlparse (url_string .strip ())
-        domain =parsed_url .netloc .lower ()
-        is_kemono =any (d in domain for d in ['kemono.su','kemono.party'])
-        is_coomer =any (d in domain for d in ['coomer.su','coomer.party'])
-        if not (is_kemono or is_coomer ):return None ,None ,None 
-        path_parts =[part for part in parsed_url .path .strip ('/').split ('/')if part ]
-        if len (path_parts )>=3 and path_parts [1 ].lower ()=='user':
-            service =path_parts [0 ]
-            user_id =path_parts [2 ]
-            if len (path_parts )>=5 and path_parts [3 ].lower ()=='post':
-                post_id =path_parts [4 ]
-            return service ,user_id ,post_id 
-        if len (path_parts )>=5 and path_parts [0 ].lower ()=='api'and path_parts [1 ].lower ()=='v1'and path_parts [3 ].lower ()=='user':
-            service =path_parts [2 ]
-            user_id =path_parts [4 ]
-            if len (path_parts )>=7 and path_parts [5 ].lower ()=='post':
-                post_id =path_parts [6 ]
-            return service ,user_id ,post_id 
-    except Exception as e :
-        print (f"Debug: Exception during extract_post_info for URL '{url_string }': {e }")
-    return None ,None ,None 
-def prepare_cookies_for_request (use_cookie_flag ,cookie_text_input ,selected_cookie_file_path_from_ui ,app_base_dir ,logger_func ,target_domain =None ):
-    """Prepares a cookie dictionary from text input or cookies.txt file."""
-    if not use_cookie_flag :
-        return None 
-
-    attempted_paths =set ()
-
-
-    if selected_cookie_file_path_from_ui :
-        basename_selected =os .path .basename (selected_cookie_file_path_from_ui )
-        is_relevant_selection =False 
-        if target_domain :
-            if basename_selected ==f"{target_domain }_cookies.txt"or basename_selected =="cookies.txt":
-                is_relevant_selection =True 
-        else :
-            is_relevant_selection =True 
-
-        if is_relevant_selection :
-            logger_func (f"   🍪 Attempting to load cookies from UI-selected file: '{basename_selected }' for domain '{target_domain or 'any'}'...")
-            norm_selected_path =os .path .normpath (selected_cookie_file_path_from_ui )
-            attempted_paths .add (norm_selected_path )
-            cookies =load_cookies_from_netscape_file (selected_cookie_file_path_from_ui ,logger_func ,target_domain_filter =target_domain )
-            if cookies :
-                return cookies 
-            else :
-                logger_func (f"   ⚠️ Failed to load cookies from UI-selected file: '{basename_selected }'.")
-        else :
-            logger_func (f"   ℹ️ UI-selected cookie file '{basename_selected }' is not specific to target domain '{target_domain }' or generic. Skipping it for this request, will try other sources.")
-
-
-    if app_base_dir and target_domain :
-        domain_specific_filename =f"{target_domain }_cookies.txt"
-        domain_specific_path =os .path .join (app_base_dir ,domain_specific_filename )
-        norm_domain_specific_path =os .path .normpath (domain_specific_path )
-        if os .path .exists (domain_specific_path )and norm_domain_specific_path not in attempted_paths :
-            logger_func (f"   🍪 Attempting to load domain-specific cookies: '{domain_specific_filename }' for '{target_domain }' from app directory...")
-            attempted_paths .add (norm_domain_specific_path )
-            cookies =load_cookies_from_netscape_file (domain_specific_path ,logger_func ,target_domain_filter =target_domain )
-            if cookies :
-                return cookies 
-            else :
-                logger_func (f"   ⚠️ Failed to load cookies from '{domain_specific_filename }' in app directory.")
-
-
-    if app_base_dir :
-        default_cookies_filename ="cookies.txt"
-        default_cookies_path =os .path .join (app_base_dir ,default_cookies_filename )
-        norm_default_path =os .path .normpath (default_cookies_path )
-        if os .path .exists (default_cookies_path )and norm_default_path not in attempted_paths :
-            logger_func (f"   🍪 Attempting to load default '{default_cookies_filename }' from app directory for domain '{target_domain or 'any'}'...")
-            attempted_paths .add (norm_default_path )
-            cookies =load_cookies_from_netscape_file (default_cookies_path ,logger_func ,target_domain_filter =target_domain )
-            if cookies :
-                return cookies 
-            else :
-                logger_func (f"   ⚠️ Failed to load cookies from default '{default_cookies_filename }' in app directory.")
-
-
-    if cookie_text_input :
-        logger_func (f"   🍪 Using cookies from UI text input for domain '{target_domain or 'any'}' (as file methods failed or were not applicable).")
-        cookies =parse_cookie_string (cookie_text_input )
-        if cookies :
-            return cookies 
-        else :
-            logger_func ("   ⚠️ UI cookie text input was provided but was empty or invalid.")
-
-    logger_func (f"   🍪 Cookie usage enabled for domain '{target_domain or 'any'}', but no valid cookies found from any source.")
-    return None 
-def fetch_posts_paginated (api_url_base ,headers ,offset ,logger ,cancellation_event =None ,pause_event =None ,cookies_dict =None ):
-    if cancellation_event and cancellation_event .is_set ():
-        logger ("   Fetch cancelled before request.")
-        raise RuntimeError ("Fetch operation cancelled by user.")
-    if pause_event and pause_event .is_set ():
-        logger ("   Post fetching paused...")
-        while pause_event .is_set ():
-            if cancellation_event and cancellation_event .is_set ():
-                logger ("   Post fetching cancelled while paused.")
-                raise RuntimeError ("Fetch operation cancelled by user.")
-            time .sleep (0.5 )
-        logger ("   Post fetching resumed.")
-    paginated_url =f'{api_url_base }?o={offset }'
-    max_retries =3 
-    retry_delay =5 
-
-    for attempt in range (max_retries +1 ):
-        if cancellation_event and cancellation_event .is_set ():
-            raise RuntimeError ("Fetch operation cancelled by user during retry loop.")
-
-        log_message =f"   Fetching: {paginated_url } (Page approx. {offset //50 +1 })"
-        if attempt >0 :
-            log_message +=f" (Attempt {attempt +1 }/{max_retries +1 })"
-        logger (log_message )
-
-        try :
-            response =requests .get (paginated_url ,headers =headers ,timeout =(15 ,90 ),cookies =cookies_dict )
-            response .raise_for_status ()
-
-            if 'application/json'not in response .headers .get ('Content-Type','').lower ():
-                logger (f"⚠️ Unexpected content type from API: {response .headers .get ('Content-Type')}. Body: {response .text [:200 ]}")
-                return []
-
-            return response .json ()
-
-        except (requests .exceptions .Timeout ,requests .exceptions .ConnectionError )as e :
-            logger (f"   ⚠️ Retryable network error on page fetch (Attempt {attempt +1 }): {e }")
-            if attempt <max_retries :
-                delay =retry_delay *(2 **attempt )
-                logger (f"      Retrying in {delay } seconds...")
-                sleep_start =time .time ()
-                while time .time ()-sleep_start <delay :
-                    if cancellation_event and cancellation_event .is_set ():
-                        raise RuntimeError ("Fetch operation cancelled by user during retry delay.")
-                    time .sleep (0.1 )
-                continue 
-            else :
-                logger (f"   ❌ Failed to fetch page after {max_retries +1 } attempts.")
-                raise RuntimeError (f"Timeout or connection error fetching offset {offset } from {paginated_url }")
-
-        except requests .exceptions .RequestException as e :
-            err_msg =f"Error fetching offset {offset } from {paginated_url }: {e }"
-            if e .response is not None :
-                err_msg +=f" (Status: {e .response .status_code }, Body: {e .response .text [:200 ]})"
-            if isinstance (e ,requests .exceptions .ConnectionError )and ("Failed to resolve"in str (e )or "NameResolutionError"in str (e )):
-                err_msg +="\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
-            raise RuntimeError (err_msg )
-        except ValueError as e :
-            raise RuntimeError (f"Error decoding JSON from offset {offset } ({paginated_url }): {e }. Response text: {response .text [:200 ]}")
-        except Exception as e :
-            raise RuntimeError (f"Unexpected error fetching offset {offset } ({paginated_url }): {e }")
-
-    raise RuntimeError (f"Failed to fetch page {paginated_url } after all attempts.")
-def fetch_post_comments (api_domain ,service ,user_id ,post_id ,headers ,logger ,cancellation_event =None ,pause_event =None ,cookies_dict =None ):
-    if cancellation_event and cancellation_event .is_set ():
-        logger ("   Comment fetch cancelled before request.")
-        raise RuntimeError ("Comment fetch operation cancelled by user.")
-    if pause_event and pause_event .is_set ():
-        logger ("   Comment fetching paused...")
-        while pause_event .is_set ():
-            if cancellation_event and cancellation_event .is_set ():
-                logger ("   Comment fetching cancelled while paused.")
-                raise RuntimeError ("Comment fetch operation cancelled by user.")
-            time .sleep (0.5 )
-        logger ("   Comment fetching resumed.")
-    comments_api_url =f"https://{api_domain }/api/v1/{service }/user/{user_id }/post/{post_id }/comments"
-    max_retries =2 
-    retry_delay =3 
-
-    for attempt in range (max_retries +1 ):
-        if cancellation_event and cancellation_event .is_set ():
-            raise RuntimeError ("Comment fetch operation cancelled by user during retry loop.")
-
-        log_message =f"   Fetching comments: {comments_api_url }"
-        if attempt >0 :
-            log_message +=f" (Attempt {attempt +1 }/{max_retries +1 })"
-        logger (log_message )
-
-        try :
-            response =requests .get (comments_api_url ,headers =headers ,timeout =(10 ,30 ),cookies =cookies_dict )
-            response .raise_for_status ()
-
-            if 'application/json'not in response .headers .get ('Content-Type','').lower ():
-                logger (f"⚠️ Unexpected content type from comments API: {response .headers .get ('Content-Type')}. Body: {response .text [:200 ]}")
-                return []
-
-            return response .json ()
-
-        except (requests .exceptions .Timeout ,requests .exceptions .ConnectionError )as e :
-            logger (f"   ⚠️ Retryable network error on comment fetch (Attempt {attempt +1 }): {e }")
-            if attempt <max_retries :
-                delay =retry_delay *(2 **attempt )
-                logger (f"      Retrying in {delay } seconds...")
-                sleep_start =time .time ()
-                while time .time ()-sleep_start <delay :
-                    if cancellation_event and cancellation_event .is_set ():
-                        raise RuntimeError ("Comment fetch operation cancelled by user during retry delay.")
-                    time .sleep (0.1 )
-                continue 
-            else :
-                logger (f"   ❌ Failed to fetch comments for post {post_id } after {max_retries +1 } attempts.")
-                raise RuntimeError (f"Timeout or connection error fetching comments for post {post_id } from {comments_api_url }")
-
-        except requests .exceptions .RequestException as e :
-            err_msg =f"Error fetching comments for post {post_id } from {comments_api_url }: {e }"
-            if e .response is not None :
-                err_msg +=f" (Status: {e .response .status_code }, Body: {e .response .text [:200 ]})"
-            if isinstance (e ,requests .exceptions .ConnectionError )and ("Failed to resolve"in str (e )or "NameResolutionError"in str (e )):
-                err_msg +="\n   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN."
-            raise RuntimeError (err_msg )
-        except ValueError as e :
-            raise RuntimeError (f"Error decoding JSON from comments API for post {post_id } ({comments_api_url }): {e }. Response text: {response .text [:200 ]}")
-        except Exception as e :
-            raise RuntimeError (f"Unexpected error fetching comments for post {post_id } ({comments_api_url }): {e }")
-
-    raise RuntimeError (f"Failed to fetch comments for post {post_id } after all attempts.")
-def download_from_api (
-api_url_input ,
-logger =print ,
-start_page =None ,
-end_page =None ,
-manga_mode =False ,
-cancellation_event =None ,
-pause_event =None ,
-use_cookie =False ,
-cookie_text ="",
-selected_cookie_file =None ,
-app_base_dir =None ,
-manga_filename_style_for_sort_check =None 
-):
-    headers ={
-    'User-Agent':'Mozilla/5.0',
-    'Accept':'application/json'
-    }
-
-    service ,user_id ,target_post_id =extract_post_info (api_url_input )
-
-    if cancellation_event and cancellation_event .is_set ():
-        logger ("   Download_from_api cancelled at start.")
-        return 
-
-    parsed_input_url_for_domain =urlparse (api_url_input )
-    api_domain =parsed_input_url_for_domain .netloc 
-    if not any (d in api_domain .lower ()for d in ['kemono.su','kemono.party','coomer.su','coomer.party']):
-        logger (f"⚠️ Unrecognized domain '{api_domain }' from input URL. Defaulting to kemono.su for API calls.")
-        api_domain ="kemono.su"
-    cookies_for_api =None 
-    if use_cookie and app_base_dir :
-        cookies_for_api =prepare_cookies_for_request (use_cookie ,cookie_text ,selected_cookie_file ,app_base_dir ,logger ,target_domain =api_domain )
-    if target_post_id :
-        direct_post_api_url =f"https://{api_domain }/api/v1/{service }/user/{user_id }/post/{target_post_id }"
-        logger (f"   Attempting direct fetch for target post: {direct_post_api_url }")
-        try :
-            direct_response =requests .get (direct_post_api_url ,headers =headers ,timeout =(10 ,30 ),cookies =cookies_for_api )
-            direct_response .raise_for_status ()
-            direct_post_data =direct_response .json ()
-            if isinstance (direct_post_data ,list )and direct_post_data :
-                direct_post_data =direct_post_data [0 ]
-            if isinstance (direct_post_data ,dict )and 'post'in direct_post_data and isinstance (direct_post_data ['post'],dict ):
-                 direct_post_data =direct_post_data ['post']
-            if isinstance (direct_post_data ,dict )and direct_post_data .get ('id')==target_post_id :
-                logger (f"   ✅ Direct fetch successful for post {target_post_id }.")
-                yield [direct_post_data ]
-                return 
-            else :
-                response_type =type (direct_post_data ).__name__ 
-                response_snippet =str (direct_post_data )[:200 ]
-                logger (f"   ⚠️ Direct fetch for post {target_post_id } returned unexpected data (Type: {response_type }, Snippet: '{response_snippet }'). Falling back to pagination.")
-        except requests .exceptions .RequestException as e :
-            logger (f"   ⚠️ Direct fetch failed for post {target_post_id }: {e }. Falling back to pagination.")
-        except Exception as e :
-            logger (f"   ⚠️ Unexpected error during direct fetch for post {target_post_id }: {e }. Falling back to pagination.")
-    if not service or not user_id :
-        logger (f"❌ Invalid URL or could not extract service/user: {api_url_input }")
-        return 
-    if target_post_id and (start_page or end_page ):
-        logger ("⚠️ Page range (start/end page) is ignored when a specific post URL is provided (searching all pages for the post).")
-
-    is_manga_mode_fetch_all_and_sort_oldest_first =manga_mode and (manga_filename_style_for_sort_check !=STYLE_DATE_POST_TITLE )and not target_post_id 
-    api_base_url =f"https://{api_domain }/api/v1/{service }/user/{user_id }"
-    page_size =50 
-    if is_manga_mode_fetch_all_and_sort_oldest_first :
-        logger (f"   Manga Mode (Style: {manga_filename_style_for_sort_check if manga_filename_style_for_sort_check else 'Default'} - Oldest First Sort Active): Fetching all posts to sort by date...")
-        all_posts_for_manga_mode =[]
-        current_offset_manga =0 
-        if start_page and start_page >1 :
-            current_offset_manga =(start_page -1 )*page_size 
-            logger (f"   Manga Mode: Starting fetch from page {start_page } (offset {current_offset_manga }).")
-        elif start_page :
-            logger (f"   Manga Mode: Starting fetch from page 1 (offset 0).")
-        if end_page :
-            logger (f"   Manga Mode: Will fetch up to page {end_page }.")
-        while True :
-            if pause_event and pause_event .is_set ():
-                logger ("   Manga mode post fetching paused...")
-                while pause_event .is_set ():
-                    if cancellation_event and cancellation_event .is_set ():
-                        logger ("   Manga mode post fetching cancelled while paused.")
-                        break 
-                    time .sleep (0.5 )
-                if not (cancellation_event and cancellation_event .is_set ()):logger ("   Manga mode post fetching resumed.")
-            if cancellation_event and cancellation_event .is_set ():
-                logger ("   Manga mode post fetching cancelled.")
-                break 
-            current_page_num_manga =(current_offset_manga //page_size )+1 
-            if end_page and current_page_num_manga >end_page :
-                logger (f"   Manga Mode: Reached specified end page ({end_page }). Stopping post fetch.")
-                break 
-            try :
-                posts_batch_manga =fetch_posts_paginated (api_base_url ,headers ,current_offset_manga ,logger ,cancellation_event ,pause_event ,cookies_dict =cookies_for_api )
-                if not isinstance (posts_batch_manga ,list ):
-                    logger (f"❌ API Error (Manga Mode): Expected list of posts, got {type (posts_batch_manga )}.")
-                    break 
-                if not posts_batch_manga :
-                    logger ("✅ Reached end of posts (Manga Mode fetch all).")
-                    if start_page and not end_page and current_page_num_manga <start_page :
-                        logger (f"   Manga Mode: No posts found on or after specified start page {start_page }.")
-                    elif end_page and current_page_num_manga <=end_page and not all_posts_for_manga_mode :
-                        logger (f"   Manga Mode: No posts found within the specified page range ({start_page or 1 }-{end_page }).")
-                    break 
-                all_posts_for_manga_mode .extend (posts_batch_manga )
-                current_offset_manga +=page_size 
-                time .sleep (0.6 )
-            except RuntimeError as e :
-                if "cancelled by user"in str (e ).lower ():
-                    logger (f"ℹ️ Manga mode pagination stopped due to cancellation: {e }")
-                else :
-                    logger (f"❌ {e }\n   Aborting manga mode pagination.")
-                break 
-            except Exception as e :
-                logger (f"❌ Unexpected error during manga mode fetch: {e }")
-                traceback .print_exc ()
-                break 
-        if cancellation_event and cancellation_event .is_set ():return 
-        if all_posts_for_manga_mode :
-            logger (f"   Manga Mode: Fetched {len (all_posts_for_manga_mode )} total posts. Sorting by publication date (oldest first)...")
-            def sort_key_tuple (post ):
-                published_date_str =post .get ('published')
-                added_date_str =post .get ('added')
-                post_id_str =post .get ('id',"0")
-                primary_sort_val ="0000-00-00T00:00:00"
-                if published_date_str :
-                    primary_sort_val =published_date_str 
-                elif added_date_str :
-                    logger (f"    ⚠️ Post ID {post_id_str } missing 'published' date, using 'added' date '{added_date_str }' for primary sorting.")
-                    primary_sort_val =added_date_str 
-                else :
-                    logger (f"    ⚠️ Post ID {post_id_str } missing both 'published' and 'added' dates. Placing at start of sort (using default earliest date).")
-                secondary_sort_val =0 
-                try :
-                    secondary_sort_val =int (post_id_str )
-                except ValueError :
-                    logger (f"    ⚠️ Post ID '{post_id_str }' is not a valid integer for secondary sorting, using 0.")
-                return (primary_sort_val ,secondary_sort_val )
-            all_posts_for_manga_mode .sort (key =sort_key_tuple )
-            for i in range (0 ,len (all_posts_for_manga_mode ),page_size ):
-                if cancellation_event and cancellation_event .is_set ():
-                    logger ("   Manga mode post yielding cancelled.")
-                    break 
-                yield all_posts_for_manga_mode [i :i +page_size ]
-        return 
-
-
-
-    if manga_mode and not target_post_id and (manga_filename_style_for_sort_check ==STYLE_DATE_POST_TITLE ):
-        logger (f"   Manga Mode (Style: {STYLE_DATE_POST_TITLE }): Processing posts in default API order (newest first).")
-
-    current_page_num =1 
-    current_offset =0 
-    processed_target_post_flag =False 
-    if start_page and start_page >1 and not target_post_id :
-        current_offset =(start_page -1 )*page_size 
-        current_page_num =start_page 
-        logger (f"   Starting from page {current_page_num } (calculated offset {current_offset }).")
-    while True :
-        if pause_event and pause_event .is_set ():
-            logger ("   Post fetching loop paused...")
-            while pause_event .is_set ():
-                if cancellation_event and cancellation_event .is_set ():
-                    logger ("   Post fetching loop cancelled while paused.")
-                    break 
-                time .sleep (0.5 )
-            if not (cancellation_event and cancellation_event .is_set ()):logger ("   Post fetching loop resumed.")
-        if cancellation_event and cancellation_event .is_set ():
-            logger ("   Post fetching loop cancelled.")
-            break 
-        if target_post_id and processed_target_post_flag :
-            break 
-        if not target_post_id and end_page and current_page_num >end_page :
-            logger (f"✅ Reached specified end page ({end_page }) for creator feed. Stopping.")
-            break 
-        try :
-            posts_batch =fetch_posts_paginated (api_base_url ,headers ,current_offset ,logger ,cancellation_event ,pause_event ,cookies_dict =cookies_for_api )
-            if not isinstance (posts_batch ,list ):
-                logger (f"❌ API Error: Expected list of posts, got {type (posts_batch )} at page {current_page_num } (offset {current_offset }).")
-                break 
-        except RuntimeError as e :
-            if "cancelled by user"in str (e ).lower ():
-                 logger (f"ℹ️ Pagination stopped due to cancellation: {e }")
-            else :
-                logger (f"❌ {e }\n   Aborting pagination at page {current_page_num } (offset {current_offset }).")
-            break 
-        except Exception as e :
-            logger (f"❌ Unexpected error fetching page {current_page_num } (offset {current_offset }): {e }")
-            traceback .print_exc ()
-            break 
-        if not posts_batch :
-            if target_post_id and not processed_target_post_flag :
-                logger (f"❌ Target post {target_post_id } not found after checking all available pages (API returned no more posts at offset {current_offset }).")
-            elif not target_post_id :
-                if current_page_num ==(start_page or 1 ):
-                     logger (f"😕 No posts found on the first page checked (page {current_page_num }, offset {current_offset }).")
-                else :
-                     logger (f"✅ Reached end of posts (no more content from API at offset {current_offset }).")
-            break 
-        if target_post_id and not processed_target_post_flag :
-            matching_post =next ((p for p in posts_batch if str (p .get ('id'))==str (target_post_id )),None )
-            if matching_post :
-                logger (f"🎯 Found target post {target_post_id } on page {current_page_num } (offset {current_offset }).")
-                yield [matching_post ]
-                processed_target_post_flag =True 
-        elif not target_post_id :
-            yield posts_batch 
-        if processed_target_post_flag :
-            break 
-        current_offset +=page_size 
-        current_page_num +=1 
-        time .sleep (0.6 )
-    if target_post_id and not processed_target_post_flag and not (cancellation_event and cancellation_event .is_set ()):
-        logger (f"❌ Target post {target_post_id } could not be found after checking all relevant pages (final check after loop).")
-def get_link_platform (url ):
-    try :
-        domain =urlparse (url ).netloc .lower ()
-        if 'drive.google.com'in domain :return 'google drive'
-        if 'mega.nz'in domain or 'mega.io'in domain :return 'mega'
-        if 'dropbox.com'in domain :return 'dropbox'
-        if 'patreon.com'in domain :return 'patreon'
-        if 'gofile.io'in domain :return 'gofile'
-        if 'instagram.com'in domain :return 'instagram'
-        if 'twitter.com'in domain or 'x.com'in domain :return 'twitter/x'
-        if 'discord.gg'in domain or 'discord.com/invite'in domain :return 'discord invite'
-        if 'pixiv.net'in domain :return 'pixiv'
-        if 'kemono.su'in domain or 'kemono.party'in domain :return 'kemono'
-        if 'coomer.su'in domain or 'coomer.party'in domain :return 'coomer'
-        parts =domain .split ('.')
-        if len (parts )>=2 :
-            if parts [-2 ]not in ['com','org','net','gov','edu','co']or len (parts )==2 :
-                 return parts [-2 ]
-            elif len (parts )>=3 and parts [-3 ]not in ['com','org','net','gov','edu','co']:
-                 return parts [-3 ]
-            else :
-                 return domain 
-        return 'external'
-    except Exception :return 'unknown'
 class PostProcessorSignals (QObject ):
     progress_signal =pyqtSignal (str )
     file_download_status_signal =pyqtSignal (bool )
@@ -815,8 +48,8 @@ class PostProcessorSignals (QObject ):
     file_progress_signal =pyqtSignal (str ,object )
     file_successfully_downloaded_signal =pyqtSignal (dict )
     missed_character_post_signal =pyqtSignal (str ,str )
-class PostProcessorWorker :
-
+    
+class PostProcessorWorker:
     def __init__ (self ,post_data ,download_root ,known_names ,
     filter_character_list ,emitter ,
     unwanted_keywords ,filter_mode ,skip_zip ,skip_rar ,
@@ -2122,9 +1355,6 @@ class PostProcessorWorker :
             except Exception as e:
                 self.logger(f"⚠️ Could not update session file for post {post_id}: {e}")
 
-
-
-
         if not self .extract_links_only and (total_downloaded_this_post >0 or not (
         (current_character_filters and (
         (self .char_filter_scope ==CHAR_SCOPE_TITLE and not post_is_candidate_by_title_char_match )or 
@@ -2149,12 +1379,7 @@ class PostProcessorWorker :
         if self .check_cancel ():self .logger (f"   Post {post_id } processing interrupted/cancelled.");
         else :self .logger (f"   Post {post_id } Summary: Downloaded={total_downloaded_this_post }, Skipped Files={total_skipped_this_post }")
 
-
         if not self .extract_links_only and self .use_post_subfolders and total_downloaded_this_post ==0 :
-
-
-
-
 
             path_to_check_for_emptiness =determined_post_save_path_for_history 
             try :
@@ -2165,6 +1390,7 @@ class PostProcessorWorker :
                 self .logger (f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness }': {e_rmdir }")
 
         return total_downloaded_this_post ,total_skipped_this_post ,kept_original_filenames_for_log ,retryable_failures_this_post ,permanent_failures_this_post ,history_data_for_this_post 
+
 class DownloadThread (QThread ):
     progress_signal =pyqtSignal (str )
     add_character_prompt_signal =pyqtSignal (str )
@@ -2322,7 +1548,7 @@ class DownloadThread (QThread ):
         if self .manga_mode_active and self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING and not self .extract_links_only and self .manga_global_file_counter_ref is None :
             self .manga_global_file_counter_ref =[1 ,threading .Lock ()]
             self .logger (f"ℹ️ [Thread] Manga Title+GlobalNum Mode: Initialized global counter at {self .manga_global_file_counter_ref [0 ]}.")
-        worker_signals_obj =PostProcessorSignals ()
+        worker_signals_obj = PostProcessorSignals ()
         try :
             worker_signals_obj .progress_signal .connect (self .progress_signal )
             worker_signals_obj .file_download_status_signal .connect (self .file_download_status_signal )
@@ -2423,9 +1649,6 @@ class DownloadThread (QThread ):
             if not was_process_cancelled and not self .isInterruptionRequested ():
                  self .logger ("✅ All posts processed or end of content reached by DownloadThread.")
 
-
-
-
         except Exception as main_thread_err :
             self .logger (f"\n❌ Critical error within DownloadThread run loop: {main_thread_err }")
             traceback .print_exc ()
@@ -2448,85 +1671,6 @@ class DownloadThread (QThread ):
              self ._add_character_response =result 
         self .logger (f"   (DownloadThread) Received character prompt response: {'Yes (added/confirmed)'if result else 'No (declined/failed)'}")
 
-def download_mega_file (mega_link ,download_path =".",logger_func =print ):
-    """
-    Downloads a file from a public Mega.nz link.
-
-    Args:
-        mega_link (str): The public Mega.nz link to the file.
-        download_path (str, optional): The directory to save the downloaded file.
-                                       Defaults to the current directory.
-        logger_func (callable, optional): Function to use for logging. Defaults to print.
-    """
-    logger_func ("Initializing Mega client...")
-    try :
-        mega_client =Mega ()
-    except NameError :
-        logger_func ("ERROR: Mega class not available. mega.py library might not be installed correctly.")
-        raise ImportError ("Mega class not found. Is mega.py installed?")
-
-    m =mega_client .login ()
-
-    logger_func (f"Attempting to download from: {mega_link }")
-
-    try :
-
-
-        logger_func (f"   Verifying Mega link and fetching attributes: {mega_link }")
-        file_attributes =m .get_public_url_info (mega_link )
-
-        if not file_attributes or not isinstance (file_attributes ,dict ):
-            logger_func (f"❌ Error: Could not retrieve valid file information for the Mega link. Link might be invalid, expired, or a folder. Info received: {file_attributes }")
-            raise ValueError (f"Invalid or inaccessible Mega link. get_public_url_info returned: {file_attributes }")
-
-        expected_filename =file_attributes .get ('name')
-        file_size =file_attributes .get ('size')
-
-        if not expected_filename :
-            logger_func (f"⚠️ Critical: File name ('name') not found in Mega link attributes. Attributes: {file_attributes }")
-            raise ValueError (f"File name ('name') not found in Mega link attributes: {file_attributes }")
-
-        logger_func (f"   Link verified. Expected filename: '{expected_filename }'. Size: {file_size if file_size is not None else 'Unknown'} bytes.")
-
-        if not os .path .exists (download_path ):
-            logger_func (f"Download path '{download_path }' does not exist. Creating it...")
-            os .makedirs (download_path ,exist_ok =True )
-
-        logger_func (f"Starting download of '{expected_filename }' to '{download_path }'...")
-
-
-        download_result =m .download_url (mega_link ,dest_path =download_path ,dest_filename =None )
-
-        if download_result and isinstance (download_result ,tuple )and len (download_result )==2 :
-            saved_filepath ,saved_filename =download_result 
-
-            if not os .path .isabs (saved_filepath )and dest_path :
-                saved_filepath =os .path .join (os .path .abspath (dest_path ),saved_filename )
-
-            logger_func (f"File downloaded successfully! Saved as: {saved_filepath }")
-            if not os .path .exists (saved_filepath ):
-                 logger_func (f"⚠️ Warning: mega.py reported success but file '{saved_filepath }' not found on disk.")
-
-            if saved_filename !=expected_filename :
-                 logger_func (f"   Note: Saved filename '{saved_filename }' differs from initially expected '{expected_filename }'. This is usually fine.")
-        else :
-            logger_func (f"Download failed. The download_url method returned: {download_result }")
-            raise Exception (f"Mega download_url did not return expected result or failed. Result: {download_result }")
-
-    except PermissionError :
-        logger_func (f"Error: Permission denied to write to '{download_path }'. Please check permissions.")
-        raise 
-    except FileNotFoundError :
-        logger_func (f"Error: The specified download path '{download_path }' is invalid or a component was not found.")
-        raise 
-    except requests .exceptions .RequestException as e :
-        logger_func (f"Error during request to Mega (network issue, etc.): {e }")
-        raise 
-    except ValueError as ve :
-        logger_func (f"ValueError during Mega processing (likely invalid link): {ve }")
-        raise 
-    except Exception as e :
-        if isinstance (e ,TypeError )and "'bool' object is not subscriptable"in str (e ):
-            logger_func ("   This specific TypeError occurred despite pre-flight checks. This might indicate a deeper issue with the mega.py library or a very transient API problem for this link.")
-        traceback .print_exc ()
-        raise 
+class InterruptedError(Exception):
+    """Custom exception for handling cancellations gracefully."""
+    pass

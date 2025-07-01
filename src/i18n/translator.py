@@ -1,563 +1,7 @@
-translations ={
-"en":{
-"settings_dialog_title":"Settings",
-"language_label":"Language:",
-"lang_english":"English",
-"lang_japanese":"日本語 (Japanese)",
-"theme_toggle_light":"Switch to Light Mode",
-"theme_toggle_dark":"Switch to Dark Mode",
-"theme_tooltip_light":"Change the application appearance to light.",
-"theme_tooltip_dark":"Change the application appearance to dark.",
-"ok_button":"OK",
-"appearance_group_title":"Appearance",
-"language_group_title":"Language Settings",
-"creator_post_url_label":"🔗 Kemono Creator/Post URL:",
-"download_location_label":"📁 Download Location:",
-"filter_by_character_label":"🎯 Filter by Character(s) (comma-separated):",
-"skip_with_words_label":"🚫 Skip with Words (comma-separated):",
-"remove_words_from_name_label":"✂️ Remove Words from name:",
-"filter_all_radio":"All",
-"filter_images_radio":"Images/GIFs",
-"filter_videos_radio":"Videos",
-"filter_archives_radio":"📦 Only Archives",
-"filter_links_radio":"🔗 Only Links",
-"filter_audio_radio":"🎧 Only Audio",
-"favorite_mode_checkbox_label":"⭐ Favorite Mode",
-"browse_button_text":"Browse...",
-"char_filter_scope_files_text":"Filter: Files",
-"char_filter_scope_files_tooltip":"Current Scope: Files\n\nFilters individual files by name. A post is kept if any file matches.\nOnly matching files from that post are downloaded.\nExample: Filter 'Tifa'. File 'Tifa_artwork.jpg' matches and is downloaded.\nFolder Naming: Uses character from matching filename.\n\nClick to cycle to: Both",
-"char_filter_scope_title_text":"Filter: Title",
-"char_filter_scope_title_tooltip":"Current Scope: Title\n\nFilters entire posts by their title. All files from a matching post are downloaded.\nExample: Filter 'Aerith'. Post titled 'Aerith's Garden' matches; all its files are downloaded.\nFolder Naming: Uses character from matching post title.\n\nClick to cycle to: Files",
-"char_filter_scope_both_text":"Filter: Both",
-"char_filter_scope_both_tooltip":"Current Scope: Both (Title then Files)\n\n1. Checks post title: If matches, all files from post are downloaded.\n2. If title doesn't match, checks filenames: If any file matches, only that file is downloaded.\nExample: Filter 'Cloud'.\n - Post 'Cloud Strife' (title match) -> all files downloaded.\n - Post 'Bike Chase' with 'Cloud_fenrir.jpg' (file match) -> only 'Cloud_fenrir.jpg' downloaded.\nFolder Naming: Prioritizes title match, then file match.\n\nClick to cycle to: Comments",
-"char_filter_scope_comments_text":"Filter: Comments (Beta)",
-"char_filter_scope_comments_tooltip":"Current Scope: Comments (Beta - Files first, then Comments as fallback)\n\n1. Checks filenames: If any file in the post matches the filter, the entire post is downloaded. Comments are NOT checked for this filter term.\n2. If no file matches, THEN checks post comments: If a comment matches, the entire post is downloaded.\nExample: Filter 'Barret'.\n - Post A: Files 'Barret_gunarm.jpg', 'other.png'. File 'Barret_gunarm.jpg' matches. All files from Post A downloaded. Comments not checked for 'Barret'.\n - Post B: Files 'dyne.jpg', 'weapon.gif'. Comments: '...a drawing of Barret Wallace...'. No file match for 'Barret'. Comment matches. All files from Post B downloaded.\nFolder Naming: Prioritizes character from file match, then from comment match.\n\nClick to cycle to: Title",
-"char_filter_scope_unknown_text":"Filter: Unknown",
-"char_filter_scope_unknown_tooltip":"Current Scope: Unknown\n\nThe character filter scope is in an unknown state. Please cycle or reset.\n\nClick to cycle to: Title",
-"skip_words_input_tooltip":"Enter words, comma-separated, to skip downloading certain content (e.g., WIP, sketch, preview).\n\n"  "The 'Scope: [Type]' button next to this input cycles how this filter applies:\n"  "- Scope: Files: Skips individual files if their names contain any of these words.\n"  "- Scope: Posts: Skips entire posts if their titles contain any of these words.\n"  "- Scope: Both: Applies both (post title first, then individual files if post title is okay).",
-"remove_words_input_tooltip":
-"Enter words, comma-separated, to remove from downloaded filenames (case-insensitive).\n"
-"Useful for cleaning up common prefixes/suffixes.\n"
-"Example: patreon, kemono, [HD], _final",
-"skip_scope_files_text":"Scope: Files",
-"skip_scope_files_tooltip":"Current Skip Scope: Files\n\nSkips individual files if their names contain any of the 'Skip with Words'.\nExample: Skip words \"WIP, sketch\".\n- File \"art_WIP.jpg\" -> SKIPPED.\n- File \"final_art.png\" -> DOWNLOADED (if other conditions met).\n\nPost is still processed for other non-skipped files.\nClick to cycle to: Both",
-"skip_scope_posts_text":"Scope: Posts",
-"skip_scope_posts_tooltip":"Current Skip Scope: Posts\n\nSkips entire posts if their titles contain any of the 'Skip with Words'.\nAll files from a skipped post are ignored.\nExample: Skip words \"preview, announcement\".\n- Post \"Exciting Announcement!\" -> SKIPPED.\n- Post \"Finished Artwork\" -> PROCESSED (if other conditions met).\n\nClick to cycle to: Files",
-"skip_scope_both_text":"Scope: Both",
-"skip_scope_both_tooltip":"Current Skip Scope: Both (Posts then Files)\n\n1. Checks post title: If title contains a skip word, the entire post is SKIPPED.\n2. If post title is OK, then checks individual filenames: If a filename contains a skip word, only that file is SKIPPED.\nExample: Skip words \"WIP, sketch\".\n- Post \"Sketches and WIPs\" (title match) -> ENTIRE POST SKIPPED.\n- Post \"Art Update\" (title OK) with files:\n    - \"character_WIP.jpg\" (file match) -> SKIPPED.\n    - \"final_scene.png\" (file OK) -> DOWNLOADED.\n\nClick to cycle to: Posts",
-"skip_scope_unknown_text":"Scope: Unknown",
-"skip_scope_unknown_tooltip":"Current Skip Scope: Unknown\n\nThe skip words scope is in an unknown state. Please cycle or reset.\n\nClick to cycle to: Posts",
-"language_change_title":"Language Changed",
-"language_change_message":"The language has been changed. A restart is required for all changes to take full effect.",
-"language_change_informative":"Would you like to restart the application now?",
-"restart_now_button":"Restart Now",
-"skip_zip_checkbox_label":"Skip .zip",
-"skip_rar_checkbox_label":"Skip .rar",
-"download_thumbnails_checkbox_label":"Download Thumbnails Only",
-"scan_content_images_checkbox_label":"Scan Content for Images",
-"compress_images_checkbox_label":"Compress to WebP",
-"separate_folders_checkbox_label":"Separate Folders by Name/Title",
-"subfolder_per_post_checkbox_label":"Subfolder per Post",
-"use_cookie_checkbox_label":"Use Cookie",
-"use_multithreading_checkbox_base_label":"Use Multithreading",
-"show_external_links_checkbox_label":"Show External Links in Log",
-"manga_comic_mode_checkbox_label":"Manga/Comic Mode",
-"threads_label":"Threads:",
-"start_download_button_text":"⬇️ Start Download",
-"start_download_button_tooltip":"Click to start the download or link extraction process with the current settings.",
-"start_download_discard_tooltip":"Click to start a new download. This will discard the previous interrupted session.",
-"extract_links_button_text":"🔗 Extract Links",
-"pause_download_button_text":"⏸️ Pause Download",
-"pause_download_button_tooltip":"Click to pause the ongoing download process.",
-"resume_download_button_text":"▶️ Resume Download",
-"resume_download_button_tooltip":"Click to resume the download.",
-"cancel_button_text":"❌ Cancel & Reset UI",
-"cancel_button_tooltip":"Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory).",
-"error_button_text":"Error",
-"error_button_tooltip":"View files skipped due to errors and optionally retry them.",
-"cancel_retry_button_text":"❌ Cancel Retry",
-"known_chars_label_text":"🎭 Known Shows/Characters (for Folder Names):",
-"open_known_txt_button_text":"Open Known.txt",
-"known_chars_list_tooltip":"This list contains names used for automatic folder creation when 'Separate Folders' is on\nand no specific 'Filter by Character(s)' is provided or matches a post.\nAdd names of series, games, or characters you frequently download.",
-"open_known_txt_button_tooltip":"Open the 'Known.txt' file in your default text editor.\nThe file is located in the application's directory.",
-"add_char_button_text":"➕ Add",
-"add_char_button_tooltip":"Add the name from the input field to the 'Known Shows/Characters' list.",
-"add_to_filter_button_text":"⤵️ Add to Filter",
-"add_to_filter_button_tooltip":"Select names from 'Known Shows/Characters' list to add to the 'Filter by Character(s)' field above.",
-"delete_char_button_text":"🗑️ Delete Selected",
-"delete_char_button_tooltip":"Delete the selected name(s) from the 'Known Shows/Characters' list.",
-"progress_log_label_text":"📜 Progress Log:",
-"radio_all_tooltip":"Download all file types found in posts.",
-"radio_images_tooltip":"Download only common image formats (JPG, PNG, GIF, WEBP, etc.).",
-"radio_videos_tooltip":"Download only common video formats (MP4, MKV, WEBM, MOV, etc.).",
-"radio_only_archives_tooltip":"Exclusively download .zip and .rar files. Other file-specific options are disabled.",
-"radio_only_audio_tooltip":"Download only common audio formats (MP3, WAV, FLAC, etc.).",
-"radio_only_links_tooltip":"Extract and display external links from post descriptions instead of downloading files.\nDownload-related options will be disabled.",
-"favorite_mode_checkbox_tooltip":"Enable Favorite Mode to browse saved artists/posts.\nThis will replace the URL input with Favorite selection buttons.",
-"skip_zip_checkbox_tooltip":"If checked, .zip archive files will not be downloaded.\n(Disabled if 'Only Archives' is selected).",
-"skip_rar_checkbox_tooltip":"If checked, .rar archive files will not be downloaded.\n(Disabled if 'Only Archives' is selected).",
-"download_thumbnails_checkbox_tooltip":"Downloads small preview images from the API instead of full-sized files (if available).\nIf 'Scan Post Content for Image URLs' is also checked, this mode will *only* download images found by the content scan (ignoring API thumbnails).",
-"scan_content_images_checkbox_tooltip":"If checked, the downloader will scan the HTML content of posts for image URLs (from <img> tags or direct links).\nThis includes resolving relative paths from <img> tags to full URLs.\nRelative paths in <img> tags (e.g., /data/image.jpg) will be resolved to full URLs.\nUseful for cases where images are in the post description but not in the API's file/attachment list.",
-"compress_images_checkbox_tooltip":"Compress images > 1.5MB to WebP format (requires Pillow).",
-"use_subfolders_checkbox_tooltip":"Create subfolders based on 'Filter by Character(s)' input or post titles.\nUses 'Known Shows/Characters' list as a fallback for folder names if no specific filter matches.\nEnables the 'Filter by Character(s)' input and 'Custom Folder Name' for single posts.",
-"use_subfolder_per_post_checkbox_tooltip":"Creates a subfolder for each post. If 'Separate Folders' is also on, it's inside the character/title folder.",
-"use_cookie_checkbox_tooltip":"If checked, will attempt to use cookies from 'cookies.txt' (Netscape format)\nin the application directory for requests.\nUseful for accessing content that requires login on Kemono/Coomer.",
-"cookie_text_input_tooltip":"Enter your cookie string directly.\nThis will be used if 'Use Cookie' is checked AND 'cookies.txt' is not found or this field is not empty.\nThe format depends on how the backend will parse it (e.g., 'name1=value1; name2=value2').",
-"use_multithreading_checkbox_tooltip":"Enables concurrent operations. See 'Threads' input for details.",
-"thread_count_input_tooltip":(
-"Number of concurrent operations.\n- Single Post: Concurrent file downloads (1-10 recommended).\n"
-"- Creator Feed URL: Number of posts to process simultaneously (1-200 recommended).\n"
-"  Files within each post are downloaded one by one by its worker.\nIf 'Use Multithreading' is unchecked, 1 thread is used."),
-"external_links_checkbox_tooltip":"If checked, a secondary log panel appears below the main log to display external links found in post descriptions.\n(Disabled if 'Only Links' or 'Only Archives' mode is active).",
-"manga_mode_checkbox_tooltip":"Downloads posts from oldest to newest and renames files based on post title (for creator feeds only).","multipart_on_button_text":"Multi-part: ON",
-"multipart_on_button_tooltip":"Multi-part Download: ON\n\nEnables downloading large files in multiple segments simultaneously.\n- Can speed up downloads for single large files (e.g., videos).\n- May increase CPU/network usage.\n- For feeds with many small files, this might not offer speed benefits and could make UI/log busy.\n- If multi-part fails, it retries as single-stream.\n\nClick to turn OFF.",
-"multipart_off_button_text":"Multi-part: OFF",
-"multipart_off_button_tooltip":"Multi-part Download: OFF\n\nAll files downloaded using a single stream.\n- Stable and works well for most scenarios, especially many smaller files.\n- Large files downloaded sequentially.\n\nClick to turn ON (see advisory).",
-"reset_button_text":"🔄 Reset",
-"reset_button_tooltip":"Reset all inputs and logs to default state (only when idle).",
-"progress_idle_text":"Progress: Idle",
-"missed_character_log_label_text":"🚫 Missed Character Log:",
-"creator_popup_title":"Creator Selection",
-"creator_popup_search_placeholder":"Search by name, service, or paste creator URL...",
-"creator_popup_add_selected_button":"Add Selected",
-"creator_popup_scope_characters_button":"Scope: Characters",
-"creator_popup_posts_area_title": "Fetched Posts",
-"creator_popup_posts_search_placeholder": "Search fetched posts by title...",
-"no_posts_fetched_yet_status": "No posts fetched yet.",
-"fetched_posts_count_label": "Fetched {count} post(s). Select to add to queue.",
-"no_posts_found_for_selection": "No posts found for selected creator(s).",
-"fetched_posts_count_label_filtered": "Displaying {count} post(s) matching filter.",
-"no_posts_match_search_filter": "No posts match your search filter.",
-"fetch_error_for_creator_label": "Error fetching for {creator_name}",
-"post_fetch_cancelled_status_done": "Post fetching cancelled.",
-"failed_to_fetch_or_no_posts_label": "Failed to fetch posts or no posts found.",
-"select_posts_to_queue_message": "Please select at least one post to add to the queue.",
-"items_in_queue_placeholder": "{count} items in queue from popup.",
-"post_fetch_finished_status": "Finished fetching posts for selected creators.",
-"fetch_posts_button_text": "Fetch Posts",
-"creator_popup_add_posts_to_queue_button": "Add Selected Posts to Queue",
-"column_header_post_title": "Post Title",
-"posts_for_creator_header": "Posts for",
-"untitled_post_placeholder": "Untitled Post",
-"no_creators_to_fetch_status": "No creators selected to fetch posts for.",
-"post_fetch_cancelled_status": "Post fetching cancellation requested...",
-"creator_popup_scope_creators_button":"Scope: Creators",
-"favorite_artists_button_text":"🖼️ Favorite Artists",
-"favorite_artists_button_tooltip":"Browse and download from your favorite artists on Kemono.su/Coomer.su.",
-"favorite_posts_button_text":"📄 Favorite Posts",
-"favorite_posts_button_tooltip":"Browse and download your favorite posts from Kemono.su/Coomer.su.",
-"favorite_scope_selected_location_text":"Scope: Selected Location",
-"favorite_scope_selected_location_tooltip":"Current Favorite Download Scope: Selected Location\n\nAll selected favorite artists/posts will be downloaded into the main 'Download Location' specified in the UI.\nFilters (character, skip words, file type) will apply globally to all content.\n\nClick to change to: Artist Folders",
-"favorite_scope_artist_folders_text":"Scope: Artist Folders",
-"favorite_scope_artist_folders_tooltip":"Current Favorite Download Scope: Artist Folders\n\nFor each selected favorite artist/post, a new subfolder (named after the artist) will be created inside the main 'Download Location'.\nContent for that artist/post will be downloaded into their specific subfolder.\nFilters (character, skip words, file type) will apply *within* each artist's folder.\n\nClick to change to: Selected Location",
-"favorite_scope_unknown_text":"Scope: Unknown",
-"favorite_scope_unknown_tooltip":"Favorite download scope is unknown. Click to cycle.",
-"manga_style_post_title_text":"Name: Post Title",
-"manga_style_original_file_text":"Name: Original File",
-"manga_style_date_based_text":"Name: Date Based",
-"manga_style_title_global_num_text":"Name: Title+G.Num",
-"manga_style_date_post_title_text":"Name: Date + Title",
-"manga_style_unknown_text":"Name: Unknown Style",
-"manga_style_post_title_tooltip":"""Files are named based on the post's title.
-- The first file in a post is named using the cleaned post title (e.g., 'My Chapter 1.jpg').
-- If the post has multiple files, subsequent files are also named using the post title, but with a numeric suffix like '_1', '_2', etc. (e.g., 'My Chapter 1_1.png', 'My Chapter 1_2.gif'). The counter for the suffix starts from 1 for the second file.
-- If a post has only one file, it's named after the post title without a suffix.
+translations = {}
 
-Example: Post 'Chapter One' (3 files: originalA.jpg, originalB.png, originalC.gif)
-Output: 'Chapter One.jpg', 'Chapter One_1.png', 'Chapter One_2.gif'.""",
-"manga_style_original_file_tooltip":"Files attempt to keep their original filenames.\n\n- An optional prefix can be entered in the input field that appears next to this button.\n\nExample (with prefix 'MySeries'): 'MySeries_OriginalFile.jpg'.\nExample (no prefix): 'OriginalFile.jpg'.",
-"manga_style_date_based_tooltip":"Files are named sequentially (e.g., 001.ext, 002.ext) based on post publication order.\n\n- An optional prefix can be entered in the input field that appears next to this button.\n- Multithreading for post processing is disabled for this style to ensure correct numbering.\n\nExample (with prefix 'MyComic'): 'MyComic_001.jpg', 'MyComic_002.png'.\nExample (no prefix): '001.jpg', '002.png'.",
-"manga_style_title_global_num_tooltip":"Files are named with the post's title and a global sequential number across all posts.\n\n- Format: '[Cleaned Post Title]_[Global Counter].[ext]'\n- The counter (e.g., _001, _002) increments for every file downloaded in the current session.\n- Multithreading for post processing is disabled for this style to ensure correct numbering.\n\nExample: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'.\nNext post 'Chapter 2' (1 file) -> 'Chapter 2_003.jpg'.",
-"manga_style_date_post_title_tooltip":"""Files are named using the post's publication date and its title.
-- Format: '[YYYY-MM-DD]_[Cleaned Post Title].[ext]'
-- The date is taken from the post's 'published' or 'added' field.
-- If a post has multiple files, subsequent files (after the first) get a numeric suffix like '_1', '_2'.
-
-Example: Post 'Chapter One' (published 2023-01-15, 2 files: a.jpg, b.png)
-Output: '2023-01-15_ChapterOne.jpg', '2023-01-15_ChapterOne_1.png'""",
-"manga_style_unknown_tooltip":"The manga filename style is currently unknown. This is unexpected. Please cycle to a valid style.",
-"manga_style_cycle_tooltip_suffix":"Click to cycle to the next style.",
-"fav_artists_dialog_title":"Favorite Artists",
-"fav_artists_loading_status":"Loading favorite artists...",
-"fav_artists_search_placeholder":"Search artists...",
-"fav_artists_select_all_button":"Select All",
-"fav_artists_deselect_all_button":"Deselect All",
-"fav_artists_download_selected_button":"Download Selected",
-"fav_artists_cancel_button":"Cancel",
-"fav_artists_loading_from_source_status":"⏳ Loading favorites from {source_name}...",
-"fav_artists_found_status":"Found {count} total favorite artist(s).",
-"fav_artists_none_found_status":"No favorite artists found on Kemono.su or Coomer.su.",
-"fav_artists_failed_status":"Failed to fetch favorites.",
-"fav_artists_cookies_required_status":"Error: Cookies enabled but could not be loaded for any source.",
-"fav_artists_no_favorites_after_processing":"No favorite artists found after processing.",
-"fav_artists_no_selection_title":"No Selection",
-"fav_artists_no_selection_message":"Please select at least one artist to download.",
-
-"fav_posts_dialog_title":"Favorite Posts",
-"fav_posts_loading_status":"Loading favorite posts...",
-"fav_posts_search_placeholder":"Search posts (title, creator, ID, service)...",
-"fav_posts_select_all_button":"Select All",
-"fav_posts_deselect_all_button":"Deselect All",
-"fav_posts_download_selected_button":"Download Selected",
-"fav_posts_cancel_button":"Cancel",
-"fav_posts_cookies_required_error":"Error: Cookies are required for favorite posts but could not be loaded.",
-"fav_posts_auth_failed_title":"Authorization Failed (Posts)",
-"fav_posts_auth_failed_message":"Could not fetch favorites{domain_specific_part} due to an authorization error:\n\n{error_message}\n\nThis usually means your cookies are missing, invalid, or expired for the site. Please check your cookie setup.",
-"fav_posts_fetch_error_title":"Fetch Error",
-"fav_posts_fetch_error_message":"Error fetching favorites from {domain}{error_message_part}",
-"fav_posts_no_posts_found_status":"No favorite posts found.",
-"fav_posts_found_status":"{count} favorite post(s) found.",
-"fav_posts_display_error_status":"Error displaying posts: {error}",
-"fav_posts_ui_error_title":"UI Error",
-"fav_posts_ui_error_message":"Could not display favorite posts: {error}",
-"fav_posts_auth_failed_message_generic":"Could not fetch favorites{domain_specific_part} due to an authorization error. This usually means your cookies are missing, invalid, or expired for the site. Please check your cookie setup.",
-"key_fetching_fav_post_list_init":"Fetching list of favorite posts...",
-"key_fetching_from_source_kemono_su":"Fetching favorites from Kemono.su...",
-"key_fetching_from_source_coomer_su":"Fetching favorites from Coomer.su...",
-"fav_posts_fetch_cancelled_status":"Favorite post fetch cancelled.",
-"fetching_posts_for_creator_status_all_pages": "Fetching all posts for {creator_name} ({service})... This may take a while.",
-
-"known_names_filter_dialog_title":"Add Known Names to Filter",
-"known_names_filter_search_placeholder":"Search names...",
-"known_names_filter_select_all_button":"Select All",
-"known_names_filter_deselect_all_button":"Deselect All",
-"known_names_filter_add_selected_button":"Add Selected",
-
-"error_files_dialog_title":"Files Skipped Due to Errors",
-"error_files_no_errors_label":"No files were recorded as skipped due to errors in the last session or after retries.",
-"error_files_found_label":"The following {count} file(s) were skipped due to download errors:",
-"error_files_select_all_button":"Select All",
-"error_files_retry_selected_button":"Retry Selected",
-"error_files_export_urls_button":"Export URLs to .txt",
-"error_files_no_selection_retry_message":"Please select at least one file to retry.",
-"error_files_no_errors_export_title":"No Errors",
-"error_files_no_errors_export_message":"There are no error file URLs to export.",
-"error_files_no_urls_found_export_title":"No URLs Found",
-"error_files_no_urls_found_export_message":"Could not extract any URLs from the error file list to export.",
-"error_files_save_dialog_title":"Save Error File URLs",
-"error_files_export_success_title":"Export Successful",
-"error_files_export_success_message":"Successfully exported {count} entries to:\n{filepath}",
-"error_files_export_error_title":"Export Error",
-"error_files_export_error_message":"Could not export file links: {error}",
-"export_options_dialog_title":"Export Options",
-"export_options_description_label":"Choose the format for exporting error file links:",
-"export_options_radio_link_only":"Link per line (URL only)",
-"export_options_radio_link_only_tooltip":"Exports only the direct download URL for each failed file, one URL per line.",
-"export_options_radio_with_details":"Export with details (URL [Post, File info])",
-"export_options_radio_with_details_tooltip":"Exports the URL followed by details like Post Title, Post ID, and Original Filename in brackets.",
-"export_options_export_button":"Export",
-
-"no_errors_logged_title":"No Errors Logged",
-"no_errors_logged_message":"No files were recorded as skipped due to errors in the last session or after retries.",
-
-"progress_initializing_text":"Progress: Initializing...",
-"progress_posts_text":"Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)",
-"progress_processing_post_text":"Progress: Processing post {processed_posts}...",
-"progress_starting_text":"Progress: Starting...",
-"downloading_file_known_size_text":"Downloading '{filename}' ({downloaded_mb:.1f}MB / {total_mb:.1f}MB)",
-"downloading_file_unknown_size_text":"Downloading '{filename}' ({downloaded_mb:.1f}MB)",
-"downloading_multipart_text":"DL '{filename}...': {downloaded_mb:.1f}/{total_mb:.1f} MB ({parts} parts @ {speed:.2f} MB/s)",
-"downloading_multipart_initializing_text":"File: {filename} - Initializing parts...",
-"status_completed":"Completed",
-"status_cancelled_by_user":"Cancelled by user",
-"files_downloaded_label":"downloaded",
-"files_skipped_label":"skipped",
-"retry_finished_text":"Retry Finished",
-"succeeded_text":"Succeeded",
-"empty_popup_button_tooltip_text":"Open Creator Selection (Browse creators.json)",
-"failed_text":"Failed",
-"ready_for_new_task_text":"Ready for new task."
-,"fav_mode_active_label_text":"⭐ Favorite Mode is active. Please select filters below before choosing your favorite artists/posts. Select action below.",
-"export_links_button_text":"Export Links",
-"download_extracted_links_button_text":"Download",
-"download_selected_button_text":"Download Selected",
-"link_input_placeholder_text":"e.g., https://kemono.su/patreon/user/12345 or .../post/98765",
-"link_input_tooltip_text":"Enter the full URL of a Kemono/Coomer creator's page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765",
-"dir_input_placeholder_text":"Select folder where downloads will be saved",
-"dir_input_tooltip_text":"Enter or browse to the main folder where all downloaded content will be saved.\nThis is required unless 'Only Links' mode is selected.",
-"character_input_placeholder_text":"e.g., Tifa, Aerith, (Cloud, Zack)",
-"custom_folder_input_placeholder_text":"Optional: Save this post to specific folder",
-"custom_folder_input_tooltip_text":"If downloading a single post URL AND 'Separate Folders by Name/Title' is enabled,\nyou can enter a custom name here for that post's download folder.\nExample: My Favorite Scene",
-"skip_words_input_placeholder_text":"e.g., WM, WIP, sketch, preview",
-"remove_from_filename_input_placeholder_text":"e.g., patreon, HD",
-"cookie_text_input_placeholder_no_file_selected_text":"Cookie string (if no cookies.txt selected)",
-"cookie_text_input_placeholder_with_file_selected_text":"Using selected cookie file (see Browse...)",
-"character_search_input_placeholder_text":"Search characters...",
-"character_search_input_tooltip_text":"Type here to filter the list of known shows/characters below.",
-"new_char_input_placeholder_text":"Add new show/character name",
-"new_char_input_tooltip_text":"Enter a new show, game, or character name to add to the list above.",
-"link_search_input_placeholder_text":"Search Links...",
-"link_search_input_tooltip_text":"When in 'Only Links' mode, type here to filter the displayed links by text, URL, or platform.",
-"manga_date_title_suffix_input_placeholder_text":"Suffix (replaces title)",
-"manga_date_title_suffix_input_tooltip_text":"Optional suffix for 'Date + Title' style.\nIf provided, this text will be used instead of the post title.\nExample: 'My Series Vol 1'",
-"history_button_tooltip_text":"View download history",
-"manga_date_prefix_input_placeholder_text":"Prefix for Manga Filenames",
-"manga_date_prefix_input_tooltip_text":"Optional prefix for 'Date Based' or 'Original File' manga filenames (e.g., 'Series Name').\nIf empty, files will be named based on the style without a prefix.",
-"log_display_mode_links_view_text":"🔗 Links View",
-"log_display_mode_progress_view_text":"⬇️ Progress View",
-"history_button_tooltip_text":"View download history",
-"empty_popup_button_tooltip_text":"Open Creator Selection (Browse creators.json)",
-"download_external_links_dialog_title":"Download Selected External Links",
-"select_all_button_text":"Select All",
-"deselect_all_button_text":"Deselect All",
-"settings_download_group_title": "Download Settings",
-"settings_save_path_button": "Save Current Download Path",
-"deselect_all_button_text":"Deselect All", # Existing, but good to have for context
-"settings_download_group_title": "Download Settings",
-"settings_save_path_button": "Save Current Download Path",
-"settings_save_path_tooltip": "Save the current 'Download Location' from the main window for future sessions.",
-"settings_save_path_success_title": "Path Saved",
-"settings_save_path_success_message": "Download location '{path}' saved successfully.",
-"settings_save_path_invalid_title": "Invalid Path",
-"settings_save_path_invalid_message": "The path '{path}' is not a valid directory. Please select a valid directory first.",
-"settings_save_path_empty_title": "Empty Path",
-"settings_save_path_empty_message": "Download location cannot be empty. Please select a path first.",
-"settings_save_all_settings_button_text": "Save All Settings",
-"settings_save_all_settings_button_tooltip": "Save all current application settings (download path, checkboxes, inputs, etc.).",
-"settings_all_saved_success_title": "Settings Saved",
-"settings_all_saved_success_message": "All application settings saved successfully.",
-"settings_all_saved_error_title": "Save Error",
-"settings_all_saved_error_message": "Could not save all application settings. Check the log for details.",
-"cookie_browse_button_tooltip":"Browse for a cookie file (Netscape format, typically cookies.txt).\nThis will be used if 'Use Cookie' is checked and the text field above is empty."
-,
-"page_range_label_text":"Page Range:",
-"start_page_input_placeholder":"Start",
-"start_page_input_tooltip":"For creator URLs: Specify the starting page number to download from (e.g., 1, 2, 3).\nLeave blank or set to 1 to start from the first page.\nDisabled for single post URLs or Manga/Comic Mode.",
-"page_range_to_label_text":"to",
-"end_page_input_placeholder":"End",
-"end_page_input_tooltip":"For creator URLs: Specify the ending page number to download up to (e.g., 5, 10).\nLeave blank to download all pages from the start page.\nDisabled for single post URLs or Manga/Comic Mode.",
-"known_names_help_button_tooltip_text":"Open the application feature guide.",
-"future_settings_button_tooltip_text":"Open application settings (Theme, Language, etc.).",
-"link_search_button_tooltip_text":"Filter displayed links",
-"confirm_add_all_dialog_title":"Confirm Adding New Names",
-"confirm_add_all_info_label":"The following new names/groups from your 'Filter by Character(s)' input are not in 'Known.txt'.\nAdding them can improve folder organization for future downloads.\n\nReview the list and choose an action:",
-"confirm_add_all_select_all_button":"Select All",
-"confirm_add_all_deselect_all_button":"Deselect All",
-"confirm_add_all_add_selected_button":"Add Selected to Known.txt",
-"confirm_add_all_skip_adding_button":"Skip Adding These",
-"confirm_add_all_cancel_download_button":"Cancel Download",
-"cookie_help_dialog_title":"Cookie File Instructions",
-"cookie_help_instruction_intro":"<p>To use cookies, you typically need a <b>cookies.txt</b> file from your browser.</p>",
-"cookie_help_how_to_get_title":"<p><b>How to get cookies.txt:</b></p>",
-"download_history_dialog_title_first_processed": "First Processed Files History",
-"first_files_processed_header": "First {count} Files Processed in this Session:",
-"history_file_label": "File:",
-"history_from_post_label": "From Post:",
-"history_post_uploaded_label": "Post Uploaded:",
-"history_file_downloaded_label": "File Downloaded:",
-"download_history_dialog_title_empty": "Download History (Empty)",
-"no_download_history_header": "No Downloads Yet",
-"cookie_help_step1_extension_intro":"<li>Install the 'Get cookies.txt LOCALLY' extension for your Chrome-based browser:<br><a href=\"https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\" style=\"color: #87CEEB;\">Get cookies.txt LOCALLY on Chrome Web Store</a></li>",
-"cookie_help_step2_login":"<li>Go to the website (e.g., kemono.su or coomer.su) and log in if necessary.</li>",
-"cookie_help_step3_click_icon":"<li>Click the extension's icon in your browser toolbar.</li>",
-"cookie_help_step4_export":"<li>Click an 'Export' button (e.g., \"Export As\", \"Export cookies.txt\" - the exact wording might vary depending on the extension version).</li>",
-"cookie_help_step5_save_file":"<li>Save the downloaded <code>cookies.txt</code> file to your computer.</li>",
-"cookie_help_step6_app_intro":"<li>In this application:<ul>",
-"cookie_help_step6a_checkbox":"<li>Ensure the 'Use Cookie' checkbox is checked.</li>",
-"cookie_help_step6b_browse":"<li>Click the 'Browse...' button next to the cookie text field.</li>",
-"cookie_help_step6c_select":"<li>Select the <code>cookies.txt</code> file you just saved.</li></ul></li>",
-"cookie_help_alternative_paste":"<p>Alternatively, some extensions might allow you to copy the cookie string directly. If so, you can paste it into the text field instead of browsing for a file.</p>",
-"cookie_help_proceed_without_button":"Download without Cookies",
-"cookie_help_cancel_download_button":"Cancel Download",
-"character_input_tooltip":(
-"Enter character names (comma-separated). Supports advanced grouping and affects folder naming "
-"if 'Separate Folders' is enabled.\n\n"
-"Examples:\n"
-"- Nami → Matches 'Nami', creates folder 'Nami'.\n"
-"- (Ulti, Vivi) → Matches either, folder 'Ulti Vivi', adds both to Known.txt separately.\n"
-"- (Boa, Hancock)~ → Matches either, folder 'Boa Hancock', adds as one group in Known.txt.\n\n"
-"Names are treated as aliases for matching.\n\n"
-"Filter Modes (button cycles):\n"
-"- Files: Filters by filename.\n"
-"- Title: Filters by post title.\n"
-"- Both: Title first, then filename.\n"
-"- Comments (Beta): Filename first, then post comments."
-),
-"tour_dialog_title":"Welcome to Kemono Downloader!",
-"tour_dialog_never_show_checkbox":"Never show this tour again",
-"tour_dialog_skip_button":"Skip Tour",
-"tour_dialog_back_button":"Back",
-"tour_dialog_next_button":"Next",
-"tour_dialog_finish_button":"Finish",
-"tour_dialog_step1_title":"👋 Welcome!",
-"tour_dialog_step1_content":"""Hello! This quick tour will walk you through the main features of the Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie management.
-        <ul>
-        <li>My goal is to help you easily download content from <b>Kemono</b> and <b>Coomer</b>.</li><br>
-        <li><b>🎨 Creator Selection Button:</b> Next to the URL input, click the palette icon to open a dialog. Browse and select creators from your <code>creators.json</code> file to quickly add their names to the URL input.</li><br>
-        <li><b>Important Tip: App '(Not Responding)'?</b><br>
-          After clicking 'Start Download', especially for large creator feeds or with many threads, the application might temporarily show as '(Not Responding)'. Your operating system (Windows, macOS, Linux) might even suggest you 'End Process' or 'Force Quit'.<br>
-          <b>Please be patient!</b> The app is often still working hard in the background. Before force-closing, try checking your chosen 'Download Location' in your file explorer. If you see new folders being created or files appearing, it means the download is progressing correctly. Give it some time to become responsive again.</li><br>
-        <li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li><br>
-        <li>Many options have tooltips if you hover over them for more details.</li><br>
-        <li>Click <b>Skip Tour</b> to close this guide at any time.</li><br>        
-        <li>Check <b>'Never show this tour again'</b> if you don't want to see this on future startups.</li>
-        </ul>""",
-"tour_dialog_step2_title":"① Getting Started",
-"tour_dialog_step2_content":"""Let's start with the basics for downloading:
-        <ul>
-        <li><b>🔗 Kemono Creator/Post URL:</b><br>
-          Paste the full web address (URL) of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) 
-        or a specific post (e.g., <i>.../post/98765</i>).</li><br>
-          or a Coomer creator (e.g., <i>https://coomer.su/onlyfans/user/artistname</i>) 
-        <li><b>📁 Download Location:</b><br>
-          Click 'Browse...' to choose a folder on your computer where all downloaded files will be saved. 
-        This is required unless you are using 'Only Links' mode.</li><br>
-        <li><b>📄 Page Range (Creator URLs only):</b><br>
-          If downloading from a creator's page, you can specify a range of pages to fetch (e.g., pages 2 to 5). 
-        Leave blank for all pages. This is disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>
-        </ul>""",
-"tour_dialog_step3_title":"② Filtering Downloads",
-"tour_dialog_step3_content":"""Refine what you download with these filters (most are disabled in 'Only Links' or 'Only Archives' modes):
-        <ul>
-        <li><b>🎯 Filter by Character(s):</b><br>
-          Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3' (after cleaning). All names in the group are used as aliases for matching.<br>
-          The <b>'Filter: [Type]'</b> button (next to this input) cycles how this filter applies:
-          <ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only matching files are downloaded. Folder naming uses the character from the matching filename (if 'Separate Folders' is on).</li><br>
-            <li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>
-            <li><b>⤵️ Add to Filter Button (Known Names):</b> Next to the 'Add' button for Known Names (see Step 5), this opens a popup. Select names from your <code>Known.txt</code> list via checkboxes (with a search bar) to quickly add them to the 'Filter by Character(s)' field. Grouped names like <code>(Boa, Hancock)</code> from Known.txt will be added as <code>(Boa, Hancock)~</code> to the filter.</li><br>
-            <li><i>Filter: Both:</i> Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes title match, then file match.</li><br>
-            <li><i>Filter: Comments (Beta):</i> Checks filenames first. If a file matches, all files from the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes file match, then comment match.</li></ul>
-          This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled.</li><br>
-        <li><b>🚫 Skip with Words:</b><br>
-          Enter words, comma-separated (e.g., <i>WIP, sketch, preview</i>). 
-          The <b>'Scope: [Type]'</b> button (next to this input) cycles how this filter applies:
-          <ul><li><i>Scope: Files:</i> Skips files if their names contain any of these words.</li><br>
-            <li><i>Scope: Posts:</i> Skips entire posts if their titles contain any of these words.</li><br>
-            <li><i>Scope: Both:</i> Applies both file and post title skipping (post first, then files).</li></ul></li><br>
-        <li><b>Filter Files (Radio Buttons):</b> Choose what to download:
-          <ul>
-          <li><i>All:</i> Downloads all file types found.</li><br>
-          <li><i>Images/GIFs:</i> Only common image formats and GIFs.</li><br>
-          <li><i>Videos:</i> Only common video formats.</li><br>
-          <li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When selected, 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show External Links' is also disabled.</li><br>
-          <li><i>🎧 Only Audio:</i> Only common audio formats (MP3, WAV, FLAC, etc.).</li><br>
-          <li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show External Links' are disabled.</li>
-          </ul></li>
-        </ul>""",
-"tour_dialog_step4_title":"③ Favorite Mode (Alternative Download)",
-"tour_dialog_step4_content":"""The application offers a 'Favorite Mode' for downloading content from artists you've favorited on Kemono.su.
-        <ul>
-        <li><b>⭐ Favorite Mode Checkbox:</b><br>
-          Located next to the '🔗 Only Links' radio button. Check this to activate Favorite Mode.</li><br>
-        <li><b>What Happens in Favorite Mode:</b>
-          <ul><li>The '🔗 Kemono Creator/Post URL' input area is replaced with a message indicating Favorite Mode is active.</li><br>
-            <li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with '🖼️ Favorite Artists' and '📄 Favorite Posts' buttons (Note: 'Favorite Posts' is planned for the future).</li><br>
-            <li>The '🍪 Use Cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li></ul></li><br>
-        <li><b>🖼️ Favorite Artists Button:</b><br>
-          Click this to open a dialog listing your favorited artists from Kemono.su. You can select one or more artists to download.</li><br>
-        <li><b>Favorite Download Scope (Button):</b><br>
-          This button (next to 'Favorite Posts') controls where selected favorites are downloaded:
-          <ul><li><i>Scope: Selected Location:</i> All selected artists are downloaded into the main 'Download Location' you've set. Filters apply globally.</li><br>
-            <li><i>Scope: Artist Folders:</i> A subfolder (named after the artist) is created inside your main 'Download Location' for each selected artist. Content for that artist goes into their specific subfolder. Filters apply within each artist's folder.</li></ul></li><br>
-        <li><b>Filters in Favorite Mode:</b><br>
-          The 'Filter by Character(s)', 'Skip with Words', and 'Filter Files' options still apply to the content downloaded from your selected favorite artists.</li>
-        </ul>""",
-"tour_dialog_step5_title":"④ Fine-Tuning Downloads",
-"tour_dialog_step5_content":"""More options to customize your downloads:
-        <ul>
-        <li><b>Skip .zip / Skip .rar:</b> Check these to avoid downloading these archive file types. 
-          <i>(Note: These are disabled and ignored if '📦 Only Archives' filter mode is selected).</i></li><br>
-        <li><b>✂️ Remove Words from name:</b><br>
-          Enter words, comma-separated (e.g., <i>patreon, [HD]</i>), to remove from downloaded filenames (case-insensitive).</li><br>
-        <li><b>Download Thumbnails Only:</b> Downloads small preview images instead of full-sized files (if available).</li><br>
-        <li><b>Compress Large Images:</b> If the 'Pillow' library is installed, images larger than 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li><br>
-        <li><b>🗄️ Custom Folder Name (Single Post Only):</b><br>
-          If you are downloading a single specific post URL AND 'Separate Folders by Name/Title' is enabled, 
-        you can enter a custom name here for that post's download folder.</li><br>
-        <li><b>🍪 Use Cookie:</b> Check this to use cookies for requests. You can either:
-          <ul><li>Enter a cookie string directly into the text field (e.g., <i>name1=value1; name2=value2</i>).</li><br>
-            <li>Click 'Browse...' to select a <i>cookies.txt</i> file (Netscape format). The path will appear in the text field.</li></ul>
-          This is useful for accessing content that requires login. The text field takes precedence if filled. 
-        If 'Use Cookie' is checked but both the text field and browsed file are empty, it will try to load 'cookies.txt' from the app's directory.</li>
-        </ul>""",
-"tour_dialog_step6_title":"⑤ Organization & Performance",
-"tour_dialog_step6_content":"""Organize your downloads and manage performance:
-        <ul>
-        <li><b>⚙️ Separate Folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the <b>Known.txt</b> list as a fallback for folder names).</li><br>
-        <li><b>Subfolder per Post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li><br>
-        <li><b>🚀 Use Multithreading (Threads):</b> Enables faster operations. The number in 'Threads' input means:
-          <ul><li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files within each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li><br>
-            <li>For <b>Single Post URLs:</b> Number of files to download concurrently from that single post.</li></ul>
-          If unchecked, 1 thread is used. High thread counts (e.g., >40) may show an advisory.</li><br>
-        <li><b>Multi-part Download Toggle (Top-right of log area):</b><br>
-          The <b>'Multi-part: [ON/OFF]'</b> button allows enabling/disabling multi-segment downloads for individual large files. 
-          <ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI choppiness or log spam with many small files. An advisory will appear when enabling. If a multi-part download fails, it retries as single-stream.</li><br>
-            <li><b>OFF (Default):</b> Files are downloaded in a single stream.</li></ul>
-          This is disabled if 'Only Links' or 'Only Archives' mode is active.</li><br>
-        <li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Tailored for sequential content.
-          <ul>
-          <li>Downloads posts from <b>oldest to newest</b>.</li><br>
-          <li>The 'Page Range' input is disabled as all posts are fetched.</li><br>
-          <li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears in the top-right of the log area when this mode is active for a creator feed. Click it to cycle through naming styles:
-            <ul>
-            <li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the post's cleaned title (e.g., 'My Chapter 1.jpg'). Subsequent files within the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li><br>
-            <li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_OriginalFile.jpg'.</li><br>
-            <li><b><i>Name: Title+G.Num (Post Title + Global Numbering):</i></b> All files across all posts in the current download session are named sequentially using the post's cleaned title as a prefix, followed by a global counter. For example: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li><br>
-            <li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on post publication order. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>
-            </ul>
-          </li><br>
-          <li>For best results with 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>
-          </ul></li><br>
-        <li><b>🎭 Known.txt for Smart Folder Organization:</b><br>
-          <code>Known.txt</code> (in the app's directory) allows fine-grained control over automatic folder organization when 'Separate Folders by Name/Title' is active.
-          <ul>
-            <li><b>How it Works:</b> Each line in <code>Known.txt</code> is an entry. 
-              <ul><li>A simple line like <code>My Awesome Series</code> means content matching this will go into a folder named "My Awesome Series".</li><br>
-                <li>A grouped line like <code>(Character A, Char A, Alt Name A)</code> means content matching "Character A", "Char A", OR "Alt Name A" will ALL go into a single folder named "Character A Char A Alt Name A" (after cleaning). All terms in the parentheses become aliases for that folder.</li></ul></li>
-            <li><b>Intelligent Fallback:</b> When 'Separate Folders by Name/Title' is active, and if a post doesn't match any specific 'Filter by Character(s)' input, the downloader consults <code>Known.txt</code> to find a matching primary name for folder creation.</li><br>
-            <li><b>User-Friendly Management:</b> Add simple (non-grouped) names via the UI list below. For advanced editing (like creating/modifying grouped aliases), click <b>'Open Known.txt'</b> to edit the file in your text editor. The app reloads it on next use or startup.</li>
-          </ul>
-        </li>
-        </ul>""",
-"tour_dialog_step7_title":"⑥ Common Errors & Troubleshooting",
-"tour_dialog_step7_content":"""Sometimes, downloads might encounter issues. Here are a few common ones:
-        <ul>
-        <li><b>Character Input Tooltip:</b><br>
-          Enter character names, comma-separated (e.g., <i>Tifa, Aerith</i>).<br>
-          Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3'.<br>
-          All names in the group are used as aliases for matching content.<br><br>
-          The 'Filter: [Type]' button next to this input cycles how this filter applies:<br>
-          - Filter: Files: Checks individual filenames. Only matching files are downloaded.<br>
-          - Filter: Title: Checks post titles. All files from a matching post are downloaded.<br>
-          - Filter: Both: Checks post title first. If no match, then checks filenames.<br>
-          - Filter: Comments (Beta): Checks filenames first. If no match, then checks post comments.<br><br>
-          This filter also influences folder naming if 'Separate Folders by Name/Title' is enabled.</li><br>      
-        <li><b>502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout:</b><br>
-          These usually indicate temporary server-side problems with Kemono/Coomer. The site might be overloaded, down for maintenance, or experiencing issues. <br>
-          <b>Solution:</b> Wait a while (e.g., 30 minutes to a few hours) and try again later. Check the site directly in your browser.</li><br>
-        <li><b>Connection Lost / Connection Refused / Timeout (during file download):</b><br>
-          This can happen due to your internet connection, server instability, or if the server drops the connection for a large file. <br>
-          <b>Solution:</b> Check your internet. Try reducing the number of 'Threads' if it's high. The app might prompt to retry some failed files at the end of a session.</li><br>
-        <li><b>IncompleteRead Error:</b><br>
-          The server sent less data than expected. Often a temporary network hiccup or server issue. <br>
-          <b>Solution:</b> The app will often mark these files for a retry attempt at the end of the download session.</li><br>
-        <li><b>403 Forbidden / 401 Unauthorized (less common for public posts):</b><br>
-          You might not have permission to access the content. For some paywalled or private content, using the 'Use Cookie' option with valid cookies from your browser session might help. Ensure your cookies are fresh.</li><br>
-        <li><b>404 Not Found:</b><br>
-          The post or file URL is incorrect, or the content has been removed from the site. Double-check the URL.</li><br>
-        <li><b>'No posts found' / 'Target post not found':</b><br>
-          Ensure the URL is correct and the creator/post exists. If using page ranges, make sure they are valid for the creator. For very new posts, there might be a slight delay before they appear in the API.</li><br>
-        <li><b>General Slowness / App '(Not Responding)':</b><br>
-          As mentioned in Step 1, if the app seems to hang after starting, especially with large creator feeds or many threads, please give it time. It's likely processing data in the background. Reducing thread count can sometimes improve responsiveness if this is frequent.</li>
-        </ul>""",
-"tour_dialog_step8_title":"⑦ Logs & Final Controls",
-"tour_dialog_step8_content":"""Monitoring and Controls:
-        <ul>
-        <li><b>📜 Progress Log / Extracted Links Log:</b> Shows detailed download messages. If '🔗 Only Links' mode is active, this area displays the extracted links.</li><br>
-        <li><b>Show External Links in Log:</b> If checked, a secondary log panel appears below the main log to display any external links found in post descriptions. <i>(This is disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</i></li><br>
-        <li><b>Log View Toggle (👁️ / 🙈 Button):</b><br>
-          This button (top-right of log area) switches the main log view:
-          <ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li><br>
-            <li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>
-        <li><b>🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li><br>
-        <li><b>⬇️ Start Download / 🔗 Extract Links / ⏸️ Pause / ❌ Cancel:</b> These buttons control the process. 'Cancel & Reset UI' stops the current operation and performs a soft UI reset, preserving your URL and Directory inputs. 'Pause/Resume' allows temporarily halting and continuing.</li><br>
-        <li>If some files fail with recoverable errors (like 'IncompleteRead'), you might be prompted to retry them at the end of a session.</li>
-        </ul>
-        <br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader."""
-},
-}
-
-translations ["zh_TW"]={    "settings_dialog_title": "設定",
+translations ["zh_TW"]={    
+    "settings_dialog_title": "設定",
     "language_label": "語言：",
     "lang_english": "英文 (English)",
     "lang_japanese": "日文 (日本語)",
@@ -3161,532 +2605,648 @@ translations ["fr"]={
     "help_guide_step9_content": "<html><head/><body>\n<h3>Fichiers clés utilisés par l'application</h3>\n<ul>\n<li><b><code>Known.txt</code> :</b>\n<ul>\n<li>Situé dans le répertoire de l'application (où se trouve le <code>.exe</code> ou <code>main.py</code>).</li>\n<li>Stocke votre liste de séries, personnages ou titres de séries connus pour l'organisation automatique des dossiers lorsque 'Dossiers séparés par Nom/Titre' est activé.</li>\n<li><b>Format :</b>\n<ul>\n<li>Chaque ligne est une entrée.</li>\n<li><b>Nom simple :</b> par ex., <code>Ma Super Série</code>. Le contenu correspondant ira dans un dossier nommé \"Ma Super Série\".</li>\n<li><b>Alias groupés :</b> par ex., <code>(Personnage A, Perso A, Nom Alt A)</code>. Le contenu correspondant à \"Personnage A\", \"Perso A\", OU \"Nom Alt A\" ira TOUS dans un seul dossier nommé \"Personnage A Perso A Nom Alt A\" (après nettoyage). Tous les termes entre parenthèses deviennent des alias pour ce dossier.</li>\n</ul>\n</li>\n<li><b>Utilisation :</b> Sert de solution de repli pour le nommage des dossiers si une publication ne correspond pas à votre entrée active 'Filtrer par Personnage(s)'. Vous pouvez gérer les entrées simples via l'UI ou éditer le fichier directement pour les alias complexes. L'application le recharge au démarrage ou à la prochaine utilisation.</li>\n</ul>\n</li>\n<li><b><code>cookies.txt</code> (Optionnel) :</b>\n<ul>\n<li>Si vous utilisez la fonctionnalité 'Utiliser le cookie' et que vous ne fournissez pas de chaîne de cookie directe ou que vous ne parcourez pas un fichier spécifique, l'application cherchera un fichier nommé <code>cookies.txt</code> dans son répertoire.</li>\n<li><b>Format :</b> Doit être au format de fichier de cookie Netscape.</li>\n<li><b>Utilisation :</b> Permet au téléchargeur d'utiliser la session de connexion de votre navigateur pour accéder au contenu qui pourrait être derrière une connexion sur Kemono/Coomer.</li>\n</ul>\n</li>\n</ul>\n<h3>Visite pour le premier utilisateur</h3>\n<ul>\n<li>Au premier lancement (ou si réinitialisé), une boîte de dialogue de visite de bienvenue apparaît, vous guidant à travers les principales fonctionnalités. Vous pouvez la passer ou choisir de \"Ne plus jamais afficher cette visite.\"</li>\n</ul>\n<p><em>De nombreux éléments de l'UI ont également des info-bulles qui apparaissent lorsque vous survolez votre souris, fournissant des conseils rapides.</em></p>\n</body></html>"
 }
 
+translations ["en"]={
+    "settings_dialog_title": "Settings",
+    "language_label": "Language:",
+    "lang_english": "English",
+    "lang_japanese": "Japanese (日本語)",
+    "theme_toggle_light": "Switch to light mode",
+    "theme_toggle_dark": "Switch to dark mode",
+    "theme_tooltip_light": "Change the application's appearance to light.",
+    "theme_tooltip_dark": "Change the application's appearance to dark.",
+    "ok_button": "OK",
+    "appearance_group_title": "Appearance",
+    "language_group_title": "Language Settings",
+    "creator_post_url_label": "🔗 Creator/Post Kemono URL:",
+    "download_location_label": "📁 Download Location:",
+    "filter_by_character_label": "🎯 Filter by Character(s) (comma-separated):",
+    "skip_with_words_label": "🚫 Skip with words (comma-separated):",
+    "remove_words_from_name_label": "✂️ Remove words from name:",
+    "filter_all_radio": "All",
+    "filter_images_radio": "Images/GIFs",
+    "filter_videos_radio": "Videos",
+    "filter_archives_radio": "📦 Only Archives",
+    "filter_links_radio": "🔗 Only Links",
+    "filter_audio_radio": "🎧 Only Audio",
+    "favorite_mode_checkbox_label": "⭐ Favorite Mode",
+    "browse_button_text": "Browse...",
+    "char_filter_scope_files_text": "Filter: Files",
+    "char_filter_scope_files_tooltip": "Current scope: Files\n\nFilters individual files by name. A post is kept if any file matches.\nOnly the matching files from that post are downloaded.\nExample: Filter 'Tifa'. File 'Tifa_artwork.jpg' matches and is downloaded.\nFolder Naming: Uses the character from the matching filename.\n\nClick to switch to: Both",
+    "char_filter_scope_title_text": "Filter: Title",
+    "char_filter_scope_title_tooltip": "Current scope: Title\n\nFilters entire posts by their title. All files from a matching post are downloaded.\nExample: Filter 'Aerith'. Post titled 'Aerith's Garden' matches; all its files are downloaded.\nFolder Naming: Uses the character from the matching post title.\n\nClick to switch to: Files",
+    "char_filter_scope_both_text": "Filter: Both",
+    "char_filter_scope_both_tooltip": "Current scope: Both (Title then Files)\n\n1. Checks the post title: If it matches, all files in the post are downloaded.\n2. If the title doesn't match, checks filenames: If a file matches, only that file is downloaded.\nExample: Filter 'Cloud'.\n - Post 'Cloud Strife' (title match) -> all files are downloaded.\n - Post 'Motorcycle Chase' with 'Cloud_fenrir.jpg' (file match) -> only 'Cloud_fenrir.jpg' is downloaded.\nFolder Naming: Prioritizes title match, then file match.\n\nClick to switch to: Comments",
+    "char_filter_scope_comments_text": "Filter: Comments (Beta)",
+    "char_filter_scope_comments_tooltip": "Current scope: Comments (Beta - Files first, then Comments as fallback)\n\n1. Checks filenames: If a file in the post matches the filter, the entire post is downloaded. Comments are NOT checked for this filter term.\n2. If no file matches, THEN checks post comments: If a comment matches, the entire post is downloaded.\nExample: Filter 'Barret'.\n - Post A: Files 'Barret_gunarm.jpg', 'other.png'. File 'Barret_gunarm.jpg' matches. All files from Post A are downloaded. Comments are not checked for 'Barret'.\n - Post B: Files 'dyne.jpg', 'weapon.gif'. Comments: '...a drawing of Barret Wallace...'. No file match for 'Barret'. Comment matches. All files from Post B are downloaded.\nFolder Naming: Prioritizes character from file match, then comment match.\n\nClick to switch to: Title",
+    "char_filter_scope_unknown_text": "Filter: Unknown",
+    "char_filter_scope_unknown_tooltip": "Current Scope: Unknown\n\nThe character filter scope is in an unknown state. Please cycle or reset.\n\nClick to switch to: Title",
+    "skip_words_input_tooltip": "Enter words, comma-separated, to skip downloading certain content (e.g., WIP, sketch, preview).\n\nThe 'Scope: [Type]' button next to this input changes how this filter applies:\n- Scope: Files: Skips individual files if their names contain any of these words.\n- Scope: Posts: Skips entire posts if their titles contain any of these words.\n- Scope: Both: Applies both (post title first, then individual files if post title is OK).",
+    "remove_words_input_tooltip": "Enter words, comma-separated, to remove from downloaded filenames (case-insensitive).\nUseful for cleaning up common prefixes/suffixes.\nExample: patreon, kemono, [HD], _final",
+    "skip_scope_files_text": "Scope: Files",
+    "skip_scope_files_tooltip": "Current Skip Scope: Files\n\nSkips individual files if their names contain any of the 'Skip Words'.\nExample: Skip Words \"WIP, sketch\".\n- File \"art_WIP.jpg\" -> SKIPPED.\n- File \"final_art.png\" -> DOWNLOADED (if other conditions met).\n\nThe post is still processed for other non-skipped files.\nClick to switch to: Both",
+    "skip_scope_posts_text": "Scope: Posts",
+    "skip_scope_posts_tooltip": "Current Skip Scope: Posts\n\nSkips entire posts if their titles contain any of the 'Skip Words'.\nAll files from a skipped post are ignored.\nExample: Skip Words \"preview, announcement\".\n- Post \"Exciting Announcement!\" -> SKIPPED.\n- Post \"Finished Artwork\" -> PROCESSED (if other conditions met).\n\nClick to switch to: Files",
+    "skip_scope_both_text": "Scope: Both",
+    "skip_scope_both_tooltip": "Current Skip Scope: Both (Posts then Files)\n\n1. Checks the post title: If the title contains a skip word, the entire post is SKIPPED.\n2. If post title is OK, then checks individual filenames: If a filename contains a skip word, only that file is SKIPPED.\nExample: Skip Words \"WIP, sketch\".\n- Post \"Sketches and WIPs\" (title match) -> ENTIRE POST SKIPPED.\n- Post \"Art Update\" (title OK) with files:\n  - \"character_WIP.jpg\" (file match) -> SKIPPED.\n  - \"final_scene.png\" (file OK) -> DOWNLOADED.\n\nClick to switch to: Posts",
+    "skip_scope_unknown_text": "Scope: Unknown",
+    "skip_scope_unknown_tooltip": "Current Skip Scope: Unknown\n\nThe skip words scope is in an unknown state. Please cycle or reset.\n\nClick to switch to: Posts",
+    "language_change_title": "Language Changed",
+    "language_change_message": "The language has been changed. A restart is required for all changes to take full effect.",
+    "language_change_informative": "Do you want to restart the application now?",
+    "restart_now_button": "Restart Now",
+    "skip_zip_checkbox_label": "Skip .zip",
+    "skip_rar_checkbox_label": "Skip .rar",
+    "download_thumbnails_checkbox_label": "Download thumbnails only",
+    "scan_content_images_checkbox_label": "Scan content for images",
+    "compress_images_checkbox_label": "Compress to WebP",
+    "separate_folders_checkbox_label": "Separate folders by Name/Title",
+    "subfolder_per_post_checkbox_label": "Subfolder per post",
+    "use_cookie_checkbox_label": "Use cookie",
+    "use_multithreading_checkbox_base_label": "Use multithreading",
+    "show_external_links_checkbox_label": "Show external links in log",
+    "manga_comic_mode_checkbox_label": "Manga/Comic Mode",
+    "threads_label": "Threads:",
+    "start_download_button_text": "⬇️ Start Download",
+    "start_download_button_tooltip": "Click to start the download or link extraction process with the current settings.",
+    "extract_links_button_text": "🔗 Extract Links",
+    "pause_download_button_text": "⏸️ Pause Download",
+    "pause_download_button_tooltip": "Click to pause the currently running download process.",
+    "resume_download_button_text": "▶️ Resume Download",
+    "resume_download_button_tooltip": "Click to resume the download.",
+    "cancel_button_text": "❌ Cancel & Reset UI",
+    "cancel_button_tooltip": "Click to cancel the current download/extraction process and reset the UI fields (keeping URL and directory).",
+    "error_button_text": "Error",
+    "error_button_tooltip": "View files skipped due to errors and optionally retry them.",
+    "cancel_retry_button_text": "❌ Cancel Retry",
+    "known_chars_label_text": "🎭 Known Series/Characters (for folder names):",
+    "open_known_txt_button_text": "Open Known.txt",
+    "known_chars_list_tooltip": "This list contains names used for automatic folder creation when 'Separate Folders' is on\nand no specific 'Filter by Character(s)' is provided or matches a post.\nAdd the names of series, games, or characters you frequently download.",
+    "open_known_txt_button_tooltip": "Open the 'Known.txt' file in your default text editor.\nThe file is located in the application's directory.",
+    "add_char_button_text": "➕ Add",
+    "add_char_button_tooltip": "Add the name from the input field to the 'Known Series/Characters' list.",
+    "add_to_filter_button_text": "⤵️ Add to Filter",
+    "add_to_filter_button_tooltip": "Select names from the 'Known Series/Characters' list to add them to the 'Filter by Character(s)' field above.",
+    "delete_char_button_text": "🗑️ Delete Selected",
+    "delete_char_button_tooltip": "Delete the selected name(s) from the 'Known Series/Characters' list.",
+    "progress_log_label_text": "📜 Progress Log:",
+    "radio_all_tooltip": "Download all file types found in posts.",
+    "radio_images_tooltip": "Download only common image formats (JPG, PNG, GIF, WEBP, etc.).",
+    "radio_videos_tooltip": "Download only common video formats (MP4, MKV, WEBM, MOV, etc.).",
+    "radio_only_archives_tooltip": "Exclusively download .zip and .rar files. Other file-specific options are disabled.",
+    "radio_only_audio_tooltip": "Download only common audio formats (MP3, WAV, FLAC, etc.).",
+    "radio_only_links_tooltip": "Extract and display external links from post descriptions instead of downloading files.\nDownload-related options will be disabled.",
+    "favorite_mode_checkbox_tooltip": "Enable Favorite Mode to browse and download from saved artists/posts.\nThis will replace the URL input field with Favorite selection buttons.",
+    "skip_zip_checkbox_tooltip": "If checked, .zip archive files will not be downloaded.\n(Disabled if 'Archives Only' is selected).",
+    "skip_rar_checkbox_tooltip": "If checked, .rar archive files will not be downloaded.\n(Disabled if 'Archives Only' is selected).",
+    "download_thumbnails_checkbox_tooltip": "Downloads the small preview images from the API instead of full-size files (if available).\nIf 'Scan post content for image URLs' is also checked, this mode will *only* download images found by content scanning (ignoring API thumbnails).",
+    "scan_content_images_checkbox_tooltip": "If checked, the downloader will scan the HTML content of posts for image URLs (from <img> tags or direct links).\nThis includes resolving relative paths from <img> tags to full URLs.\nRelative paths in <img> tags (e.g., /data/image.jpg) will be resolved to full URLs.\nUseful for cases where images are in the post description but not in the API's file/attachment list.",
+    "compress_images_checkbox_tooltip": "Compress images > 1.5MB to WebP format (requires Pillow).",
+    "use_subfolders_checkbox_tooltip": "Create subfolders based on the 'Filter by Character(s)' input or post titles.\nUses the 'Known Series/Characters' list as a fallback for folder names if no specific filter matches.\nEnables the 'Filter by Character(s)' and 'Custom Folder Name' input for single posts.",
+    "use_subfolder_per_post_checkbox_tooltip": "Creates a subfolder for each post. If 'Separate Folders' is also on, it goes inside the character/title folder.",
+    "use_cookie_checkbox_tooltip": "If checked, will attempt to use cookies from 'cookies.txt' (Netscape format)\nin the application directory for requests.\nUseful for accessing content that requires a login on Kemono/Coomer.",
+    "cookie_text_input_tooltip": "Enter your cookie string directly.\nThis will be used if 'Use cookie' is checked AND 'cookies.txt' is not found or this field is not empty.\nThe format depends on how the backend will parse it (e.g., 'name1=value1; name2=value2').",
+    "use_multithreading_checkbox_tooltip": "Enables concurrent operations. See 'Threads' field for details.",
+    "thread_count_input_tooltip": "Number of concurrent operations.\n- Single Post: Concurrent file downloads (1-10 recommended).\n- Creator Feed URL: Number of posts to process simultaneously (1-200 recommended).\n  Files from each post are downloaded one-by-one by its worker.\nIf 'Use multithreading' is unchecked, 1 thread is used.",
+    "external_links_checkbox_tooltip": "If checked, a secondary log panel appears below the main log to display external links found in post descriptions.\n(Disabled if 'Links Only' or 'Archives Only' mode is active).",
+    "manga_mode_checkbox_tooltip": "Downloads posts from oldest to newest and renames files based on the post title (for creator feeds only).",
+    "multipart_on_button_text": "Multi-part: ON",
+    "multipart_on_button_tooltip": "Multipart Downloading: ON\n\nEnables downloading large files in several segments simultaneously.\n- May speed up single large file downloads (e.g., videos).\n- Can increase CPU/network usage.\n- For feeds with many small files, this might not offer speed benefits and could make the UI/log busy.\n- If multipart fails, it retries as a single stream.\n\nClick to disable.",
+    "multipart_off_button_text": "Multi-part: OFF",
+    "multipart_off_button_tooltip": "Multipart Downloading: OFF\n\nAll files are downloaded using a single stream.\n- Stable and works well for most scenarios, especially many small files.\n- Large files downloaded sequentially.\n\nClick to enable (see warning).",
+    "reset_button_text": "🔄 Reset",
+    "reset_button_tooltip": "Reset all inputs and logs to their default state (only when app is idle).",
+    "progress_idle_text": "Progress: Idle",
+    "missed_character_log_label_text": "🚫 Missed Character Log:",
+    "creator_popup_title": "Creator Selection",
+    "creator_popup_search_placeholder": "Search by name, service, or paste creator URL...",
+    "creator_popup_add_selected_button": "Add Selected",
+    "creator_popup_scope_characters_button": "Scope: Characters",
+    "creator_popup_scope_creators_button": "Scope: Creators",
+    "favorite_artists_button_text": "🖼️ Favorite Artists",
+    "favorite_artists_button_tooltip": "Browse and download from your favorite artists on Kemono.su/Coomer.su.",
+    "favorite_posts_button_text": "📄 Favorite Posts",
+    "favorite_posts_button_tooltip": "Browse and download your favorite posts from Kemono.su/Coomer.su.",
+    "favorite_scope_selected_location_text": "Scope: Selected Location",
+    "favorite_scope_selected_location_tooltip": "Current Favorite Download Scope: Selected Location\n\nAll selected favorite artists/posts will be downloaded to the main 'Download Location' specified in the UI.\nFilters (character, skip words, file type) will apply globally to all content.\n\nClick to change to: Artist Folders",
+    "favorite_scope_artist_folders_text": "Scope: Artist Folders",
+    "favorite_scope_artist_folders_tooltip": "Current Favorite Download Scope: Artist Folders\n\nFor each selected favorite artist/post, a new subfolder (named after the artist) will be created inside the main 'Download Location'.\nThat artist's/post's content will be downloaded into its specific subfolder.\nFilters (character, skip words, file type) will apply *within* each artist's folder.\n\nClick to change to: Selected Location",
+    "favorite_scope_unknown_text": "Scope: Unknown",
+    "favorite_scope_unknown_tooltip": "Favorite download scope is unknown. Click to cycle.",
+    "manga_style_post_title_text": "Name: Post Title",
+    "manga_style_original_file_text": "Name: Original File",
+    "manga_style_date_based_text": "Name: Date Based",
+    "manga_style_title_global_num_text": "Name: Title+G.Num",
+    "manga_style_unknown_text": "Name: Unknown Style",
+    "fav_artists_dialog_title": "Favorite Artists",
+    "fav_artists_loading_status": "Loading favorite artists...",
+    "fav_artists_search_placeholder": "Search artists...",
+    "fav_artists_select_all_button": "Select All",
+    "fav_artists_deselect_all_button": "Deselect All",
+    "fav_artists_download_selected_button": "Download Selected",
+    "fav_artists_cancel_button": "Cancel",
+    "fav_artists_loading_from_source_status": "⏳ Loading favorites from {source_name}...",
+    "fav_artists_found_status": "{count} favorite artist(s) found in total.",
+    "fav_artists_none_found_status": "No favorite artists found on Kemono.su or Coomer.su.",
+    "fav_artists_failed_status": "Failed to retrieve favorites.",
+    "fav_artists_cookies_required_status": "Error: Cookies enabled but could not be loaded for any source.",
+    "fav_artists_no_favorites_after_processing": "No favorite artists found after processing.",
+    "fav_artists_no_selection_title": "No Selection",
+    "fav_artists_no_selection_message": "Please select at least one artist to download.",
+    "fav_posts_dialog_title": "Favorite Posts",
+    "fav_posts_loading_status": "Loading favorite posts...",
+    "fav_posts_search_placeholder": "Search posts (title, creator, ID, service)...",
+    "fav_posts_select_all_button": "Select All",
+    "fav_posts_deselect_all_button": "Deselect All",
+    "fav_posts_download_selected_button": "Download Selected",
+    "fav_posts_cancel_button": "Cancel",
+    "fav_posts_cookies_required_error": "Error: Cookies are required for favorite posts but could not be loaded.",
+    "fav_posts_auth_failed_title": "Authorization Failed (Posts)",
+    "fav_posts_auth_failed_message": "Could not retrieve favorites{domain_specific_part} due to an authorization error:\n\n{error_message}\n\nThis usually means your cookies are missing, invalid, or expired for the site. Please check your cookie setup.",
+    "fav_posts_fetch_error_title": "Fetch Error",
+    "fav_posts_fetch_error_message": "Error while fetching favorites from {domain}{error_message_part}",
+    "fav_posts_no_posts_found_status": "No favorite posts found.",
+    "fav_posts_found_status": "{count} favorite post(s) found.",
+    "fav_posts_display_error_status": "Error displaying posts: {error}",
+    "fav_posts_ui_error_title": "UI Error",
+    "fav_posts_ui_error_message": "Could not display favorite posts: {error}",
+    "fav_posts_auth_failed_message_generic": "Could not retrieve favorites{domain_specific_part} due to an authorization error. This usually means your cookies are missing, invalid, or expired for the site. Please check your cookie setup.",
+    "key_fetching_fav_post_list_init": "Fetching favorite post list...",
+    "key_fetching_from_source_kemono_su": "Fetching favorites from Kemono.su...",
+    "key_fetching_from_source_coomer_su": "Fetching favorites from Coomer.su...",
+    "fav_posts_fetch_cancelled_status": "Favorite post fetching cancelled.",
+    "known_names_filter_dialog_title": "Add Known Names to Filter",
+    "known_names_filter_search_placeholder": "Search names...",
+    "known_names_filter_select_all_button": "Select All",
+    "known_names_filter_deselect_all_button": "Deselect All",
+    "known_names_filter_add_selected_button": "Add Selected",
+    "error_files_dialog_title": "Files Skipped Due to Errors",
+    "error_files_no_errors_label": "No files were logged as skipped due to errors in the last session or after retries.",
+    "error_files_found_label": "The following {count} file(s) were skipped due to download errors:",
+    "error_files_select_all_button": "Select All",
+    "error_files_retry_selected_button": "Retry Selected",
+    "error_files_export_urls_button": "Export URLs to .txt",
+    "error_files_no_selection_retry_message": "Please select at least one file to retry.",
+    "error_files_no_errors_export_title": "No Errors",
+    "error_files_no_errors_export_message": "There are no errored file URLs to export.",
+    "error_files_no_urls_found_export_title": "No URLs Found",
+    "error_files_no_urls_found_export_message": "Could not extract any URLs from the errored files list to export.",
+    "error_files_save_dialog_title": "Save Errored File URLs",
+    "error_files_export_success_title": "Export Successful",
+    "error_files_export_success_message": "{count} entries successfully exported to:\n{filepath}",
+    "error_files_export_error_title": "Export Error",
+    "error_files_export_error_message": "Could not export file links: {error}",
+    "export_options_dialog_title": "Export Options",
+    "export_options_description_label": "Choose the export format for errored file links:",
+    "export_options_radio_link_only": "Link Per Line (URL only)",
+    "export_options_radio_link_only_tooltip": "Exports only the direct download URL for each failed file, one URL per line.",
+    "export_options_radio_with_details": "Export with Details (URL [Post, File Info])",
+    "export_options_radio_with_details_tooltip": "Exports the URL followed by details like the post title, post ID, and original filename in brackets.",
+    "export_options_export_button": "Export",
+    "no_errors_logged_title": "No Errors Logged",
+    "no_errors_logged_message": "No files were logged as skipped due to errors in the last session or after retries.",
+    "progress_initializing_text": "Progress: Initializing...",
+    "progress_posts_text": "Progress: {processed_posts} / {total_posts} posts ({progress_percent:.1f}%)",
+    "progress_processing_post_text": "Progress: Processing post {processed_posts}...",
+    "progress_starting_text": "Progress: Starting...",
+    "downloading_file_known_size_text": "Downloading '{filename}' ({downloaded_mb:.1f}MB / {total_mb:.1f}MB)",
+    "downloading_file_unknown_size_text": "Downloading '{filename}' ({downloaded_mb:.1f}MB)",
+    "downloading_multipart_text": "DL '{filename}...': {downloaded_mb:.1f}/{total_mb:.1f} MB ({parts} parts @ {speed:.2f} MB/s)",
+    "downloading_multipart_initializing_text": "File: {filename} - Initializing parts...",
+    "status_completed": "Completed",
+    "status_cancelled_by_user": "Cancelled by user",
+    "files_downloaded_label": "downloaded",
+    "files_skipped_label": "skipped",
+    "retry_finished_text": "Retry finished",
+    "succeeded_text": "Succeeded",
+    "failed_text": "Failed",
+    "ready_for_new_task_text": "Ready for new task.",
+    "fav_mode_active_label_text": "⭐ Favorite Mode is active. Please select filters below before choosing your favorite artists/posts. Select an action below.",
+    "export_links_button_text": "Export Links",
+    "download_extracted_links_button_text": "Download",
+    "download_selected_button_text": "Download Selected",
+    "link_input_placeholder_text": "e.g., https://kemono.su/patreon/user/12345 or .../post/98765",
+    "link_input_tooltip_text": "Enter the full URL of a Kemono/Coomer creator page or a specific post.\nExample (Creator): https://kemono.su/patreon/user/12345\nExample (Post): https://kemono.su/patreon/user/12345/post/98765",
+    "dir_input_placeholder_text": "Select the folder where downloads will be saved",
+    "dir_input_tooltip_text": "Enter or browse to the main folder where all downloaded content will be saved.\nThis is required unless 'Links Only' mode is selected.",
+    "character_input_placeholder_text": "e.g., Tifa, Aerith, (Cloud, Zack)",
+    "custom_folder_input_placeholder_text": "Optional: Save this post to a specific folder",
+    "custom_folder_input_tooltip_text": "If you are downloading a single post URL AND 'Separate folders by Name/Title' is enabled,\nyou can enter a custom name here for this post's download folder.\nExample: My Favorite Scene",
+    "skip_words_input_placeholder_text": "e.g., WM, WIP, sketch, preview",
+    "remove_from_filename_input_placeholder_text": "e.g., patreon, HD",
+    "cookie_text_input_placeholder_no_file_selected_text": "Cookie string (if no cookies.txt is selected)",
+    "cookie_text_input_placeholder_with_file_selected_text": "Using selected cookie file (see Browse...)",
+    "character_search_input_placeholder_text": "Search characters...",
+    "character_search_input_tooltip_text": "Type here to filter the list of known series/characters below.",
+    "new_char_input_placeholder_text": "Add new series/character name",
+    "new_char_input_tooltip_text": "Enter a new series, game, or character name to add to the list above.",
+    "link_search_input_placeholder_text": "Search links...",
+    "link_search_input_tooltip_text": "In 'Links Only' mode, type here to filter the displayed links by text, URL, or platform.",
+    "manga_date_prefix_input_placeholder_text": "Prefix for Manga filenames",
+    "manga_date_prefix_input_tooltip_text": "Optional prefix for 'Date Based' or 'Original File' manga filenames (e.g., 'Series Name').\nIf empty, files will be named according to the style without a prefix.",
+    "log_display_mode_links_view_text": "🔗 Links View",
+    "log_display_mode_progress_view_text": "⬇️ Progress View",
+    "download_external_links_dialog_title": "Download Selected External Links",
+    "select_all_button_text": "Select All",
+    "deselect_all_button_text": "Deselect All",
+    "cookie_browse_button_tooltip": "Browse for a cookie file (Netscape format, usually cookies.txt).\nThis will be used if 'Use cookie' is checked and the text field above is empty.",
+    "page_range_label_text": "Page Range:",
+    "start_page_input_placeholder": "Start",
+    "start_page_input_tooltip": "For creator URLs: Specify the starting page number for the download (e.g., 1, 2, 3).\nLeave empty or set to 1 to start from the first page.\nDisabled for single post URLs or in Manga/Comic Mode.",
+    "page_range_to_label_text": "to",
+    "end_page_input_placeholder": "End",
+    "end_page_input_tooltip": "For creator URLs: Specify the ending page number for the download (e.g., 5, 10).\nLeave empty to download all pages from the start page.\nDisabled for single post URLs or in Manga/Comic Mode.",
+    "known_names_help_button_tooltip_text": "Open the application feature guide.",
+    "future_settings_button_tooltip_text": "Open application settings (Theme, Language, etc.).",
+    "link_search_button_tooltip_text": "Filter displayed links",
+    "confirm_add_all_dialog_title": "Confirm Adding New Names",
+    "confirm_add_all_info_label": "The following new names/groups from your 'Filter by Character(s)' input are not in 'Known.txt'.\nAdding them can improve folder organization for future downloads.\n\nPlease review the list and choose an action:",
+    "confirm_add_all_select_all_button": "Select All",
+    "confirm_add_all_deselect_all_button": "Deselect All",
+    "confirm_add_all_add_selected_button": "Add Selected to Known.txt",
+    "confirm_add_all_skip_adding_button": "Skip Adding These",
+    "confirm_add_all_cancel_download_button": "Cancel Download",
+    "cookie_help_dialog_title": "Cookie File Instructions",
+    "cookie_help_instruction_intro": "<p>To use cookies, you typically need a <b>cookies.txt</b> file from your browser.</p>",
+    "cookie_help_how_to_get_title": "<p><b>How to get cookies.txt:</b></p>",
+    "cookie_help_step1_extension_intro": "<li>Install the 'Get cookies.txt LOCALLY' extension for your Chrome-based browser:<br><a href=\"https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\" style=\"color: #87CEEB;\">Get cookies.txt LOCALLY on Chrome Web Store</a></li>",
+    "cookie_help_step2_login": "<li>Go to the website (e.g., kemono.su or coomer.su) and log in if necessary.</li>",
+    "cookie_help_step3_click_icon": "<li>Click the extension icon in your browser's toolbar.</li>",
+    "cookie_help_step4_export": "<li>Click an 'Export' button (e.g., \"Export As\", \"Export cookies.txt\" - exact wording may vary by extension version).</li>",
+    "cookie_help_step5_save_file": "<li>Save the downloaded <code>cookies.txt</code> file to your computer.</li>",
+    "cookie_help_step6_app_intro": "<li>In this application:<ul>",
+    "cookie_help_step6a_checkbox": "<li>Make sure the 'Use cookie' box is checked.</li>",
+    "cookie_help_step6b_browse": "<li>Click the 'Browse...' button next to the cookie text field.</li>",
+    "cookie_help_step6c_select": "<li>Select the <code>cookies.txt</code> file you just saved.</li></ul></li>",
+    "cookie_help_alternative_paste": "<p>Alternatively, some extensions may let you copy the cookie string directly. If so, you can paste that into the text field instead of browsing for a file.</p>",
+    "cookie_help_proceed_without_button": "Download without cookies",
+    "cookie_help_cancel_download_button": "Cancel Download",
+    "character_input_tooltip": "Enter character names (comma-separated). Supports advanced grouping and affects folder naming if 'Separate Folders' is enabled.\n\nExamples:\n- Nami → Matches 'Nami', creates 'Nami' folder.\n- (Ulti, Vivi) → Matches either, folder 'Ulti Vivi', adds both to Known.txt separately.\n- (Boa, Hancock)~ → Matches either, folder 'Boa Hancock', adds as one group to Known.txt.\n\nNames are treated as aliases for matching.\n\nFilter Modes (button cycles):\n- Files: Filters by filename.\n- Title: Filters by post title.\n- Both: Title first, then filename.\n- Comments (Beta): Filename first, then post comments.",
+    "tour_dialog_title": "Welcome to Kemono Downloader!",
+    "tour_dialog_never_show_checkbox": "Never show this tour again",
+    "tour_dialog_skip_button": "Skip Tour",
+    "tour_dialog_back_button": "Back",
+    "tour_dialog_next_button": "Next",
+    "tour_dialog_finish_button": "Finish",
+    "tour_dialog_step1_title": "👋 Welcome!",
+    "tour_dialog_step1_content": "Hello! This quick tour will guide you through the main features of Kemono Downloader, including recent updates like enhanced filtering, manga mode improvements, and cookie handling.\n<ul>\n<li>My goal is to help you easily download content from <b>Kemono</b> and <b>Coomer</b>.</li><br>\n<li><b>🎨 Creator Selection Button:</b> Next to the URL input, click the palette icon to open a dialog. Browse and select creators from your <code>creators.json</code> file to quickly add their names to the URL input.</li><br>\n<li><b>Important Tip: App '(Not Responding)'?</b><br>\nAfter clicking 'Start Download', especially for large creator feeds or with many threads, the app might temporarily show '(Not Responding)'. Your operating system (Windows, macOS, Linux) might even suggest you 'End Process' or 'Force Quit'.<br>\n<b>Please be patient!</b> The app is often working hard in the background. Before force-closing, try checking your chosen 'Download Location' in your file explorer. If you see new folders being created or files appearing, it means the download is progressing correctly. Give it some time to become responsive again.</li><br>\n<li>Use the <b>Next</b> and <b>Back</b> buttons to navigate.</li><br>\n<li>Many options have tooltips if you hover over them for more details.</li><br>\n<li>Click <b>Skip Tour</b> to close this guide at any time.</li><br>\n<li>Check <b>'Never show this tour again'</b> if you don't want to see this on future startups.</li>\n</ul>",
+    "tour_dialog_step2_title": "① Getting Started",
+    "tour_dialog_step2_content": "Let's start with the download basics:\n<ul>\n<li><b>🔗 Creator/Post Kemono URL:</b><br>\nPaste the full web address (URL) of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) \nor a specific post (e.g., <i>.../post/98765</i>).<br>\nor a Coomer creator (e.g., <i>https://coomer.su/onlyfans/user/artistname</i>)</li><br>\n<li><b>📁 Download Location:</b><br>\nClick 'Browse...' to choose a folder on your computer where all downloaded files will be saved. \nThis is required unless you are using 'Links Only' mode.</li><br>\n<li><b>📄 Page Range (Creator URLs only):</b><br>\nIf downloading from a creator's page, you can specify a range of pages to grab (e.g., pages 2 to 5). \nLeave blank for all pages. This is disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>\n</ul>",
+    "tour_dialog_step3_title": "② Filtering Downloads",
+    "tour_dialog_step3_content": "Refine what you download with these filters (most are disabled in 'Links Only' or 'Archives Only' modes):\n<ul>\n<li><b>🎯 Filter by Character(s):</b><br>\nEnter character names, separated by commas (e.g., <i>Tifa, Aerith</i>). Group aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes the folder 'alias1 alias2 alias3' (after cleanup). All names in the group are used as aliases for matching.<br>\nThe <b>'Filter: [Type]'</b> button (next to this input) changes how this filter applies:\n<ul><li><i>Filter: Files:</i> Checks individual filenames. A post is kept if any file matches; only the matching files are downloaded. Folder naming uses the character from the matching filename (if 'Separate Folders' is on).</li><br>\n<li><i>Filter: Title:</i> Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>\n<li><b>⤵️ Add to Filter Button (Known Names):</b> Next to the 'Add' button for Known Names (see Step 5), this opens a popup. Select names from your <code>Known.txt</code> list via checkboxes (with a search bar) to quickly add them to the 'Filter by Character(s)' field. Grouped names like <code>(Boa, Hancock)</code> from Known.txt will be added as <code>(Boa, Hancock)~</code> to the filter.</li><br>\n<li><i>Filter: Both:</i> Checks the post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes the title match, then the file match.</li><br>\n<li><i>Filter: Comments (Beta):</i> Checks filenames first. If a file matches, all files in the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes the file match, then the comment match.</li></ul>\nThis filter also influences folder naming if 'Separate folders by Name/Title' is on.</li><br>\n<li><b>🚫 Skip with words:</b><br>\nEnter words, comma-separated (e.g., <i>WIP, sketch, preview</i>). \nThe <b>'Scope: [Type]'</b> button (next to this input) changes how this filter applies:\n<ul><li><i>Scope: Files:</i> Skips files if their names contain any of these words.</li><br>\n<li><i>Scope: Posts:</i> Skips entire posts if their titles contain any of these words.</li><br>\n<li><i>Scope: Both:</i> Applies both file and post title skipping (post first, then files).</li></ul></li><br>\n<li><b>Filter Files (Radio Buttons):</b> Choose what to download:\n<ul>\n<li><i>All:</i> Downloads all file types found.</li><br>\n<li><i>Images/GIFs:</i> Only common image formats and GIFs.</li><br>\n<li><i>Videos:</i> Only common video formats.</li><br>\n<li><b><i>📦 Only Archives:</i></b> Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When this is selected, the 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show external links' is also disabled.</li><br>\n<li><i>🎧 Only Audio:</i> Only common audio formats (MP3, WAV, FLAC, etc.).</li><br>\n<li><i>🔗 Only Links:</i> Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show external links' are disabled.</li>\n</ul></li>\n</ul>",
+    "tour_dialog_step4_title": "③ Favorite Mode (Alternate Downloading)",
+    "tour_dialog_step4_content": "The app offers a 'Favorite Mode' for downloading content from artists you have favorited on Kemono.su.\n<ul>\n<li><b>⭐ Favorite Mode Checkbox:</b><br>\nLocated next to the '🔗 Only Links' radio button. Check this box to enable Favorite Mode.</li><br>\n<li><b>What Happens in Favorite Mode:</b>\n<ul><li>The '🔗 Creator/Post Kemono URL' input area is replaced with a message indicating Favorite Mode is active.</li><br>\n<li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with '🖼️ Favorite Artists' and '📄 Favorite Posts' buttons (Note: 'Favorite Posts' is planned for the future).</li><br>\n<li>The '🍪 Use cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li></ul></li><br>\n<li><b>🖼️ Favorite Artists Button:</b><br>\nClick this to open a dialog listing your favorite artists from Kemono.su. You can select one or more artists to download.</li><br>\n<li><b>Favorite Download Scope (Button):</b><br>\nThis button (next to 'Favorite Posts') controls where selected favorites are downloaded:\n<ul><li><i>Scope: Selected Location:</i> All selected artists are downloaded into the main 'Download Location' you set. Filters apply globally.</li><br>\n<li><i>Scope: Artist Folders:</i> A subfolder (named after the artist) is created in your main 'Download Location' for each selected artist. That artist's content goes into their specific folder. Filters apply within each artist's folder.</li></ul></li><br>\n<li><b>Filters in Favorite Mode:</b><br>\nThe 'Filter by Character(s)', 'Skip with words', and 'Filter Files' options still apply to the content downloaded from your selected favorite artists.</li>\n</ul>",
+    "tour_dialog_step5_title": "④ Refining Downloads",
+    "tour_dialog_step5_content": "More options to customize your downloads:\n<ul>\n<li><b>Skip .zip / Skip .rar:</b> Check these to avoid downloading these archive file types. \n<i>(Note: These are disabled and ignored if '📦 Only Archives' filter mode is selected).</i></li><br>\n<li><b>✂️ Remove words from name:</b><br>\nEnter words, comma-separated (e.g., <i>patreon, [HD]</i>), to be removed from downloaded filenames (case-insensitive).</li><br>\n<li><b>Download thumbnails only:</b> Downloads the small preview images instead of full-size files (if available).</li><br>\n<li><b>Compress large images:</b> If the 'Pillow' library is installed, images over 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li><br>\n<li><b>🗄️ Custom Folder Name (Single Post Only):</b><br>\nIf you are downloading a specific post URL AND 'Separate folders by Name/Title' is enabled, \nyou can enter a custom name here for that post's download folder.</li><br>\n<li><b>🍪 Use cookie:</b> Check this to use cookies for requests. You can either:\n<ul><li>Enter a cookie string directly into the text field (e.g., <i>name1=value1; name2=value2</i>).</li><br>\n<li>Click 'Browse...' to select a <i>cookies.txt</i> file (Netscape format). The path will appear in the text field.</li></ul>\nThis is useful for accessing content that requires a login. The text field takes priority if filled. \nIf 'Use cookie' is checked but both the text field and browsed file are empty, it will try to load 'cookies.txt' from the app's directory.</li>\n</ul>",
+    "tour_dialog_step6_title": "⑤ Organization & Performance",
+    "tour_dialog_step6_content": "Organize your downloads and manage performance:\n<ul>\n<li><b>⚙️ Separate folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles (can use the <b>Known.txt</b> list as a fallback for folder names).</li><br>\n<li><b>Subfolder per post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li><br>\n<li><b>🚀 Use multithreading (Threads):</b> Enables faster operations. The number in the 'Threads' input means:\n<ul><li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files from each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li><br>\n<li>For <b>Single Post URLs:</b> Number of files to download simultaneously from that single post.</li></ul>\nIf unchecked, 1 thread is used. High thread counts (e.g., >40) may show a warning.</li><br>\n<li><b>Multipart Download Toggle (top-right of log area):</b><br>\nThe <b>'Multi-part: [ON/OFF]'</b> button enables/disables multi-segment downloads for individual large files. \n<ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI stutter or log spam with many small files. A warning will appear on activation. If a multipart download fails, it retries as a single stream.</li><br>\n<li><b>OFF (Default):</b> Files are downloaded in a single stream.</li></ul>\nThis is disabled if 'Links Only' or 'Archives Only' mode is active.</li><br>\n<li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Designed for sequential content.\n<ul>\n<li>Downloads posts from <b>oldest to newest</b>.</li><br>\n<li>The 'Page Range' input is disabled as all posts are fetched.</li><br>\n<li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears at the top-right of the log area when this mode is active for a creator feed. Click it to cycle between naming styles:\n<ul>\n<li><b><i>Name: Post Title (Default):</i></b> The first file in a post is named after the cleaned post title (e.g., 'My Chapter 1.jpg'). Subsequent files in the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li><br>\n<li><b><i>Name: Original File:</i></b> All files attempt to keep their original filenames. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_OriginalFile.jpg'.</li><br>\n<li><b><i>Name: Title+G.Num (Post Title + Global Numbering):</i></b> All files across all posts in the current download session are named sequentially using the cleaned post title as a prefix, followed by a global counter. E.g.: Post 'Chapter 1' (2 files) -> 'Chapter 1_001.jpg', 'Chapter 1_002.png'. The next post, 'Chapter 2' (1 file), would continue the numbering -> 'Chapter 2_003.jpg'. Multithreading for post processing is automatically disabled for this style to ensure correct global numbering.</li><br>\n<li><b><i>Name: Date Based:</i></b> Files are named sequentially (001.ext, 002.ext, ...) based on the publish order of the posts. An optional prefix (e.g., 'MySeries_') can be entered in the input field that appears next to the style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>\n</ul>\n</li><br>\n<li>For best results with the 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>\n</ul></li><br>\n<li><b>🎭 Known.txt for Smart Folder Organization:</b><br>\n<code>Known.txt</code> (in the app directory) allows fine-grained control over automatic folder organization when 'Separate folders by Name/Title' is on.\n<ul>\n<li><b>How it works:</b> Each line in <code>Known.txt</code> is an entry. \n<ul><li>A simple line like <code>My Awesome Series</code> means matching content will go into a folder named \"My Awesome Series\".</li><br>\n<li>A grouped line like <code>(Character A, Char A, Alt Name A)</code> means content matching \"Character A\", \"Char A\", OR \"Alt Name A\" will ALL go into a single folder named \"Character A Char A Alt Name A\" (after cleanup). All terms in the parentheses become aliases for that folder.</li></ul></li>\n<li><b>Smart Fallback:</b> When 'Separate folders by Name/Title' is on, and if a post doesn't match any specific 'Filter by Character(s)' entries, the downloader consults <code>Known.txt</code> to find a matching master name for folder creation.</li><br>\n<li><b>User-Friendly Management:</b> Add simple (non-grouped) names via the UI list below. For advanced editing (like creating/modifying grouped aliases), click <b>'Open Known.txt'</b> to edit the file in your text editor. The app reloads it on next use or next startup.</li>\n</ul>\n</li>\n</ul>",
+    "tour_dialog_step7_title": "⑥ Common Errors & Troubleshooting",
+    "tour_dialog_step7_content": "Sometimes downloads can run into issues. Here are some of the most common ones:\n<ul>\n<li><b>Character Input Tooltip:</b><br>\nEnter character names, comma-separated (e.g., <i>Tifa, Aerith</i>).<br>\nGroup aliases for a combined folder name: <i>(alias1, alias2, alias3)</i> becomes folder 'alias1 alias2 alias3'.<br>\nAll names in the group are used as aliases for content matching.<br><br>\nThe 'Filter: [Type]' button next to this input changes how this filter applies:<br>\n- Filter: Files: Checks individual filenames. Only matching files are downloaded.<br>\n- Filter: Title: Checks post titles. All files from a matching post are downloaded.<br>\n- Filter: Both: Checks post title first. If no match, then checks filenames.<br>\n- Filter: Comments (Beta): Checks filenames first. If no match, then checks post comments.<br><br>\nThis filter also influences folder naming if 'Separate folders by Name/Title' is enabled.</li><br>\n<li><b>502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout:</b><br>\nThese usually indicate temporary server-side problems with Kemono/Coomer. The site might be overloaded, down for maintenance, or having issues. <br>\n<b>Solution:</b> Wait a while (e.g., 30 minutes to a few hours) and try again later. Check the site directly in your browser.</li><br>\n<li><b>Connection Lost / Connection Refused / Timeout (during file download):</b><br>\nThis can happen due to your internet connection, server instability, or if the server drops the connection for a large file. <br>\n<b>Solution:</b> Check your internet. Try reducing the 'Threads' count if it's high. The app may offer to retry some failed files at the end of a session.</li><br>\n<li><b>IncompleteRead Error:</b><br>\nThe server sent less data than expected. Often a temporary network hiccup or server issue. <br>\n<b>Solution:</b> The app will often mark these files for a retry at the end of the download session.</li><br>\n<li><b>403 Forbidden / 401 Unauthorized (less common for public posts):</b><br>\nYou may not have permission to access the content. For some paywalled or private content, using the 'Use cookie' option with valid cookies from your browser session might help. Ensure your cookies are up to date.</li><br>\n<li><b>404 Not Found:</b><br>\nThe post or file URL is incorrect, or the content has been deleted from the site. Double-check the URL.</li><br>\n<li><b>'No posts found' / 'Target post not found':</b><br>\nEnsure the URL is correct and the creator/post exists. If using page ranges, make sure they are valid for the creator. For very new posts, there might be a slight delay before they appear in the API.</li><br>\n<li><b>General Slowness / App '(Not Responding)':</b><br>\nAs mentioned in Step 1, if the app appears to freeze after starting, especially with large creator feeds or many threads, please give it time. It is likely processing data in the background. Reducing the thread count can sometimes improve responsiveness if this is frequent.</li>\n</ul>",
+    "tour_dialog_step8_title": "⑦ Logs & Final Controls",
+    "tour_dialog_step8_content": "Monitoring and Controls:\n<ul>\n<li><b>📜 Progress Log / Extracted Links Log:</b> Shows detailed download messages. If '🔗 Only Links' mode is active, this area displays the extracted links.</li><br>\n<li><b>Show external links in log:</b> If checked, a secondary log panel appears below the main log to display external links found in post descriptions. <i>(This is disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</i></li><br>\n<li><b>Log Display Toggle (👁️ / 🙈 Button):</b><br>\nThis button (top-right of the log area) changes the main log view:\n<ul><li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li><br>\n<li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li></ul></li><br>\n<li><b>🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li><br>\n<li><b>⬇️ Start Download / 🔗 Extract Links / ⏸️ Pause / ❌ Cancel:</b> These buttons control the process. 'Cancel & Reset UI' stops the current operation and performs a soft reset of the UI, keeping your URL and directory inputs. 'Pause/Resume' allows for temporary halting and continuing.</li><br>\n<li>If some files fail with recoverable errors (like 'IncompleteRead'), you may be prompted to retry them at the end of a session.</li>\n</ul>\n<br>You're all set! Click <b>'Finish'</b> to close the tour and start using the downloader.",
+    "help_guide_dialog_title": "Kemono Downloader - Feature Guide",
+    "help_guide_github_tooltip": "Visit the project's GitHub page (Opens in browser)",
+    "help_guide_instagram_tooltip": "Visit our Instagram page (Opens in browser)",
+    "help_guide_discord_tooltip": "Join our Discord community (Opens in browser)",
+    "help_guide_step1_title": "① Introduction & Main Inputs",
+    "help_guide_step1_content": "<html><head/><body>\n<p>This guide provides an overview of the features, fields, and buttons in the Kemono Downloader.</p>\n<h3>Main Input Area (Top-Left)</h3>\n<ul>\n<li><b>🔗 Creator/Post Kemono URL:</b>\n<ul>\n<li>Enter the full web address of a creator's page (e.g., <i>https://kemono.su/patreon/user/12345</i>) or a specific post (e.g., <i>.../post/98765</i>).</li>\n<li>Supports Kemono (kemono.su, kemono.party) and Coomer (coomer.su, coomer.party) URLs.</li>\n</ul>\n</li>\n<li><b>Page Range (Start to End):</b>\n<ul>\n<li>For creator URLs: Specify a range of pages to grab (e.g., pages 2 to 5). Leave blank for all pages.</li>\n<li>Disabled for single post URLs or when <b>Manga/Comic Mode</b> is active.</li>\n</ul>\n</li>\n<li><b>📁 Download Location:</b>\n<ul>\n<li>Click <b>'Browse...'</b> to choose a main folder on your computer where all downloaded files will be saved.</li>\n<li>This field is required unless you are using <b>'🔗 Only Links'</b> mode.</li>\n</ul>\n</li>\n<li><b>🎨 Creator Selection Button (next to URL input):</b>\n<ul>\n<li>Click the palette icon (🎨) to open the 'Creator Selection' dialog.</li>\n<li>This dialog loads creators from your <code>creators.json</code> file (which must be in the app directory).</li>\n<li><b>Inside the dialog:</b>\n<ul>\n<li><b>Search bar:</b> Type to filter the creator list by name or service.</li>\n<li><b>Creator list:</b> Displays creators from your <code>creators.json</code>. Creators you have marked as 'favorites' (in the JSON data) appear at the top.</li>\n<li><b>Checkboxes:</b> Select one or more creators by checking the box next to their name.</li>\n<li><b>'Scope' Button (e.g., 'Scope: Characters'):</b> This button toggles the download organization when initiating downloads from this popup:\n<ul><li><i>Scope: Characters:</i> Downloads will be organized into character-named folders directly in your main 'Download Location'. Art from different creators for the same character will be grouped.</li>\n<li><i>Scope: Creators:</i> Downloads will first create a creator-named folder in your main 'Download Location'. Character-named subfolders will then be created inside each creator's folder.</li></ul>\n</li>\n<li><b>'Add Selected' Button:</b> Clicking this will take the names of all checked creators and add them to the main '🔗 Creator/Post Kemono URL' input field, separated by commas. The dialog will then close.</li>\n</ul>\n</li>\n<li>This feature provides a quick way to populate the URL field for multiple creators without manually typing or pasting each URL.</li>\n</ul>\n</li>\n</ul></body></html>",
+    "help_guide_step2_title": "② Filtering Downloads",
+    "help_guide_step2_content": "<html><head/><body>\n<h3>Filtering Downloads (Left Panel)</h3>\n<ul>\n<li><b>🎯 Filter by Character(s):</b>\n<ul>\n<li>Enter names, comma-separated (e.g., <code>Tifa, Aerith</code>).</li>\n<li><b>Grouped Aliases for Shared Folder (Separate Known.txt entries):</b> <code>(Vivi, Ulti, Uta)</code>.\n<ul><li>Content matching \"Vivi\", \"Ulti\", OR \"Uta\" will go into a shared folder named \"Vivi Ulti Uta\" (after cleanup).</li>\n<li>If these names are new, you will be prompted to add \"Vivi\", \"Ulti\", and \"Uta\" as <i>separate individual entries</i> to <code>Known.txt</code>.</li>\n</ul>\n</li>\n<li><b>Grouped Aliases for Shared Folder (Single Known.txt entry):</b> <code>(Yuffie, Sonon)~</code> (note the tilde <code>~</code>).\n<ul><li>Content matching \"Yuffie\" OR \"Sonon\" will go into a shared folder named \"Yuffie Sonon\".</li>\n<li>If new, \"Yuffie Sonon\" (with aliases Yuffie, Sonon) will be proposed to be added as a <i>single group entry</i> to <code>Known.txt</code>.</li>\n</ul>\n</li>\n<li>This filter influences folder naming if 'Separate folders by Name/Title' is enabled.</li>\n</ul>\n</li>\n<li><b>Filter: [Type] Button (Character Filter Scope):</b> Cycles how 'Filter by Character(s)' applies:\n<ul>\n<li><code>Filter: Files</code>: Checks individual filenames. A post is kept if a file matches; only matching files are downloaded. Folder naming uses the character from the matching filename.</li>\n<li><code>Filter: Title</code>: Checks post titles. All files from a matching post are downloaded. Folder naming uses the character from the matching post title.</li>\n<li><code>Filter: Both</code>: Checks post title first. If it matches, all files are downloaded. If not, it then checks filenames, and only matching files are downloaded. Folder naming prioritizes the title match, then the file match.</li>\n<li><code>Filter: Comments (Beta)</code>: Checks filenames first. If a file matches, all files in the post are downloaded. If no file match, it then checks post comments. If a comment matches, all files are downloaded. (Uses more API requests). Folder naming prioritizes the file match, then the comment match.</li>\n</ul>\n</li>\n<li><b>🗄️ Custom Folder Name (Single Post Only):</b>\n<ul>\n<li>Visible and usable only when downloading a specific post URL AND 'Separate folders by Name/Title' is enabled.</li>\n<li>Allows specifying a custom name for that single post's download folder.</li>\n</ul>\n</li>\n<li><b>🚫 Skip with words:</b>\n<ul><li>Enter words, comma-separated (e.g., <code>WIP, sketch, preview</code>) to ignore certain content.</li></ul>\n</li>\n<li><b>Scope: [Type] Button (Skip Words Scope):</b> Cycles how 'Skip with words' applies:\n<ul>\n<li><code>Scope: Files</code>: Skips individual files if their names contain any of these words.</li>\n<li><code>Scope: Posts</code>: Skips entire posts if their titles contain any of these words.</li>\n<li><code>Scope: Both</code>: Applies both (post title first, then individual files).</li>\n</ul>\n</li>\n<li><b>✂️ Remove words from name:</b>\n<ul><li>Enter words, comma-separated (e.g., <code>patreon, [HD]</code>), to be removed from downloaded filenames (case-insensitive).</li></ul>\n</li>\n<li><b>Filter Files (Radio Buttons):</b> Choose what to download:\n<ul>\n<li><code>All</code>: Downloads all file types found.</li>\n<li><code>Images/GIFs</code>: Only common image formats (JPG, PNG, GIF, WEBP, etc.) and GIFs.</li>\n<li><code>Videos</code>: Only common video formats (MP4, MKV, WEBM, MOV, etc.).</li>\n<li><code>📦 Only Archives</code>: Exclusively downloads <b>.zip</b> and <b>.rar</b> files. When this is selected, the 'Skip .zip' and 'Skip .rar' checkboxes are automatically disabled and unchecked. 'Show external links' is also disabled.</li>\n<li><code>🎧 Only Audio</code>: Downloads only common audio formats (MP3, WAV, FLAC, M4A, OGG, etc.). Other file-specific options behave as in 'Images' or 'Videos' mode.</li>\n<li><code>🔗 Only Links</code>: Extracts and displays external links from post descriptions instead of downloading files. Download-related options and 'Show external links' are disabled. The main download button becomes '🔗 Extract Links'.</li>\n</ul>\n</li>\n</ul></body></html>",
+    "help_guide_step3_title": "③ Download Options & Settings",
+    "help_guide_step3_content": "<html><head/><body>\n<h3>Download Options & Settings (Left Panel)</h3>\n<ul>\n<li><b>Skip .zip / Skip .rar:</b> Checkboxes to avoid downloading these archive file types. (Disabled and ignored if '📦 Only Archives' filter mode is selected).</li>\n<li><b>Download thumbnails only:</b> Downloads the small preview images instead of full-size files (if available).</li>\n<li><b>Compress large images (to WebP):</b> If the 'Pillow' (PIL) library is installed, images over 1.5MB will be converted to WebP format if the WebP version is significantly smaller.</li>\n<li><b>⚙️ Advanced Settings:</b>\n<ul>\n<li><b>Separate folders by Name/Title:</b> Creates subfolders based on the 'Filter by Character(s)' input or post titles. Can use the <b>Known.txt</b> list as a fallback for folder names.</li></ul></li></ul></body></html>",
+    "help_guide_step4_title": "④ Advanced Settings (Part 1)",
+    "help_guide_step4_content": "<html><head/><body><h3>⚙️ Advanced Settings (Continued)</h3><ul><ul>\n<li><b>Subfolder per post:</b> If 'Separate Folders' is on, this creates an additional subfolder for <i>each individual post</i> inside the main character/title folder.</li>\n<li><b>Use cookie:</b> Check this box to use cookies for requests.\n<ul>\n<li><b>Text Field:</b> Enter a cookie string directly (e.g., <code>name1=value1; name2=value2</code>).</li>\n<li><b>Browse...:</b> Select a <code>cookies.txt</code> file (Netscape format). The path will appear in the text field.</li>\n<li><b>Priority:</b> The text field (if filled) takes priority over a browsed file. If 'Use cookie' is checked but both are empty, it attempts to load <code>cookies.txt</code> from the app's directory.</li>\n</ul>\n</li>\n<li><b>Use multithreading & Threads Input:</b>\n<ul>\n<li>Enables faster operations. The number in the 'Threads' input means:\n<ul>\n<li>For <b>Creator Feeds:</b> Number of posts to process simultaneously. Files from each post are downloaded sequentially by its worker (unless 'Date Based' manga naming is on, which forces 1 post worker).</li>\n<li>For <b>Single Post URLs:</b> Number of files to download simultaneously from that single post.</li>\n</ul>\n</li>\n<li>If unchecked, 1 thread is used. High thread counts (e.g., >40) may show a warning.</li>\n</ul>\n</li></ul></ul></body></html>",
+    "help_guide_step5_title": "⑤ Advanced Settings (Part 2) & Actions",
+    "help_guide_step5_content": "<html><head/><body><h3>⚙️ Advanced Settings (Continued)</h3><ul><ul>\n<li><b>Show external links in log:</b> If checked, a secondary log panel appears below the main log to display external links found in post descriptions. (Disabled if '🔗 Only Links' or '📦 Only Archives' mode is active).</li>\n<li><b>📖 Manga/Comic Mode (Creator URLs only):</b> Designed for sequential content.\n<ul>\n<li>Downloads posts from <b>oldest to newest</b>.</li>\n<li>The 'Page Range' input is disabled as all posts are fetched.</li>\n<li>A <b>filename style toggle button</b> (e.g., 'Name: Post Title') appears at the top-right of the log area when this mode is active for a creator feed. Click it to cycle between naming styles:\n<ul>\n<li><code>Name: Post Title (Default)</code>: The first file in a post is named after the cleaned post title (e.g., 'My Chapter 1.jpg'). Subsequent files in the *same post* will attempt to keep their original filenames (e.g., 'page_02.png', 'bonus_art.jpg'). If the post has only one file, it's named after the post title. This is generally recommended for most manga/comics.</li>\n<li><code>Name: Original File</code>: All files attempt to keep their original filenames.</li>\n<li><code>Name: Original File</code>: All files attempt to keep their original filenames. When this style is active, an input field for an <b>optional filename prefix</b> (e.g., 'MySeries_') will appear next to this style button. Example: 'MySeries_OriginalFile.jpg'.</li>\n<li><code>Name: Title+G.Num (Post Title + Global Numbering)</code>: All files across all posts in the current download session are named sequentially using the cleaned post title as a prefix, followed by a global counter. E.g.: Post 'Chapter 1' (2 files) -> 'Chapter 1 001.jpg', 'Chapter 1 002.png'. Next post 'Chapter 2' (1 file) -> 'Chapter 2 003.jpg'. Multithreading for post processing is automatically disabled for this style.</li>\n<li><code>Name: Date Based</code>: Files are named sequentially (001.ext, 002.ext, ...) based on the publish order. When this style is active, an input field for an <b>optional filename prefix</b> (e.g., 'MySeries_') will appear next to this style button. Example: 'MySeries_001.jpg'. Multithreading for post processing is automatically disabled for this style.</li>\n</ul>\n</li>\n<li>For best results with the 'Name: Post Title', 'Name: Title+G.Num', or 'Name: Date Based' styles, use the 'Filter by Character(s)' field with the manga/series title for folder organization.</li>\n</ul>\n</li>\n</ul></li></ul>\n<h3>Main Actions (Left Panel)</h3>\n<ul>\n<li><b>⬇️ Start Download / 🔗 Extract Links:</b> This button's text and function changes based on the 'Filter Files' radio button selection. It starts the main operation.</li>\n<li><b>⏸️ Pause Download / ▶️ Resume Download:</b> Allows for temporarily halting the current download/extraction process and resuming it later. Some UI settings can be changed while paused.</li>\n<li><b>❌ Cancel & Reset UI:</b> Stops the current operation and performs a soft reset of the UI. Your URL and download directory inputs are kept, but other settings and logs are cleared.</li>\n</ul></body></html>",
+    "help_guide_step6_title": "⑥ Known Series/Characters List",
+    "help_guide_step6_content": "<html><head/><body>\n<h3>Managing the Known Series/Characters List (Bottom-Left)</h3>\n<p>This section helps manage the <code>Known.txt</code> file, which is used for smart folder organization when 'Separate folders by Name/Title' is on, especially as a fallback if a post doesn't match your active 'Filter by Character(s)' input.</p>\n<ul>\n<li><b>Open Known.txt:</b> Opens the <code>Known.txt</code> file (located in the app directory) in your default text editor for advanced editing (like creating complex grouped aliases).</li>\n<li><b>Search characters...:</b> Filters the list of known names displayed below.</li>\n<li><b>List Widget:</b> Displays the master names from your <code>Known.txt</code>. Select entries here to delete them.</li>\n<li><b>Add new series/character name (Input Field):</b> Enter a name or group to add.\n<ul>\n<li><b>Simple Name:</b> e.g., <code>My Awesome Series</code>. Adds as a single entry.</li>\n<li><b>Group for separate Known.txt entries:</b> e.g., <code>(Vivi, Ulti, Uta)</code>. Adds \"Vivi\", \"Ulti\", and \"Uta\" as three separate, individual entries to <code>Known.txt</code>.</li>\n<li><b>Group for Shared Folder & Single Known.txt Entry (Tilde <code>~</code>):</b> e.g., <code>(Character A, Char A)~</code>. Adds an entry to <code>Known.txt</code> named \"Character A Char A\". \"Character A\" and \"Char A\" become aliases for this single folder/entry.</li>\n</ul>\n</li>\n<li><b>Button ➕ Add:</b> Adds the name/group from the input field above to the list and to <code>Known.txt</code>.</li>\n<li><b>Button ⤵️ Add to Filter:</b>\n<ul>\n<li>Located next to the '➕ Add' button for the 'Known Series/Characters' list.</li>\n<li>Clicking this opens a popup window showing all names from your <code>Known.txt</code> file, each with a checkbox.</li>\n<li>The popup includes a search bar to quickly filter the list of names.</li>\n<li>You can select one or more names using the checkboxes.</li>\n<li>Click 'Add Selected' to insert the chosen names into the main window's 'Filter by Character(s)' input field.</li>\n<li>If a selected name in <code>Known.txt</code> was originally a group (e.g., defined as <code>(Boa, Hancock)</code> in Known.txt), it will be added to the filter field as <code>(Boa, Hancock)~</code>. Simple names are added as-is.</li>\n<li>'Select All' and 'Deselect All' buttons are available in the popup for convenience.</li>\n<li>Click 'Cancel' to close the popup without any changes.</li>\n</ul>\n</li>\n<li><b>Button 🗑️ Delete Selected:</b> Deletes the selected name(s) from the list and from <code>Known.txt</code>.</li>\n<li><b>Button ❓ (This one!):</b> Displays this comprehensive help guide.</li>\n</ul></body></html>",
+    "help_guide_step7_title": "⑦ Log Area & Controls",
+    "help_guide_step7_content": "<html><head/><body>\n<h3>Log Area & Controls (Right Panel)</h3>\n<ul>\n<li><b>📜 Progress Log / Extracted Links Log (Label):</b> Title for the main log area; changes if '🔗 Only Links' mode is active.</li>\n<li><b>Search links... / Button 🔍 (Link Search):</b>\n<ul><li>Visible only when '🔗 Only Links' mode is active. Allows for real-time filtering of the extracted links shown in the main log by text, URL, or platform.</li></ul>\n</li>\n<li><b>Name: [Style] Button (Manga Filename Style):</b>\n<ul><li>Visible only when <b>Manga/Comic Mode</b> is active for a creator feed and not in 'Links Only' or 'Archives Only' mode.</li>\n<li>Cycles through filename styles: <code>Post Title</code>, <code>Original File</code>, <code>Date Based</code>. (See Manga/Comic Mode section for details).</li>\n<li>When 'Original File' or 'Date Based' style is active, an input field for an <b>optional filename prefix</b> will appear next to this button.</li>\n</ul>\n</li>\n<li><b>Multi-part: [ON/OFF] Button:</b>\n<ul><li>Toggles multi-segment downloads for individual large files.\n<ul><li><b>ON:</b> Can speed up large file downloads (e.g., videos) but may increase UI stutter or log spam with many small files. A warning appears on activation. If a multipart download fails, it retries as a single stream.</li>\n<li><b>OFF (Default):</b> Files are downloaded in a single stream.</li>\n</ul>\n<li>Disabled if '🔗 Only Links' or '📦 Only Archives' mode is active.</li>\n</ul>\n</li>\n<li><b>Button 👁️ / 🙈 (Log Display Toggle):</b> Changes the main log view:\n<ul>\n<li><b>👁️ Progress Log (Default):</b> Shows all download activity, errors, and summaries.</li>\n<li><b>🙈 Missed Character Log:</b> Displays a list of key terms from post titles/content that were skipped due to your 'Filter by Character(s)' settings. Useful for identifying content you might be unintentionally missing.</li>\n</ul>\n</li>\n<li><b>Button 🔄 Reset:</b> Clears all input fields, logs, and resets temporary settings to their defaults. Can only be used when no download is active.</li>\n<li><b>Main Log Output (Text Area):</b> Displays detailed progress messages, errors, and summaries. If '🔗 Only Links' mode is active, this area displays the extracted links.</li>\n<li><b>Missed Character Log Output (Text Area):</b> (Visible via 👁️ / 🙈 toggle) Shows posts/files skipped due to character filters.</li>\n<li><b>External Log Output (Text Area):</b> Appears below the main log if 'Show external links in log' is checked. Displays external links found in post descriptions.</li>\n<li><b>Export Links Button:</b>\n<ul><li>Visible and enabled only when '🔗 Only Links' mode is active and links have been extracted.</li>\n<li>Allows saving all extracted links to a <code>.txt</code> file.</li>\n</ul>\n</li>\n<li><b>Progress Label: [Status]:</b> Displays the overall progress of the download or link extraction process (e.g., posts processed).</li>\n<li><b>File Progress Label:</b> Displays the progress of individual file downloads, including speed and size, or multipart download status.</li>\n</ul></body></html>",
+    "help_guide_step8_title": "⑧ Favorite Mode & Future Features",
+    "help_guide_step8_content": "<html><head/><body>\n<h3>Favorite Mode (Downloading from your Kemono.su Favorites)</h3>\n<p>This mode allows you to download content directly from artists you have favorited on Kemono.su.</p>\n<ul>\n<li><b>⭐ How to Activate:</b>\n<ul>\n<li>Check the <b>'⭐ Favorite Mode'</b> checkbox, located next to the '🔗 Only Links' radio button.</li>\n</ul>\n</li>\n<li><b>UI Changes in Favorite Mode:</b>\n<ul>\n<li>The '🔗 Creator/Post Kemono URL' input area is replaced with a message indicating Favorite Mode is active.</li>\n<li>The standard 'Start Download', 'Pause', 'Cancel' buttons are replaced with:\n<ul>\n<li><b>'🖼️ Favorite Artists'</b> button</li>\n<li><b>'📄 Favorite Posts'</b> button</li>\n</ul>\n</li>\n<li>The '🍪 Use cookie' option is automatically enabled and locked, as cookies are required to fetch your favorites.</li>\n</ul>\n</li>\n<li><b>Button 🖼️ Favorite Artists:</b>\n<ul>\n<li>Clicking this opens a dialog that lists all artists you have favorited on Kemono.su.</li>\n<li>You can select one or more artists from this list to download their content.</li>\n</ul>\n</li>\n<li><b>Button 📄 Favorite Posts (Future Feature):</b>\n<ul>\n<li>Downloading specific favorited <i>posts</i> (especially in a sequential, manga-like order if they are part of a series) is a feature currently in development.</li>\n<li>The best way to handle favorited posts, particularly for sequential reading like manga, is still being considered.</li>\n<li>If you have specific ideas or use-cases for how you'd like to download and organize favorited posts (e.g., \"manga-style\" from favorites), please consider opening an issue or joining the discussion on the project's GitHub page. Your input is valuable!</li>\n</ul>\n</li>\n<li><b>Favorite Download Scope (Button):</b>\n<ul>\n<li>This button (next to 'Favorite Posts') controls where the selected favorite artists' content is downloaded:\n<ul>\n<li><b><i>Scope: Selected Location:</i></b> All selected artists are downloaded into the main 'Download Location' you set in the UI. Filters apply globally to all content.</li>\n<li><b><i>Scope: Artist Folders:</i></b> For each selected artist, a subfolder (named after the artist) is automatically created inside your main 'Download Location'. That artist's content goes into their specific folder. Filters apply within each artist's dedicated folder.</li>\n</ul>\n</li>\n</ul>\n</li>\n<li><b>Filters in Favorite Mode:</b>\n<ul>\n<li>The '🎯 Filter by Character(s)', '🚫 Skip with words', and 'Filter Files' options you have set in the UI will still apply to the content downloaded from your selected favorite artists.</li>\n</ul>\n</li>\n</ul></body></html>",
+    "help_guide_step9_title": "⑨ Key Files & Tour",
+    "help_guide_step9_content": "<html><head/><body>\n<h3>Key Files Used by the Application</h3>\n<ul>\n<li><b><code>Known.txt</code>:</b>\n<ul>\n<li>Located in the application directory (where the <code>.exe</code> or <code>main.py</code> is).</li>\n<li>Stores your list of known series, characters, or series titles for automatic folder organization when 'Separate folders by Name/Title' is enabled.</li>\n<li><b>Format:</b>\n<ul>\n<li>Each line is one entry.</li>\n<li><b>Simple Name:</b> e.g., <code>My Awesome Series</code>. Matching content will go into a folder named \"My Awesome Series\".</li>\n<li><b>Grouped Aliases:</b> e.g., <code>(Character A, Char A, Alt Name A)</code>. Content matching \"Character A\", \"Char A\", OR \"Alt Name A\" will ALL go into a single folder named \"Character A Char A Alt Name A\" (after cleanup). All terms in the parentheses become aliases for that folder.</li>\n</ul>\n</li>\n<li><b>Usage:</b> Acts as a fallback for folder naming if a post doesn't match your active 'Filter by Character(s)' input. You can manage simple entries via the UI or edit the file directly for complex aliases. The app reloads it on startup or next use.</li>\n</ul>\n</li>\n<li><b><code>cookies.txt</code> (Optional):</b>\n<ul>\n<li>If you use the 'Use cookie' feature and do not provide a direct cookie string or browse for a specific file, the app will look for a file named <code>cookies.txt</code> in its directory.</li>\n<li><b>Format:</b> Must be in the Netscape cookie file format.</li>\n<li><b>Usage:</b> Allows the downloader to use your browser's login session to access content that may be behind a login on Kemono/Coomer.</li>\n</ul>\n</li>\n</ul>\n<h3>First-Time User Tour</h3>\n<ul>\n<li>On first launch (or if reset), a welcome tour dialog appears, walking you through the main features. You can skip it or choose to \"Never show this tour again.\"</li>\n</ul>\n<p><em>Many UI elements also have tooltips that appear when you hover your mouse over them, providing quick hints.</em></p>\n</body></html>"  
+}
+
 translations ["ja"]={
-"settings_dialog_title":"設定",
-"language_label":"言語:",
-"lang_english":"英語",
-"lang_japanese":"日本語",
-"theme_toggle_light":"ライトモードに切り替え",
-"theme_toggle_dark":"ダークモードに切り替え",
-"theme_tooltip_light":"アプリケーションの外観を明るく変更します。",
-"theme_tooltip_dark":"アプリケーションの外観を暗く変更します。",
-"ok_button":"OK",
-"appearance_group_title":"外観",
-"language_group_title":"言語設定",
-"creator_post_url_label":"🔗 Kemonoクリエイター/投稿URL:",
-"download_location_label":"📁 ダウンロード場所:",
-"filter_by_character_label":"🎯 キャラクターでフィルタリング (コンマ区切り):",
-"skip_with_words_label":"🚫 スキップする単語 (コンマ区切り):",
-"remove_words_from_name_label":"✂️ 名前から単語を削除:",
-"filter_all_radio":"すべて",
-"filter_images_radio":"画像/GIF",
-"filter_videos_radio":"動画",
-"filter_archives_radio":"📦 アーカイブのみ",
-"filter_links_radio":"🔗 リンクのみ",
-"filter_audio_radio":"🎧 音声のみ",
-"favorite_mode_checkbox_label":"⭐ お気に入りモード",
-"browse_button_text":"参照...",
-"char_filter_scope_files_text":"フィルター: ファイル",
-"char_filter_scope_files_tooltip":"現在のスコープ: ファイル\n\nファイル名で個々のファイルをフィルターします。いずれかのファイルが一致すれば投稿は保持されます。\nその投稿から一致するファイルのみがダウンロードされます。\n例: フィルター「ティファ」。ファイル「ティファ_アートワーク.jpg」が一致し、ダウンロードされます。\nフォルダー命名: 一致するファイル名のキャラクターを使用します。\n\nクリックして次に循環: 両方",
-"char_filter_scope_title_text":"フィルター: タイトル",
-"char_filter_scope_title_tooltip":"現在のスコープ: タイトル\n\n投稿タイトルで投稿全体をフィルターします。一致する投稿のすべてのファイルがダウンロードされます。\n例: フィルター「エアリス」。タイトル「エアリスの庭」の投稿が一致し、すべてのファイルがダウンロードされます。\nフォルダー命名: 一致する投稿タイトルのキャラクターを使用します。\n\nクリックして次に循環: ファイル",
-"char_filter_scope_both_text":"フィルター: 両方",
-"char_filter_scope_both_tooltip":"現在のスコープ: 両方 (タイトル、次にファイル)\n\n1. 投稿タイトルを確認: 一致する場合、投稿のすべてのファイルがダウンロードされます。\n2. タイトルが一致しない場合、ファイル名を確認: いずれかのファイルが一致する場合、そのファイルのみがダウンロードされます。\n例: フィルター「クラウド」。\n - 投稿「クラウド・ストライフ」(タイトル一致) -> すべてのファイルがダウンロードされます。\n - 投稿「バイクチェイス」と「クラウド_フェンリル.jpg」(ファイル一致) -> 「クラウド_フェンリル.jpg」のみがダウンロードされます。\nフォルダー命名: タイトル一致を優先し、次にファイル一致を優先します。\n\nクリックして次に循環: コメント",
-"char_filter_scope_comments_text":"フィルター: コメント (ベータ)",
-"char_filter_scope_comments_tooltip":"現在のスコープ: コメント (ベータ - ファイル優先、次にコメントをフォールバック)\n\n1. ファイル名を確認: 投稿内のいずれかのファイルがフィルターに一致する場合、投稿全体がダウンロードされます。このフィルター用語についてはコメントはチェックされません。\n2. ファイルが一致しない場合、次に投稿コメントを確認: コメントが一致する場合、投稿全体がダウンロードされます。\n例: フィルター「バレット」。\n - 投稿A: ファイル「バレット_ガンアーム.jpg」、「other.png」。ファイル「バレット_ガンアーム.jpg」が一致。投稿Aのすべてのファイルがダウンロードされます。「バレット」についてはコメントはチェックされません。\n - 投稿B: ファイル「ダイン.jpg」、「ウェポン.gif」。コメント: 「...バレット・ウォーレスの絵...」。「バレット」にファイル一致なし。コメントが一致。投稿Bのすべてのファイルがダウンロードされます。\nフォルダー命名: ファイル一致のキャラクターを優先し、次にコメント一致のキャラクターを優先します。\n\nクリックして次に循環: タイトル",
-"char_filter_scope_unknown_text":"フィルター: 不明",
-"char_filter_scope_unknown_tooltip":"現在のスコープ: 不明\n\nキャラクターフィルタースコープが不明な状態です。循環またはリセットしてください。\n\nクリックして次に循環: タイトル",
-"skip_words_input_tooltip":(
-"特定のコンテンツのダウンロードをスキップするために、単語をカンマ区切りで入力します（例: WIP, sketch, preview）。\n\n"
-"この入力の隣にある「スコープ: [タイプ]」ボタンは、このフィルターの適用方法を循環します:\n"
-"- スコープ: ファイル: 名前にこれらの単語のいずれかを含む場合、個々のファイルをスキップします。\n"
-"- スコープ: 投稿: タイトルにこれらの単語のいずれかを含む場合、投稿全体をスキップします。\n"
-"- スコープ: 両方: 両方を適用します（まず投稿タイトル、次に投稿タイトルがOKな場合は個々のファイル）。"
-),
-"remove_words_input_tooltip":(
-"ダウンロードしたファイル名から削除する単語をカンマ区切りで入力します（大文字・小文字を区別しません）。\n"
-"一般的な接頭辞や接尾辞を整理するのに役立ちます。\n"
-"例: patreon, kemono, [HD], _final"
-),
-"skip_scope_files_text":"スコープ: ファイル",
-"skip_scope_files_tooltip":"現在のスキップスコープ: ファイル\n\n「スキップする単語」のいずれかを含む場合、個々のファイルをスキップします。\n例: スキップする単語「WIP、スケッチ」。\n- ファイル「art_WIP.jpg」-> スキップ。\n- ファイル「final_art.png」-> ダウンロード (他の条件が満たされた場合)。\n\n投稿は他のスキップされないファイルについて引き続き処理されます。\nクリックして次に循環: 両方",
-"skip_scope_posts_text":"スコープ: 投稿",
-"skip_scope_posts_tooltip":"現在のスキップスコープ: 投稿\n\n「スキップする単語」のいずれかを含む場合、投稿全体をスキップします。\nスキップされた投稿のすべてのファイルは無視されます。\n例: スキップする単語「プレビュー、お知らせ」。\n- 投稿「エキサイティングなお知らせ！」-> スキップ。\n- 投稿「完成したアートワーク」-> 処理 (他の条件が満たされた場合)。\n\nクリックして次に循環: ファイル",
-"skip_scope_both_text":"スコープ: 両方",
-"skip_scope_both_tooltip":"現在のスキップスコープ: 両方 (投稿、次にファイル)\n\n1. 投稿タイトルを確認: タイトルにスキップワードが含まれている場合、投稿全体がスキップされます。\n2. 投稿タイトルがOKの場合、次に個々のファイル名を確認: ファイル名にスキップワードが含まれている場合、そのファイルのみがスキップされます。\n例: スキップする単語「WIP、スケッチ」。\n- 投稿「スケッチとWIP」(タイトル一致) -> 投稿全体がスキップされます。\n- 投稿「アートアップデート」(タイトルOK) とファイル:\n    - 「キャラクター_WIP.jpg」(ファイル一致) -> スキップ。\n    - 「最終シーン.png」(ファイルOK) -> ダウンロード。\n\nクリックして次に循環: 投稿",
-"skip_scope_unknown_text":"スコープ: 不明",
-"skip_scope_unknown_tooltip":"現在のスキップスコープ: 不明\n\nスキップワードスコープが不明な状態です。循環またはリセットしてください。\n\nクリックして次に循環: 投稿",
-"language_change_title":"言語が変更されました",
-"language_change_message":"言語が変更されました。すべての変更を完全に有効にするには、再起動が必要です。",
-"language_change_informative":"今すぐアプリケーションを再起動しますか？",
-"restart_now_button":"今すぐ再起動",
-"skip_zip_checkbox_label":".zipをスキップ",
-"skip_rar_checkbox_label":".rarをスキップ",
-"download_thumbnails_checkbox_label":"サムネイルのみダウンロード",
-"scan_content_images_checkbox_label":"コンテンツ内の画像をスキャン",
-"compress_images_checkbox_label":"WebPに圧縮",
-"separate_folders_checkbox_label":"名前/タイトルでフォルダを分ける",
-"subfolder_per_post_checkbox_label":"投稿ごとにサブフォルダ",
-"use_cookie_checkbox_label":"Cookieを使用",
-"use_multithreading_checkbox_base_label":"マルチスレッドを使用",
-"show_external_links_checkbox_label":"ログに外部リンクを表示",
-"manga_comic_mode_checkbox_label":"マンガ/コミックモード",
-"threads_label":"スレッド数:",
-"start_download_button_text":"⬇️ ダウンロード開始",
-"start_download_button_tooltip":"現在の設定でダウンロードまたはリンク抽出プロセスを開始します。",
-"extract_links_button_text":"🔗 リンクを抽出",
-"pause_download_button_text":"⏸️ 一時停止",
-"pause_download_button_tooltip":"進行中のダウンロードプロセスを一時停止します。",
-"resume_download_button_text":"▶️ 再開",
-"resume_download_button_tooltip":"ダウンロードを再開します。",
-"cancel_button_text":"❌ 中止してUIリセット",
-"cancel_button_tooltip":"進行中のダウンロード/抽出プロセスを中止し、UIフィールドをリセットします（URLとディレクトリは保持）。",
-"error_button_text":"エラー",
-"error_button_tooltip":"エラーによりスキップされたファイルを表示し、オプションで再試行します。",
-"cancel_retry_button_text":"❌ 再試行を中止",
-"known_chars_label_text":"🎭 既知の番組/キャラクター (フォルダ名用):",
-"open_known_txt_button_text":"Known.txtを開く",
-"known_chars_list_tooltip":"このリストには、「フォルダを分ける」がオンで、特定の「キャラクターでフィルタリング」が提供されていないか、投稿に一致しない場合に、自動フォルダ作成に使用される名前が含まれています。\n頻繁にダウンロードするシリーズ、ゲーム、またはキャラクターの名前を追加してください。",
-"open_known_txt_button_tooltip":"デフォルトのテキストエディタで「Known.txt」ファイルを開きます。\nファイルはアプリケーションのディレクトリにあります。",
-"add_char_button_text":"➕ 追加",
-"add_char_button_tooltip":"入力フィールドの名前を「既知の番組/キャラクター」リストに追加します。",
-"add_to_filter_button_text":"⤵️ フィルターに追加",
-"add_to_filter_button_tooltip":"「既知の番組/キャラクター」リストから名前を選択して、上の「キャラクターでフィルタリング」フィールドに追加します。",
-"delete_char_button_text":"🗑️ 選択項目を削除",
-"delete_char_button_tooltip":"選択した名前を「既知の番組/キャラクター」リストから削除します。",
-"radio_all_tooltip":"投稿で見つかったすべてのファイルタイプをダウンロードします。",
-"radio_images_tooltip":"一般的な画像形式（JPG、PNG、GIF、WEBPなど）のみをダウンロードします。",
-"radio_videos_tooltip":"一般的な動画形式（MP4、MKV、WEBM、MOVなど）のみをダウンロードします。",
-"radio_only_archives_tooltip":".zipおよび.rarファイルのみを排他的にダウンロードします。他のファイル固有のオプションは無効になります。",
-"radio_only_audio_tooltip":"一般的な音声形式（MP3、WAV、FLACなど）のみをダウンロードします。",
-"radio_only_links_tooltip":"ファイルをダウンロードする代わりに、投稿の説明から外部リンクを抽出して表示します。\nダウンロード関連のオプションは無効になります。",
-"favorite_mode_checkbox_tooltip":"お気に入りモードを有効にして、保存したアーティスト/投稿を閲覧します。\nこれにより、URL入力がお気に入り選択ボタンに置き換えられます。",
-"skip_zip_checkbox_tooltip":"チェックすると、.zipアーカイブファイルはダウンロードされません。\n（「アーカイブのみ」が選択されている場合は無効）。",
-"skip_rar_checkbox_tooltip":"チェックすると、.rarアーカイブファイルはダウンロードされません。\n（「アーカイブのみ」が選択されている場合は無効）。",
-"download_thumbnails_checkbox_tooltip":"フルサイズのファイルの代わりにAPIから小さなプレビュー画像をダウンロードします（利用可能な場合）。\n「コンテンツ内の画像をスキャン」もチェックされている場合、このモードではコンテンツスキャンで見つかった画像のみがダウンロードされます（APIサムネイルは無視）。",
-"scan_content_images_checkbox_tooltip":"チェックすると、ダウンローダーは投稿のHTMLコンテンツをスキャンして画像URL（<img>タグまたは直接リンクから）を探します。\nこれには、<img>タグの相対パスを完全なURLに解決することも含まれます。\n<img>タグの相対パス（例: /data/image.jpg）は完全なURLに解決されます。\n画像が投稿の説明にあるがAPIのファイル/添付ファイルリストにない場合に便利です。",
-"compress_images_checkbox_tooltip":"1.5MBを超える画像をWebP形式に圧縮します（Pillowが必要）。",
-"use_subfolders_checkbox_tooltip":"「キャラクターでフィルタリング」入力または投稿タイトルに基づいてサブフォルダを作成します。\n特定のフィルターが投稿に一致しない場合、フォルダ名のフォールバックとして「既知の番組/キャラクター」リストを使用します。\n単一投稿の「キャラクターでフィルタリング」入力と「カスタムフォルダ名」を有効にします。",
-"use_subfolder_per_post_checkbox_tooltip":"投稿ごとにサブフォルダを作成します。「フォルダを分ける」もオンの場合、キャラクター/タイトルフォルダ内に作成されます。",
-"use_cookie_checkbox_tooltip":"チェックすると、リクエストにアプリケーションディレクトリの「cookies.txt」（Netscape形式）のCookieを使用しようとします。\nKemono/Coomerでログインが必要なコンテンツにアクセスするのに便利です。",
-"cookie_text_input_tooltip":"Cookie文字列を直接入力します。\n「Cookieを使用」がチェックされていて、「cookies.txt」が見つからないか、このフィールドが空でない場合に使用されます。\n形式はバックエンドがどのように解析するかに依存します（例: 「name1=value1; name2=value2」）。",
-"use_multithreading_checkbox_tooltip":"同時操作を有効にします。詳細については、「スレッド数」入力を参照してください。",
-"thread_count_input_tooltip":(
-"同時操作の数。\n- 単一投稿: 同時ファイルダウンロード数（1～10推奨）。\n"
-"- クリエイターフィードURL: 同時に処理する投稿数（1～200推奨）。\n"
-"  各投稿内のファイルはそのワーカーによって1つずつダウンロードされます。\n「マルチスレッドを使用」がオフの場合、1スレッドが使用されます。"),
-"external_links_checkbox_tooltip":"チェックすると、メインログの下にセカンダリログパネルが表示され、投稿の説明で見つかった外部リンクが表示されます。\n（「リンクのみ」または「アーカイブのみ」モードがアクティブな場合は無効）。",
-"manga_mode_checkbox_tooltip":"投稿を古いものから新しいものへダウンロードし、ファイル名を投稿タイトルに基づいて変更します（クリエイターフィードのみ）。",
-"progress_log_label_text":"📜 進捗ログ:",
-"multipart_on_button_text":"マルチパート: オン",
-"multipart_on_button_tooltip":"マルチパートダウンロード: オン\n\n大きなファイルを複数のセグメントで同時にダウンロードします。\n- 単一の大きなファイル（例: 動画）のダウンロードを高速化できます。\n- CPU/ネットワーク使用量が増加する可能性があります。\n- 多くの小さなファイルがあるフィードでは、速度の利点はなく、UI/ログが煩雑になることがあります。\n- マルチパートが失敗した場合、シングルストリームで再試行します。\n\nクリックしてオフにします。",
-"multipart_off_button_text":"マルチパート: オフ",
-"multipart_off_button_tooltip":"マルチパートダウンロード: オフ\n\nすべてのファイルが単一のストリームを使用してダウンロードされます。\n- 安定しており、ほとんどのシナリオ、特に多くの小さなファイルに適しています。\n- 大きなファイルは連続してダウンロードされます。\n\nクリックしてオンにします（アドバイザリを参照）。",
-"reset_button_text":"🔄 リセット",
-"reset_button_tooltip":"すべての入力とログをデフォルト状態にリセットします（アイドル時のみ）。",
-"progress_idle_text":"進捗: アイドル",
-"missed_character_log_label_text":"🚫 見逃したキャラクターログ:",
-"creator_popup_title":"クリエイター選択",
-"creator_popup_search_placeholder":"名前、サービスで検索、またはクリエイターURLを貼り付け...",
-"creator_popup_add_selected_button":"選択項目を追加",
-"creator_popup_scope_characters_button":"スコープ: キャラクター",
-"creator_popup_scope_creators_button":"スコープ: クリエイター",
-"creator_popup_title_fetching": "クリエイター投稿",
-"creator_popup_posts_area_title": "取得済み投稿",
-"creator_popup_posts_search_placeholder": "タイトルで取得済み投稿を検索...",
-"no_posts_fetched_yet_status": "まだ投稿が取得されていません。",
-"fetched_posts_count_label": "{count}件の投稿を取得しました。キューに追加するものを選択してください。",
-"no_posts_found_for_selection": "選択したクリエイターの投稿が見つかりませんでした。",
-"fetched_posts_count_label_filtered": "フィルターに一致する{count}件の投稿を表示中。",
-"no_posts_match_search_filter": "検索フィルターに一致する投稿がありません。",
-"fetch_error_for_creator_label": "{creator_name}の取得エラー",
-"post_fetch_cancelled_status_done": "投稿の取得がキャンセルされました。",
-"failed_to_fetch_or_no_posts_label": "投稿の取得に失敗したか、投稿が見つかりませんでした。",
-"select_posts_to_queue_message": "キューに追加する投稿を少なくとも1つ選択してください。",
-"favorite_artists_button_text":"🖼️ お気に入りアーティスト",
-"favorite_artists_button_tooltip":"Kemono.su/Coomer.suでお気に入りのアーティストを閲覧してダウンロードします。",
-"favorite_posts_button_text":"📄 お気に入り投稿",
-"favorite_posts_button_tooltip":"Kemono.su/Coomer.suでお気に入りの投稿を閲覧してダウンロードします。",
-"favorite_scope_selected_location_text":"スコープ: 選択場所",
-"favorite_scope_selected_location_tooltip":"現在のお気に入りダウンロードスコープ: 選択場所\n\n選択したすべてのお気に入りアーティスト/投稿は、UIで指定されたメインの「ダウンロード場所」にダウンロードされます。\nフィルター（キャラクター、スキップワード、ファイルタイプ）は、これらのアーティストのすべてのコンテンツにグローバルに適用されます。\n\nクリックして変更: アーティストフォルダ",
-"favorite_scope_artist_folders_text":"スコープ: アーティストフォルダ",
-"favorite_scope_artist_folders_tooltip":"現在のお気に入りダウンロードスコープ: アーティストフォルダ\n\n選択した各お気に入りアーティスト/投稿に対して、メインの「ダウンロード場所」内に新しいサブフォルダ（アーティスト名）が作成されます。\nそのアーティスト/投稿のコンテンツは、特定のサブフォルダにダウンロードされます。\nフィルター（キャラクター、スキップワード、ファイルタイプ）は、各アーティストのフォルダ内で適用されます。\n\nクリックして変更: 選択場所",
-"favorite_scope_unknown_text":"スコープ: 不明",
-"favorite_scope_unknown_tooltip":"お気に入りのダウンロードスコープが不明です。クリックして循環します。",
-"manga_style_post_title_text":"名前: 投稿タイトル",
-"manga_style_original_file_text":"名前: 元ファイル名",
-"manga_style_date_based_text":"名前: 日付順",
-"manga_style_title_global_num_text":"名前: タイトル+通し番号",
-"manga_style_unknown_text":"名前: 不明なスタイル",
-"manga_style_post_title_tooltip":"""ファイルは投稿のタイトルに基づいて名前が付けられます。
-- 投稿の最初のファイルは、投稿のクリーンなタイトルを取得します（例：「私の第1章.jpg」）。
-- 投稿に複数のファイルがある場合、後続のファイルも投稿タイトルを使用して名前が付けられますが、「_1」、「_2」などの数字の接尾辞が付きます（例：「私の第1章_1.png」、「私の第1章_2.gif」）。接尾辞のカウンターは2番目のファイルから1で始まります。
-- 投稿にファイルが1つしかない場合は、接尾辞なしで投稿のタイトルに基づいて名前が付けられます。
-
-例：投稿「第一章」（3ファイル：originala.jpg、originalb.png、originalc.gif）
-出力：「第一章.jpg」、「第一章_1.png」、「第一章_2.gif」。""",
-"manga_style_original_file_tooltip":"ファイルは元のファイル名を保持しようとします。\n\n- このスタイルボタンの隣に表示される入力フィールドにオプションのプレフィックスを入力できます。\n\n例（プレフィックス「私のシリーズ」）：「私のシリーズ_元のファイル.jpg」。\n例（プレフィックスなし）：「元のファイル.jpg」。",
-"manga_style_date_based_tooltip":"ファイルは投稿の公開順に基づいて順番に名前が付けられます（例：001.ext、002.ext）。\n\n- このスタイルボタンの隣に表示される入力フィールドにオプションのプレフィックスを入力できます。\n- このスタイルでは、正しい番号付けを保証するために、投稿処理のマルチスレッドは自動的に無効になります。\n\n例（プレフィックス「私の漫画」）：「私の漫画_001.jpg」、「私の漫画_002.png」。\n例（プレフィックスなし）：「001.jpg」、「002.png」。",
-"manga_style_title_global_num_tooltip":"ファイルは投稿のタイトルと、すべての投稿にわたるグローバルな連番で名前が付けられます。\n\n- 形式：「[クリーンな投稿タイトル]_[グローバルカウンター].[ext]」\n- カウンター（例：_001、_002）は、現在のセッションでダウンロードされたすべてのファイルに対してインクリメントされます。\n- このスタイルでは、正しい番号付けを保証するために、投稿処理のマルチスレッドは自動的に無効になります。\n\n例：投稿「第1章」（2ファイル）->「第1章_001.jpg」、「第1章_002.png」。\n次の投稿「第2章」（1ファイル）->「第2章_003.jpg」。",
-"manga_style_unknown_tooltip":"漫画のファイル名スタイルは現在不明です。これは予期しないことです。有効なスタイルに切り替えてください。",
-"manga_style_cycle_tooltip_suffix":"クリックして次のスタイルに切り替えます。",
-"fav_artists_dialog_title":"お気に入りアーティスト",
-"fav_artists_loading_status":"お気に入りアーティストを読み込み中...",
-"fav_artists_search_placeholder":"アーティストを検索...",
-"fav_artists_select_all_button":"すべて選択",
-"fav_artists_deselect_all_button":"すべて選択解除",
-"fav_artists_download_selected_button":"選択項目をダウンロード",
-"fav_artists_cancel_button":"キャンセル",
-"fav_artists_loading_from_source_status":"⏳ {source_name} からお気に入りを読み込み中...",
-"fav_artists_found_status":"{count} 人のお気に入りアーティストが見つかりました。",
-"fav_artists_none_found_status":"Kemono.suまたはCoomer.suにお気に入りアーティストが見つかりません。",
-"fav_artists_failed_status":"お気に入りの取得に失敗しました。",
-"fav_artists_cookies_required_status":"エラー: Cookieが有効ですが、どのソースからも読み込めませんでした。",
-"fav_artists_no_favorites_after_processing":"処理後にお気に入りアーティストが見つかりませんでした。",
-"fav_artists_no_selection_title":"選択なし",
-"fav_artists_no_selection_message":"ダウンロードするアーティストを少なくとも1人選択してください。",
-
-"fav_posts_dialog_title":"お気に入り投稿",
-"fav_posts_loading_status":"お気に入り投稿を読み込み中...",
-"fav_posts_search_placeholder":"投稿を検索 (タイトル、クリエイター、ID、サービス)...",
-"fav_posts_select_all_button":"すべて選択",
-"fav_posts_deselect_all_button":"すべて選択解除",
-"fav_posts_download_selected_button":"選択項目をダウンロード",
-"fav_posts_cancel_button":"キャンセル",
-"fav_posts_cookies_required_error":"エラー: お気に入り投稿にはCookieが必要ですが、読み込めませんでした。",
-"fav_posts_auth_failed_title":"認証失敗 (投稿)",
-"fav_posts_auth_failed_message":"認証エラーのため、お気に入り{domain_specific_part}を取得できませんでした:\n\n{error_message}\n\nこれは通常、サイトのCookieがないか、無効であるか、期限切れであることを意味します。Cookieの設定を確認してください。",
-"fav_posts_fetch_error_title":"取得エラー",
-"fav_posts_fetch_error_message":"{domain}からのお気に入り取得エラー{error_message_part}",
-"fav_posts_no_posts_found_status":"お気に入り投稿が見つかりません。",
-"fav_posts_found_status":"{count}件のお気に入り投稿が見つかりました。",
-"fav_posts_display_error_status":"投稿の表示エラー: {error}",
-"fav_posts_ui_error_title":"UIエラー",
-"fav_posts_ui_error_message":"お気に入り投稿を表示できませんでした: {error}",
-"fav_posts_auth_failed_message_generic":"認証エラーのため、お気に入り{domain_specific_part}を取得できませんでした。これは通常、サイトのCookieがないか、無効であるか、期限切れであることを意味します。Cookieの設定を確認してください。",
-"key_fetching_fav_post_list_init":"お気に入り投稿リストを取得中...", # JA_ADD_KEY_HERE
-"empty_popup_button_tooltip_text": "クリエイター選択を開く (creators.json を参照)",
-"key_fetching_from_source_kemono_su":"Kemono.suからお気に入りを取得中...",
-"key_fetching_from_source_coomer_su":"Coomer.suからお気に入りを取得中...",
-"fav_posts_fetch_cancelled_status":"お気に入り投稿の取得がキャンセルされました。",
-"items_in_queue_placeholder": "ポップアップからキューに{count}件のアイテムがあります。",
-"post_fetch_finished_status": "選択したクリエイターの投稿の取得が完了しました。",
-
-"known_names_filter_dialog_title":"既知の名前をフィルターに追加",
-"known_names_filter_search_placeholder":"名前を検索...",
-"known_names_filter_select_all_button":"すべて選択",
-"known_names_filter_deselect_all_button":"すべて選択解除",
-"known_names_filter_add_selected_button":"選択項目を追加",
-
-"error_files_dialog_title":"エラーによりスキップされたファイル",
-"error_files_no_errors_label":"前回のセッションまたは再試行後にエラーでスキップされたと記録されたファイルはありません。",
-"error_files_found_label":"以下の{count}個のファイルがダウンロードエラーによりスキップされました:",
-"error_files_select_all_button":"すべて選択",
-"error_files_retry_selected_button":"選択項目を再試行",
-"error_files_export_urls_button":"URLを.txtにエクスポート",
-"error_files_no_selection_retry_message":"再試行するファイルを少なくとも1つ選択してください。",
-"error_files_no_errors_export_title":"エラーなし",
-"error_files_no_errors_export_message":"エクスポートするエラーファイルのURLはありません。",
-"error_files_no_urls_found_export_title":"URLが見つかりません",
-"error_files_no_urls_found_export_message":"エラーファイルリストからエクスポートするURLを抽出できませんでした。",
-"error_files_save_dialog_title":"エラーファイルのURLを保存",
-"error_files_export_success_title":"エクスポート成功",
-"error_files_export_success_message":"{count}件のエントリを正常にエクスポートしました:\n{filepath}",
-"error_files_export_error_title":"エクスポートエラー",
-"error_files_export_error_message":"ファイルリンクをエクスポートできませんでした: {error}",
-"export_options_dialog_title":"エクスポートオプション",
-"export_options_description_label":"エラーファイルリンクのエクスポート形式を選択してください:",
-"export_options_radio_link_only":"1行に1リンク (URLのみ)",
-"export_options_radio_link_only_tooltip":"失敗した各ファイルの直接ダウンロードURLのみを1行に1URLずつエクスポートします。",
-"export_options_radio_with_details":"詳細付きでエクスポート (URL [投稿、ファイル情報])",
-"export_options_radio_with_details_tooltip":"URLの後に投稿タイトル、投稿ID、元のファイル名などの詳細を角括弧で囲んでエクスポートします。",
-"export_options_export_button":"エクスポート",
-
-"no_errors_logged_title":"エラー記録なし",
-"no_errors_logged_message":"前回のセッションまたは再試行後にエラーでスキップされたと記録されたファイルはありません。",
-
-"progress_initializing_text":"進捗: 初期化中...",
-"progress_posts_text":"進捗: {processed_posts} / {total_posts} 件の投稿 ({progress_percent:.1f}%)",
-"progress_processing_post_text":"進捗: 投稿 {processed_posts} を処理中...",
-"progress_starting_text":"進捗: 開始中...",
-"downloading_file_known_size_text":"'{filename}' をダウンロード中 ({downloaded_mb:.1f}MB / {total_mb:.1f}MB)",
-"downloading_file_unknown_size_text":"'{filename}' をダウンロード中 ({downloaded_mb:.1f}MB)",
-"downloading_multipart_text":"DL '{filename}...': {downloaded_mb:.1f}/{total_mb:.1f} MB ({parts}パーツ @ {speed:.2f} MB/s)",
-"downloading_multipart_initializing_text":"ファイル: {filename} - パーツを初期化中...",
-"status_cancelled_by_user":"ユーザーによってキャンセルされました",
-"files_downloaded_label":"ダウンロード済み",
-"files_skipped_label":"スキップ済み",
-"retry_finished_text":"再試行完了",
-"succeeded_text":"成功",
-"status_completed":"完了",
-"failed_text":"失敗",
-"ready_for_new_task_text":"新しいタスクの準備ができました。",
-"fav_mode_active_label_text":"⭐ お気に入りモードが有効です。お気に入りのアーティスト/投稿を選択する前に、以下のフィルターを選択してください。下のアクションを選択してください。",
-"export_links_button_text":"リンクをエクスポート",
-"download_extracted_links_button_text":"ダウンロード",
-"log_display_mode_links_view_text":"🔗 リンク表示",
-"download_selected_links_dialog_button_text":"選択項目をダウンロード",
-"download_external_links_dialog_title":"選択した外部リンクのダウンロード",
-"download_external_links_dialog_main_label":"サポートされているリンクが{count}件見つかりました (Mega, GDrive, Dropbox)。ダウンロードするものを選択してください:",
-"select_all_button_text":"すべて選択",
-"deselect_all_button_text":"すべて選択解除",
-"download_selected_button_text":"選択項目をダウンロード",
-"link_input_placeholder_text":"例: https://kemono.su/patreon/user/12345 または .../post/98765",
-"link_input_tooltip_text":"Kemono/Coomerクリエイターのページまたは特定の投稿の完全なURLを入力します。\n例 (クリエイター): https://kemono.su/patreon/user/12345\n例 (投稿): https://kemono.su/patreon/user/12345/post/98765",
-"dir_input_placeholder_text":"ダウンロードを保存するフォルダを選択",
-"dir_input_tooltip_text":"ダウンロードされたすべてのコンテンツが保存されるメインフォルダを入力または参照します。\n「リンクのみ」モードが選択されていない限り必須です。",
-"character_input_placeholder_text":"例: ティファ, エアリス, (クラウド, ザックス)",
-"custom_folder_input_placeholder_text":"任意: この投稿を特定のフォルダに保存",
-"custom_folder_input_tooltip_text":"単一の投稿URLをダウンロードし、かつ「名前/タイトルでフォルダを分ける」が有効な場合、\nその投稿のダウンロードフォルダにカスタム名を入力できます。\n例: お気に入りのシーン",
-"skip_words_input_placeholder_text":"例: WM, WIP, スケッチ, プレビュー",
-"remove_from_filename_input_placeholder_text":"例: patreon, HD",
-"cookie_text_input_placeholder_no_file_selected_text":"Cookie文字列 (cookies.txt未選択時)",
-"cookie_text_input_placeholder_with_file_selected_text":"選択されたCookieファイルを使用中 (参照...を参照)",
-"character_search_input_placeholder_text":"キャラクターを検索...",
-"character_search_input_tooltip_text":"既知の番組/キャラクターのリストを以下でフィルタリングするには、ここに入力します。",
-"new_char_input_placeholder_text":"新しい番組/キャラクター名を追加",
-"new_char_input_tooltip_text":"上記のリストに新しい番組、ゲーム、またはキャラクター名を入力します。",
-"link_search_input_placeholder_text":"リンクを検索...",
-"link_search_input_tooltip_text":"「リンクのみ」モードの場合、表示されるリンクをテキスト、URL、またはプラットフォームでフィルタリングするには、ここに入力します。",
-"manga_date_prefix_input_placeholder_text":"マンガファイル名のプレフィックス",
-"manga_date_prefix_input_tooltip_text":"「日付順」または「元ファイル名」マンガファイル名のオプションのプレフィックス（例: 「シリーズ名」）。\n空の場合、ファイルはプレフィックスなしのスタイルに基づいて名前が付けられます。",
-"empty_popup_button_tooltip_text":"クリエイター選択を開く\n\n「creators.json」ファイルからクリエイターを閲覧・選択します。\n選択したクリエイター名がURL入力フィールドに追加されます。",
-"log_display_mode_progress_view_text":"⬇️ 進捗表示",
-"cookie_browse_button_tooltip":"Cookieファイル（Netscape形式、通常はcookies.txt）を参照します。\n「Cookieを使用」がチェックされていて、上のテキストフィールドが空の場合に使用されます。",
-"page_range_label_text":"ページ範囲:",
-"thread_count_input_tooltip":"同時操作の数。クリエイターフィードの投稿処理または単一投稿のファイルダウンロードに影響します。「マルチスレッドを使用」がオフの場合、1スレッドが使用されます。",
-"start_page_input_placeholder":"開始",
-"start_page_input_tooltip":"クリエイターURLの場合: ダウンロードを開始する開始ページ番号を指定します（例: 1, 2, 3）。\n最初のページから開始する場合は空白にするか、1に設定します。\n単一投稿URLまたはマンガ/コミックモードでは無効です。",
-"page_range_to_label_text":"から",
-"end_page_input_placeholder":"終了",
-"end_page_input_tooltip":"クリエイターURLの場合: ダウンロードする終了ページ番号を指定します（例: 5, 10）。\n開始ページからすべてのページをダウンロードする場合は空白にします。\n単一投稿URLまたはマンガ/コミックモードでは無効です。",
-"known_names_help_button_tooltip_text":"アプリケーション機能ガイドを開きます。",
-"future_settings_button_tooltip_text":"アプリケーション設定を開きます（テーマ、言語など）。",
-"link_search_button_tooltip_text":"表示されたリンクをフィルター",
-"confirm_add_all_dialog_title":"新しい名前の追加を確認",
-"confirm_add_all_info_label":"「キャラクターでフィルタリング」入力からの以下の新しい名前/グループは「Known.txt」にありません。\n追加すると、将来のダウンロードのフォルダ整理が改善されます。\n\nリストを確認してアクションを選択してください:",
-"confirm_add_all_select_all_button":"すべて選択",
-"confirm_add_all_deselect_all_button":"すべて選択解除",
-"confirm_add_all_add_selected_button":"選択項目をKnown.txtに追加",
-"confirm_add_all_skip_adding_button":"これらの追加をスキップ",
-"confirm_add_all_cancel_download_button":"ダウンロードをキャンセル",
-"cookie_help_dialog_title":"Cookieファイルの説明",
-"cookie_help_instruction_intro":"<p>Cookieを使用するには、通常ブラウザから<b>cookies.txt</b>ファイルが必要です。</p>",
-"cookie_help_how_to_get_title":"<p><b>cookies.txtの入手方法:</b></p>",
-"download_history_dialog_title_first_processed": "最初に処理されたファイルの履歴",
-"first_files_processed_header": "このセッションで最初に処理された {count} 個のファイル:",
-"history_file_label": "ファイル:",
-"history_from_post_label": "投稿元:",
-"history_post_uploaded_label": "投稿アップロード日時:",
-"history_file_downloaded_label": "ファイルダウンロード日時:",
-"download_history_dialog_title_empty": "ダウンロード履歴 (空)",
-"no_download_history_header": "まだダウンロードがありません",
-"cookie_help_step1_extension_intro":"<li>Chromeベースのブラウザに「Get cookies.txt LOCALLY」拡張機能をインストールします:<br><a href=\"https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\" style=\"color: #87CEEB;\">ChromeウェブストアでGet cookies.txt LOCALLYを入手</a></li>",
-"cookie_help_step2_login":"<li>ウェブサイト（例: kemono.suまたはcoomer.su）にアクセスし、必要に応じてログインします。</li>",
-"cookie_help_step3_click_icon":"<li>ブラウザのツールバーにある拡張機能のアイコンをクリックします。</li>",
-"cookie_help_step4_export":"<li>「エクスポート」ボタン（例: 「名前を付けてエクスポート」、「cookies.txtをエクスポート」 - 正確な文言は拡張機能のバージョンによって異なる場合があります）をクリックします。</li>",
-"cookie_help_step5_save_file":"<li>ダウンロードした<code>cookies.txt</code>ファイルをコンピュータに保存します。</li>",
-"cookie_help_step6_app_intro":"<li>このアプリケーションで:<ul>",
-"cookie_help_step6a_checkbox":"<li>「Cookieを使用」チェックボックスがオンになっていることを確認します。</li>",
-"cookie_help_step6b_browse":"<li>Cookieテキストフィールドの隣にある「参照...」ボタンをクリックします。</li>",
-"cookie_help_step6c_select":"<li>保存した<code>cookies.txt</code>ファイルを選択します。</li></ul></li>",
-"cookie_help_alternative_paste":"<p>または、一部の拡張機能ではCookie文字列を直接コピーできる場合があります。その場合は、ファイルを参照する代わりにテキストフィールドに貼り付けることができます。</p>",
-"cookie_help_proceed_without_button":"Cookieなしでダウンロード",
-"cookie_help_cancel_download_button":"ダウンロードをキャンセル",
-"character_input_tooltip":(
-"キャラクター名を入力してください（カンマ区切り）。「フォルダを分ける」が有効な場合、高度なグルーピングに対応し、フォルダ名に影響します。\n\n"
-"例:\n"
-"- Nami → 'Nami'に一致し、「Nami」フォルダが作成されます。\n"
-"- (Ulti, Vivi) → いずれかに一致し、「Ulti Vivi」フォルダが作成され、両方の名前がKnown.txtに個別に追加されます。\n"
-"- (Boa, Hancock)~ → いずれかに一致し、「Boa Hancock」フォルダが作成され、Known.txtに1つのグループとして追加されます。\n\n"
-"入力された名前は、コンテンツ照合時のエイリアスとして機能します。\n\n"
-"フィルターモード（ボタンで切り替え）:\n"
-"- ファイル: ファイル名でフィルターします。\n"
-"- タイトル: 投稿タイトルでフィルターします。\n"
-"- 両方: まず投稿タイトルを確認し、一致しない場合はファイル名を確認します。\n"
-"- コメント（ベータ版）: まずファイル名を確認し、一致しない場合は投稿コメントを確認します。"
-),
-"tour_dialog_title":"Kemonoダウンローダーへようこそ！",
-"tour_dialog_never_show_checkbox":"今後このツアーを表示しない",
-"tour_dialog_skip_button":"ツアーをスキップ",
-"tour_dialog_back_button":"戻る",
-"tour_dialog_next_button":"次へ",
-"tour_dialog_finish_button":"完了",
-"tour_dialog_step1_title":"👋 ようこそ！",
-"tour_dialog_step1_content":"""このクイックツアーでは、Kemonoダウンローダーの主な機能（強化されたフィルタリング、マンガモードの改善、Cookie管理など、最近の更新を含む）を説明します。
-        <ul>
-        <li>私の目標は、<b>Kemono</b>と<b>Coomer</b>からコンテンツを簡単にダウンロードできるようにすることです。</li><br>
-        <li><b>🎨 クリエイター選択ボタン:</b> URL入力の隣にあるパレットアイコンをクリックするとダイアログが開きます。<code>creators.json</code>ファイルからクリエイターを閲覧・選択して、URL入力に名前をすばやく追加できます。</li><br>
-        <li><b>重要ヒント: アプリが「(応答なし)」になる場合</b><br>
-          「ダウンロード開始」をクリックした後、特に大規模なクリエイターフィードや多数のスレッドを使用する場合、アプリケーションが一時的に「(応答なし)」と表示されることがあります。お使いのオペレーティングシステム（Windows、macOS、Linux）が「プロセスの終了」や「強制終了」を提案することさえあるかもしれません。<br>
-          <b>しばらくお待ちください！</b> アプリは多くの場合、バックグラウンドで懸命に動作しています。強制終了する前に、選択した「ダウンロード場所」をファイルエクスプローラーで確認してみてください。新しいフォルダが作成されたり、ファイルが表示されたりしている場合は、ダウンロードが正しく進行していることを意味します。応答性が回復するまでしばらく時間をおいてください。</li><br>
-        <li><b>次へ</b>と<b>戻る</b>ボタンで移動します。</li><br>
-        <li>多くのオプションには、マウスオーバーすると詳細が表示されるツールチップがあります。</li><br>
-        <li>いつでもこのガイドを閉じるには<b>ツアーをスキップ</b>をクリックします。</li><br>        
-        <li>今後の起動時にこれを見たくない場合は<b>「今後このツアーを表示しない」</b>をチェックします。</li>
-        </ul>""",
-"tour_dialog_step2_title":"①はじめに",
-"tour_dialog_step2_content":"""ダウンロードの基本から始めましょう:
-        <ul>
-        <li><b>🔗 Kemonoクリエイター/投稿URL:</b><br>
-          クリエイターのページ（例: <i>https://kemono.su/patreon/user/12345</i>）
-        または特定の投稿（例: <i>.../post/98765</i>）の完全なウェブアドレス（URL）を貼り付けます。</li><br>
-          またはCoomerクリエイター（例: <i>https://coomer.su/onlyfans/user/artistname</i>）
-        <li><b>📁 ダウンロード場所:</b><br>
-          「参照...」をクリックして、ダウンロードしたすべてのファイルが保存されるコンピュータ上のフォルダを選択します。
-        「リンクのみ」モードを使用している場合を除き、これは必須です。</li><br>
-        <li><b>📄 ページ範囲（クリエイターURLのみ）:</b><br>
-          クリエイターのページからダウンロードする場合、取得するページの範囲を指定できます（例: 2ページから5ページ）。
-        すべてのページを取得するには空白のままにします。これは単一の投稿URLまたは<b>マンガ/コミックモード</b>がアクティブな場合は無効になります。</li>
-        </ul>""",
-"tour_dialog_step3_title":"② ダウンロードのフィルタリング",
-"tour_dialog_step3_content":"""これらのフィルターでダウンロードするものを絞り込みます（ほとんどは「リンクのみ」または「アーカイブのみ」モードでは無効になります）:
-        <ul>
-        <li><b>🎯 キャラクターでフィルタリング:</b><br>
-          キャラクター名をコンマ区切りで入力します（例: <i>ティファ, エアリス</i>）。結合されたフォルダ名のエイリアスをグループ化します: <i>(エイリアス1, エイリアス2, エイリアス3)</i> は「エイリアス1 エイリアス2 エイリアス3」（クリーニング後）というフォルダになります。グループ内のすべての名前が照合用のエイリアスとして使用されます。<br>
-          この入力の隣にある<b>「フィルター: [タイプ]」</b>ボタンは、このフィルターの適用方法を循環します:
-          <ul><li><i>フィルター: ファイル:</i> 個々のファイル名を確認します。いずれかのファイルが一致すれば投稿は保持され、一致するファイルのみがダウンロードされます。「フォルダを分ける」がオンの場合、フォルダ名は一致するファイル名のキャラクターを使用します。</li><br>
-            <li><i>フィルター: タイトル:</i> 投稿タイトルを確認します。一致する投稿のすべてのファイルがダウンロードされます。フォルダ名は一致する投稿タイトルのキャラクターを使用します。</li>
-            <li><b>⤵️ フィルターに追加ボタン（既知の名前）:</b> 既知の名前の「追加」ボタン（ステップ5参照）の隣にあり、これをクリックするとポップアップが開きます。<code>Known.txt</code>リストからチェックボックス（検索バー付き）で名前を選択し、「キャラクターでフィルタリング」フィールドにすばやく追加します。Known.txtの<code>(ボア, ハンコック)</code>のようなグループ化された名前は、フィルターフィールドに<code>(ボア, ハンコック)~</code>として追加されます。</li><br>
-            <li><i>フィルター: 両方:</i> まず投稿タイトルを確認します。一致する場合、すべてのファイルがダウンロードされます。一致しない場合、次にファイル名を確認し、一致するファイルのみがダウンロードされます。フォルダ名はタイトル一致を優先し、次にファイル一致を優先します。</li><br>
-            <li><i>フィルター: コメント（ベータ）:</i> まずファイル名を確認します。ファイルが一致する場合、投稿のすべてのファイルがダウンロードされます。ファイル一致がない場合、次に投稿コメントを確認します。コメントが一致する場合、投稿のすべてのファイルがダウンロードされます。（より多くのAPIリクエストを使用します）。フォルダ名はファイル一致を優先し、次にコメント一致を優先します。</li></ul>
-          「名前/タイトルでフォルダを分ける」が有効な場合、このフィルターはフォルダ名にも影響します。</li><br>
-        <li><b>🚫 スキップする単語:</b><br>
-          単語をコンマ区切りで入力します（例: <i>WIP, スケッチ, プレビュー</i>）。
-          この入力の隣にある<b>「スコープ: [タイプ]」</b>ボタンは、このフィルターの適用方法を循環します:
-          <ul><li><i>スコープ: ファイル:</i> 名前にこれらの単語のいずれかを含む場合、ファイルをスキップします。</li><br>
-            <li><i>スコープ: 投稿:</i> タイトルにこれらの単語のいずれかを含む場合、投稿全体をスキップします。</li><br>
-            <li><i>スコープ: 両方:</i> ファイルと投稿タイトルの両方のスキップを適用します（まず投稿、次にファイル）。</li></ul></li><br>
-        <li><b>ファイルフィルター（ラジオボタン）:</b> ダウンロードするものを選択します:
-          <ul>
-          <li><i>すべて:</i> 見つかったすべてのファイルタイプをダウンロードします。</li><br>
-          <li><i>画像/GIF:</i> 一般的な画像形式とGIFのみ。</li><br>
-          <li><i>動画:</i> 一般的な動画形式のみ。</li><br>
-          <li><b><i>📦 アーカイブのみ:</i></b> <b>.zip</b>と<b>.rar</b>ファイルのみをダウンロードします。選択すると、「.zipをスキップ」と「.rarをスキップ」チェックボックスは自動的に無効になり、チェックが外れます。「外部リンクをログに表示」も無効になります。</li><br>
-          <li><i>🎧 音声のみ:</i> 一般的な音声形式のみ（MP3、WAV、FLACなど）。</li><br>
-          <li><i>🔗 リンクのみ:</i> ファイルをダウンロードする代わりに、投稿の説明から外部リンクを抽出して表示します。ダウンロード関連のオプションと「外部リンクをログに表示」は無効になります。</li>
-          </ul></li>
-        </ul>""",
-"tour_dialog_step4_title":"③ お気に入りモード（代替ダウンロード）",
-"tour_dialog_step4_content":"""アプリケーションは、Kemono.suでお気に入りに登録したアーティストからコンテンツをダウンロードするための「お気に入りモード」を提供しています。
-        <ul>
-        <li><b>⭐ お気に入りモードチェックボックス:</b><br>
-          「🔗 リンクのみ」ラジオボタンの隣にあります。これをチェックするとお気に入りモードが有効になります。</li><br>
-        <li><b>お気に入りモードでの動作:</b>
-          <ul><li>「🔗 Kemonoクリエイター/投稿URL」入力エリアは、お気に入りモードがアクティブであることを示すメッセージに置き換えられます。</li><br>
-            <li>標準の「ダウンロード開始」、「一時停止」、「キャンセル」ボタンは、「🖼️ お気に入りアーティスト」と「📄 お気に入り投稿」ボタンに置き換えられます（注意: 「お気に入り投稿」は将来の機能です）。</li><br>
-            <li>お気に入りを取得するにはCookieが必要なため、「🍪 Cookieを使用」オプションは自動的に有効になり、ロックされます。</li></ul></li><br>
-        <li><b>🖼️ お気に入りアーティストボタン:</b><br>
-          これをクリックすると、Kemono.suでお気に入りに登録したアーティストのリストが表示されるダイアログが開きます。このリストから1人以上のアーティストを選択してダウンロードできます。</li><br>
-        <li><b>お気に入りダウンロードスコープ（ボタン）:</b><br>
-          このボタン（「お気に入り投稿」の隣）は、選択したお気に入りのダウンロード場所を制御します:
-          <ul><li><i>スコープ: 選択場所:</i> 選択したすべてのアーティストは、UIで設定したメインの「ダウンロード場所」にダウンロードされます。フィルターはグローバルに適用されます。</li><br>
-            <li><i>スコープ: アーティストフォルダ:</i> 選択した各アーティストについて、メインの「ダウンロード場所」内にサブフォルダ（アーティスト名）が作成されます。そのアーティストのコンテンツは、特定のサブフォルダにダウンロードされます。フィルターは各アーティストのフォルダ内で適用されます。</li></ul></li><br>
-        <li><b>お気に入りモードでのフィルター:</b><br>
-          「キャラクターでフィルタリング」、「スキップする単語」、「ファイルフィルター」オプションは、選択したお気に入りアーティストからダウンロードされるコンテンツにも適用されます。</li>
-        </ul>""",
-"tour_dialog_step5_title":"④ ダウンロードの微調整",
-"tour_dialog_step5_content":"""ダウンロードをカスタマイズするためのその他のオプション:
-        <ul>
-        <li><b>.zipをスキップ / .rarをスキップ:</b> これらのアーカイブファイルタイプをダウンロードしないようにするには、これらをチェックします。
-          <i>（注意: 「📦 アーカイブのみ」フィルターモードが選択されている場合、これらは無効になり、無視されます）。</i></li><br>
-        <li><b>✂️ 名前から単語を削除:</b><br>
-          ダウンロードしたファイル名から削除する単語をコンマ区切りで入力します（大文字と小文字を区別しません）（例: <i>patreon, [HD]</i>）。</li><br>
-        <li><b>サムネイルのみダウンロード:</b> フルサイズのファイルの代わりに小さなプレビュー画像をダウンロードします（利用可能な場合）。</li><br>
-        <li><b>大きな画像を圧縮:</b> 「Pillow」ライブラリがインストールされている場合、1.5MBより大きい画像は、WebPバージョンが大幅に小さい場合にWebP形式に変換されます。</li><br>
-        <li><b>🗄️ カスタムフォルダ名（単一投稿のみ）:</b><br>
-          単一の特定の投稿URLをダウンロードしていて、かつ「名前/タイトルでフォルダを分ける」が有効な場合、
-        その投稿のダウンロードフォルダにカスタム名を入力できます。</li><br>
-        <li><b>🍪 Cookieを使用:</b> リクエストにCookieを使用するには、これをチェックします。次のいずれかを実行できます:
-          <ul><li>Cookie文字列をテキストフィールドに直接入力します（例: <i>name1=value1; name2=value2</i>）。</li><br>
-            <li>「参照...」をクリックして<i>cookies.txt</i>ファイル（Netscape形式）を選択します。パスがテキストフィールドに表示されます。</li></ul>
-          これは、ログインが必要なコンテンツにアクセスする場合に便利です。テキストフィールド（入力されている場合）が優先されます。
-        「Cookieを使用」がチェックされていて、テキストフィールドと参照されたファイルの両方が空の場合、アプリのディレクトリから「cookies.txt」を読み込もうとします。</li>
-        </ul>""",
-"tour_dialog_step6_title":"⑤ 整理とパフォーマンス",
-"tour_dialog_step6_content":"""ダウンロードを整理し、パフォーマンスを管理します:
-        <ul>
-        <li><b>⚙️ 名前/タイトルでフォルダを分ける:</b> 「キャラクターでフィルタリング」入力または投稿タイトルに基づいてサブフォルダを作成します（特定のフィルターが投稿に一致しない場合、フォルダ名のフォールバックとして<b>Known.txt</b>リストを使用できます）。</li><br>
-        <li><b>投稿ごとにサブフォルダ:</b> 「フォルダを分ける」がオンの場合、メインのキャラクター/タイトルフォルダ内に<i>個々の投稿</i>ごとに追加のサブフォルダを作成します。</li><br>
-        <li><b>🚀 マルチスレッドを使用（スレッド数）:</b> より高速な操作を可能にします。「スレッド数」入力の数値の意味:
-          <ul><li><b>クリエイターフィードの場合:</b> 同時に処理する投稿の数。各投稿内のファイルは、そのワーカーによって順番にダウンロードされます（「日付順」マンガ命名がオンの場合を除く。これは1つの投稿ワーカーを強制します）。</li><br>
-            <li><b>単一投稿URLの場合:</b> その単一投稿から同時にダウンロードするファイルの数。</li></ul>
-          チェックされていない場合、1スレッドが使用されます。高いスレッド数（例: >40）はアドバイザリを表示する場合があります。</li><br>
-        <li><b>マルチパートダウンロード切り替え（ログエリアの右上）:</b><br>
-          <b>「マルチパート: [オン/オフ]」</b>ボタンは、個々の大きなファイルのマルチセグメントダウンロードを有効/無効にできます。
-          <ul><li><b>オン:</b> 大きなファイルのダウンロード（例: 動画）を高速化できますが、多くの小さなファイルがある場合、UIの途切れやログのスパムが増加する可能性があります。有効にするとアドバイザリが表示されます。マルチパートダウンロードが失敗した場合、シングルストリームで再試行します。</li><br>
-            <li><b>オフ（デフォルト）:</b> ファイルは単一のストリームでダウンロードされます。</li></ul>
-          「リンクのみ」または「アーカイブのみ」モードがアクティブな場合は無効になります。</li><br>
-        <li><b>📖 マンガ/コミックモード（クリエイターURLのみ）:</b> シーケンシャルコンテンツ向けに調整されています。
-          <ul>
-          <li>投稿を<b>古いものから新しいものへ</b>ダウンロードします。</li><br>
-          <li>すべての投稿が取得されるため、「ページ範囲」入力は無効になります。</li><br>
-          <li>このモードがクリエイターフィードでアクティブな場合、ログエリアの右上に<b>ファイル名スタイル切り替えボタン</b>（例: 「名前: 投稿タイトル」）が表示されます。クリックすると命名スタイルが循環します:
-            <ul>
-            <li><b><i>名前: 投稿タイトル（デフォルト）:</i></b> 投稿の最初のファイルは、投稿のクリーンなタイトルにちなんで名付けられます（例: 「My Chapter 1.jpg」）。*同じ投稿*内の後続のファイルは、元のファイル名を保持しようとします（例: 「page_02.png」、「bonus_art.jpg」）。投稿にファイルが1つしかない場合は、投稿タイトルにちなんで名付けられます。これはほとんどのマンガ/コミックに一般的に推奨されます。</li><br>
-            <li><b><i>名前: 元ファイル名:</i></b> すべてのファイルが元のファイル名を保持しようとします。オプションのプレフィックス（例: 「MySeries_」）を、このスタイルボタンの隣に表示される入力フィールドに入力できます。例: 「MySeries_OriginalFile.jpg」。</li><br>
-            <li><b><i>名前: タイトル+通し番号（投稿タイトル+グローバル番号付け）:</i></b> 現在のダウンロードセッションのすべての投稿のすべてのファイルが、投稿のクリーンなタイトルをプレフィックスとして使用し、グローバルカウンターを続けて順番に名付けられます。例: 投稿「Chapter 1」（2ファイル）-> 「Chapter 1_001.jpg」、「Chapter 1_002.png」。次の投稿「Chapter 2」（1ファイル）は番号付けを続けます -> 「Chapter 2_003.jpg」。このスタイルの場合、正しいグローバル番号付けを保証するために、投稿処理のマルチスレッドは自動的に無効になります。</li><br>
-            <li><b><i>名前: 日付順:</i></b> ファイルは投稿の公開順に基づいて順番に名付けられます（001.ext、002.extなど）。オプションのプレフィックス（例: 「MySeries_」）を、このスタイルボタンの隣に表示される入力フィールドに入力できます。例: 「MySeries_001.jpg」。このスタイルの場合、投稿処理のマルチスレッドは自動的に無効になります。</li>
-            </ul>
-          </li><br>
-          <li>「名前: 投稿タイトル」、「名前: タイトル+通し番号」、または「名前: 日付順」スタイルで最良の結果を得るには、「キャラクターでフィルタリング」フィールドにマンガ/シリーズのタイトルを入力してフォルダを整理します。</li>
-          </ul></li><br>
-        <li><b>🎭 Known.txtによるスマートなフォルダ整理:</b><br>
-          <code>Known.txt</code>（アプリのディレクトリ内）は、「名前/タイトルでフォルダを分ける」がアクティブな場合の自動フォルダ整理を細かく制御できます。
-          <ul> # JA_PLACEHOLDER
-            <li><b>仕組み:</b> <code>Known.txt</code>の各行がエントリです。
-              <ul><li><code>My Awesome Series</code>のような単純な行は、これに一致するコンテンツが「My Awesome Series」という名前のフォルダに入ることを意味します。</li><br>
-                <li><code>(Character A, Char A, Alt Name A)</code>のようなグループ化された行は、「Character A」、「Char A」、または「Alt Name A」に一致するコンテンツがすべて「Character A Char A Alt Name A」（クリーニング後）という名前の単一フォルダに入ることを意味します。括弧内のすべての用語がそのフォルダのエイリアスになります。</li></ul></li>
-            <li><b>インテリジェントなフォールバック:</b> 「名前/タイトルでフォルダを分ける」がアクティブで、投稿が特定の「キャラクターでフィルタリング」入力に一致しない場合、ダウンローダーは<code>Known.txt</code>を参照して、フォルダ作成用の一致するプライマリ名を見つけます。</li><br>
-            <li><b>ユーザーフレンドリーな管理:</b> UIリスト（下記）から単純な（グループ化されていない）名前を追加します。高度な編集（グループ化されたエイリアスの作成/変更など）の場合は、<b>「Known.txtを開く」</b>をクリックしてテキストエディタでファイルを編集します。アプリは次回使用時または起動時に再読み込みします。</li>
-          </ul>
-        </li>
-        </ul>""",
-"tour_dialog_step7_title":"⑥ 一般的なエラーとトラブルシューティング",
-"tour_dialog_step7_content":"""ダウンロード中に問題が発生することがあります。一般的なものをいくつか紹介します:
-        <ul>
-        <li><b>キャラクター入力ツールチップ:</b><br>
-          キャラクター名をコンマ区切りで入力します (例: <i>ティファ, エアリス</i>)。<br>
-          結合されたフォルダ名のエイリアスをグループ化します: <i>(エイリアス1, エイリアス2, エイリアス3)</i> はフォルダ「エイリアス1 エイリアス2 エイリアス3」になります。<br>
-          グループ内のすべての名前が照合用のエイリアスとして使用されます。<br><br>
-          この入力の隣にある「フィルター: [タイプ]」ボタンは、このフィルターの適用方法を循環します:<br>
-          - フィルター: ファイル: 個々のファイル名を確認します。一致するファイルのみがダウンロードされます。<br>
-          - フィルター: タイトル: 投稿タイトルを確認します。一致する投稿のすべてのファイルがダウンロードされます。<br>
-          - フィルター: 両方: まず投稿タイトルを確認します。一致しない場合、次にファイル名を確認します。<br>
-          - フィルター: コメント (ベータ): まずファイル名を確認します。一致しない場合、次に投稿コメントを確認します。<br><br>
-          「名前/タイトルでフォルダを分ける」が有効な場合、このフィルターはフォルダ名にも影響します。</li><br>      
-        <li><b>502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout:</b><br>
-          これらは通常、Kemono/Coomerのサーバー側の一時的な問題を示します。サイトが過負荷になっているか、メンテナンス中であるか、問題が発生している可能性があります。<br>
-          <b>解決策:</b> しばらく（例: 30分から数時間）待ってから、後でもう一度試してください。ブラウザで直接サイトを確認してください。</li><br>
-        <li><b>接続喪失 / 接続拒否 / タイムアウト（ファイルダウンロード中）:</b><br>
-          これは、インターネット接続、サーバーの不安定性、またはサーバーが大きなファイルの接続を切断した場合に発生する可能性があります。<br>
-          <b>解決策:</b> インターネットを確認してください。「スレッド数」が高い場合は減らしてみてください。セッションの最後に一部の失敗したファイルを再試行するようアプリが促す場合があります。</li><br>
-        <li><b>IncompleteReadエラー:</b><br>
-          サーバーが予期したよりも少ないデータを送信しました。多くの場合、一時的なネットワークの不具合またはサーバーの問題です。<br>
-          <b>解決策:</b> アプリは多くの場合、ダウンロードセッションの最後にこれらのファイルを再試行対象としてマークします。</li><br>
-        <li><b>403 Forbidden / 401 Unauthorized（公開投稿ではあまり一般的ではありません）:</b><br>
-          コンテンツにアクセスする権限がない可能性があります。一部の有料またはプライベートコンテンツの場合、「Cookieを使用」オプションをブラウザセッションの有効なCookieと共に使用すると役立つ場合があります。Cookieが最新であることを確認してください。</li><br>
-        <li><b>404 Not Found:</b><br>
-          投稿またはファイルのURLが正しくないか、コンテンツがサイトから削除されています。URLを再確認してください。</li><br>
-        <li><b>「投稿が見つかりません」/「対象の投稿が見つかりません」:</b><br>
-          URLが正しく、クリエイター/投稿が存在することを確認してください。ページ範囲を使用している場合は、クリエイターに対して有効であることを確認してください。非常に新しい投稿の場合、APIに表示されるまでにわずかな遅延がある場合があります。</li><br>
-        <li><b>全体的な遅さ / アプリ「(応答なし)」:</b><br>
-          ステップ1で述べたように、特に大規模なクリエイターフィードや多くのスレッドで開始後にアプリがハングするように見える場合は、しばらくお待ちください。バックグラウンドでデータを処理している可能性が高いです。これが頻繁に発生する場合は、スレッド数を減らすと応答性が向上することがあります。</li>
-        </ul>""",
-"tour_dialog_step8_title":"⑦ ログと最終コントロール",
-"tour_dialog_step8_content":"""監視とコントロール:
-        <ul>
-        <li><b>📜 進捗ログ / 抽出リンクログ:</b> 詳細なダウンロードメッセージを表示します。「🔗 リンクのみ」モードがアクティブな場合、このエリアには抽出されたリンクが表示されます。</li><br>
-        <li><b>ログに外部リンクを表示:</b> チェックすると、メインログの下にセカンダリログパネルが表示され、投稿の説明で見つかった外部リンクが表示されます。<i>（「🔗 リンクのみ」または「📦 アーカイブのみ」モードがアクティブな場合は無効になります）。</i></li><br>
-        <li><b>ログビュー切り替え（👁️ / 🙈 ボタン）:</b><br>
-          このボタン（ログエリアの右上）は、メインログビューを切り替えます:
-          <ul><li><b>👁️ 進捗ログ（デフォルト）:</b> すべてのダウンロードアクティビティ、エラー、概要を表示します。</li><br>
-            <li><b>🙈 見逃したキャラクターログ:</b> 「キャラクターでフィルタリング」設定のためにスキップされた投稿タイトルのキーワードのリストを表示します。意図せずに見逃している可能性のあるコンテンツを特定するのに役立ちます。</li></ul></li><br>
-        <li><b>🔄 リセット:</b> すべての入力フィールド、ログをクリアし、一時的な設定をデフォルトにリセットします。ダウンロードがアクティブでない場合にのみ使用できます。</li><br>
-        <li><b>⬇️ ダウンロード開始 / 🔗 リンクを抽出 / ⏸️ 一時停止 / ❌ 中止:</b> これらのボタンでプロセスを制御します。「中止してUIリセット」は現在の操作を停止し、URLとディレクトリ入力を保持してソフトUIリセットを実行します。「一時停止/再開」は一時的な停止と継続を可能にします。</li><br>
-        <li>一部のファイルが回復可能なエラー（「IncompleteRead」など）で失敗した場合、セッションの最後に再試行するよう促される場合があります。</li>
-        </ul>
-        <br>準備完了です！<b>「完了」</b>をクリックしてツアーを閉じ、ダウンローダーの使用を開始します。"""
+    "settings_dialog_title": "設定",
+    "language_label": "言語:",
+    "lang_english": "英語 (English)",
+    "lang_japanese": "日本語",
+    "theme_toggle_light": "ライトモードに切り替え",
+    "theme_toggle_dark": "ダークモードに切り替え",
+    "theme_tooltip_light": "アプリケーションの外観をライトに変更します。",
+    "theme_tooltip_dark": "アプリケーションの外観をダークに変更します。",
+    "ok_button": "OK",
+    "appearance_group_title": "外観",
+    "language_group_title": "言語設定",
+    "creator_post_url_label": "🔗クリエイター/投稿Kemono URL:",
+    "download_location_label": "📁ダウンロード場所:",
+    "filter_by_character_label": "🎯キャラクターでフィルター(コンマ区切り):",
+    "skip_with_words_label": "🚫単語でスキップ(コンマ区切り):",
+    "remove_words_from_name_label": "✂️名前から単語を削除:",
+    "filter_all_radio": "すべて",
+    "filter_images_radio": "画像/GIF",
+    "filter_videos_radio": "動画",
+    "filter_archives_radio": "📦アーカイブのみ",
+    "filter_links_radio": "🔗リンクのみ",
+    "filter_audio_radio": "🎧音声のみ",
+    "favorite_mode_checkbox_label": "⭐お気に入りモード",
+    "browse_button_text": "参照...",
+    "char_filter_scope_files_text": "フィルター: ファイル",
+    "char_filter_scope_files_tooltip": "現在のスコープ: ファイル\n\n個々のファイルを名前でフィルタリングします。いずれかのファイルが一致した場合、投稿は保持されます。\nその投稿から一致したファイルのみがダウンロードされます。\n例: フィルター 'Tifa'。ファイル 'Tifa_artwork.jpg' が一致し、ダウンロードされます。\nフォルダーの命名: 一致したファイル名のキャラクターを使用します。\n\nクリックして切り替え: 両方",
+    "char_filter_scope_title_text": "フィルター: タイトル",
+    "char_filter_scope_title_tooltip": "現在のスコープ: タイトル\n\n投稿全体をタイトルでフィルタリングします。一致した投稿のすべてのファイルがダウンロードされます。\n例: フィルター 'Aerith'。タイトルが 'Aerith's Garden' の投稿が一致し、すべてのファイルがダウンロードされます。\nフォルダーの命名: 一致した投稿タイトルのキャラクターを使用します。\n\nクリックして切り替え: ファイル",
+    "char_filter_scope_both_text": "フィルター: 両方",
+    "char_filter_scope_both_tooltip": "現在のスコープ: 両方(タイトル、次にファイル)\n\n1. 投稿タイトルを確認します。一致した場合、投稿内のすべてのファイルがダウンロードされます。\n2. タイトルが一致しない場合、ファイル名を確認します。ファイルが一致した場合、そのファイルのみがダウンロードされます。\n例: フィルター 'Cloud'。\n - 投稿 'Cloud Strife' (タイトル一致) -> すべてのファイルがダウンロードされます。\n - 投稿 'Motorcycle Chase' と 'Cloud_fenrir.jpg' (ファイル一致) -> 'Cloud_fenrir.jpg' のみがダウンロードされます。\nフォルダーの命名: タイトルの一致を優先し、次にファイルの一致を優先します。\n\nクリックして切り替え: コメント",
+    "char_filter_scope_comments_text": "フィルター: コメント(ベータ)",
+    "char_filter_scope_comments_tooltip": "現在のスコープ: コメント(ベータ - 最初にファイル、次にフォールバックとしてコメント)\n\n1. ファイル名を確認します。投稿内のファイルがフィルターに一致した場合、投稿全体がダウンロードされます。このフィルター用語ではコメントはチェックされません。\n2. ファイルが一致しない場合、次に投稿のコメントを確認します。コメントが一致した場合、投稿全体がダウンロードされます。\n例: フィルター 'Barret'。\n - 投稿A: ファイル 'Barret_gunarm.jpg', 'other.png'。ファイル 'Barret_gunarm.jpg' が一致します。投稿Aのすべてのファイルがダウンロードされます。'Barret' のコメントはチェックされません。\n - 投稿B: ファイル 'dyne.jpg', 'weapon.gif'。コメント: '...a drawing of Barret Wallace...'。'Barret' のファイル一致はありません。コメントが一致します。投稿Bのすべてのファイルがダウンロードされます。\nフォルダーの命名: ファイルの一致からのキャラクターを優先し、次にコメントの一致を優先します。\n\nクリックして切り替え: タイトル",
+    "char_filter_scope_unknown_text": "フィルター: 不明",
+    "char_filter_scope_unknown_tooltip": "現在のスコープ: 不明\n\nキャラクターフィルタースコープが不明な状態です。サイクルまたはリセットしてください。\n\nクリックして切り替え: タイトル",
+    "skip_words_input_tooltip": "特定のコンテンツ(例: WIP、スケッチ、プレビュー)のダウンロードをスキップするには、単語をコンマ区切りで入力します。\n\nこの入力の横にある 'スコープ: [タイプ]' ボタンは、このフィルターの適用方法を変更します:\n- スコープ: ファイル: これらの単語のいずれかを含む場合、個々のファイルをスキップします。\n- スコープ: 投稿: これらの単語のいずれかを含む場合、投稿全体をスキップします。\n- スコープ: 両方: 両方を適用します(最初に投稿タイトル、次に投稿タイトルがOKの場合は個々のファイル)。",
+    "remove_words_input_tooltip": "ダウンロードされたファイル名から削除する単語をコンマ区切りで入力します(大文字と小文字を区別しません)。\n一般的なプレフィックス/サフィックスのクリーンアップに役立ちます。\n例: patreon、kemono、[HD]、_final",
+    "skip_scope_files_text": "スコープ: ファイル",
+    "skip_scope_files_tooltip": "現在のスキップスコープ: ファイル\n\n'スキップワード' のいずれかを含む場合、個々のファイルをスキップします。\n例: スキップワード \"WIP, sketch\"。\n- ファイル \"art_WIP.jpg\" -> スキップ。\n- ファイル \"final_art.png\" -> ダウンロード済み(他の条件が満たされた場合)。\n\n投稿は、スキップされていない他のファイルに対して引き続き処理されます。\nクリックして切り替え: 両方",
+    "skip_scope_posts_text": "スコープ: 投稿",
+    "skip_scope_posts_tooltip": "現在のスキップスコープ: 投稿\n\n'スキップワード' のいずれかを含む場合、投稿全体をスキップします。\nスキップされた投稿のすべてのファイルは無視されます。\n例: スキップワード \"preview, announcement\"。\n- 投稿 \"Exciting Announcement!\" -> スキップ。\n- 投稿 \"Finished Artwork\" -> 処理済み(他の条件が満たされた場合)。\n\nクリックして切り替え: ファイル",
+    "skip_scope_both_text": "スコープ: 両方",
+    "skip_scope_both_tooltip": "現在のスキップスコープ: 両方(投稿、次にファイル)\n\n1. 投稿タイトルを確認します。タイトルにスキップワードが含まれている場合、投稿全体がスキップされます。\n2. 投稿タイトルがOKの場合、次に個々のファイル名を確認します。ファイル名にスキップワードが含まれている場合、そのファイルのみがスキップされます。\n例: スキップワード \"WIP, sketch\"。\n- 投稿 \"Sketches and WIPs\" (タイトル一致) -> 投稿全体がスキップされます。\n- 投稿 \"Art Update\" (タイトルOK) とファイル:\n  - \"character_WIP.jpg\" (ファイル一致) -> スキップ。\n  - \"final_scene.png\" (ファイルOK) -> ダウンロード済み。\n\nクリックして切り替え: 投稿",
+    "skip_scope_unknown_text": "スコープ: 不明",
+    "skip_scope_unknown_tooltip": "現在のスキップスコープ: 不明\n\nスキップワードのスコープが不明な状態です。サイクルまたはリセットしてください。\n\nクリックして切り替え: 投稿",
+    "language_change_title": "言語が変更されました",
+    "language_change_message": "言語が変更されました。すべての変更を完全に有効にするには、再起動が必要です。",
+    "language_change_informative": "今すぐアプリケーションを再起動しますか?",
+    "restart_now_button": "今すぐ再起動",
+    "skip_zip_checkbox_label": ".zipをスキップ",
+    "skip_rar_checkbox_label": ".rarをスキップ",
+    "download_thumbnails_checkbox_label": "サムネイルのみをダウンロード",
+    "scan_content_images_checkbox_label": "コンテンツをスキャンして画像を探す",
+    "compress_images_checkbox_label": "WebPに圧縮",
+    "separate_folders_checkbox_label": "名前/タイトルでフォルダを分ける",
+    "subfolder_per_post_checkbox_label": "投稿ごとにサブフォルダを作成",
+    "use_cookie_checkbox_label": "Cookieを使用",
+    "use_multithreading_checkbox_base_label": "マルチスレッドを使用",
+    "show_external_links_checkbox_label": "ログに外部リンクを表示",
+    "manga_comic_mode_checkbox_label": "マンガ/コミックモード",
+    "threads_label": "スレッド:",
+    "start_download_button_text": "⬇️ダウンロード開始",
+    "start_download_button_tooltip": "現在の設定でダウンロードまたはリンク抽出プロセスを開始するには、クリックします。",
+    "extract_links_button_text": "🔗リンクを抽出",
+    "pause_download_button_text": "⏸️ダウンロードを一時停止",
+    "pause_download_button_tooltip": "現在実行中のダウンロードプロセスを一時停止するには、クリックします。",
+    "resume_download_button_text": "▶️ダウンロードを再開",
+    "resume_download_button_tooltip": "ダウンロードを再開するには、クリックします。",
+    "cancel_button_text": "❌キャンセルしてUIをリセット",
+    "cancel_button_tooltip": "現在のダウンロード/抽出プロセスをキャンセルし、UIフィールドをリセットするには、クリックします(URLとディレクトリは保持されます)。",
+    "error_button_text": "エラー",
+    "error_button_tooltip": "エラーのためにスキップされたファイルを表示し、オプションで再試行します。",
+    "cancel_retry_button_text": "❌再試行をキャンセル",
+    "known_chars_label_text": "🎭既知のシリーズ/キャラクター(フォルダ名用):",
+    "open_known_txt_button_text": "Known.txtを開く",
+    "known_chars_list_tooltip": "このリストには、'フォルダを分ける'がオンで、特定の'キャラクターでフィルター'が提供されていないか、投稿に一致しない場合に使用される自動フォルダ作成用の名前が含まれています。\n頻繁にダウンロードするシリーズ、ゲーム、またはキャラクターの名前を追加します。",
+    "open_known_txt_button_tooltip": "デフォルトのテキストエディタで'Known.txt'ファイルを開きます。\nファイルはアプリケーションのディレクトリにあります。",
+    "add_char_button_text": "➕追加",
+    "add_char_button_tooltip": "入力フィールドの名前を'既知のシリーズ/キャラクター'リストに追加します。",
+    "add_to_filter_button_text": "⤵️フィルターに追加",
+    "add_to_filter_button_tooltip": "'既知のシリーズ/キャラクター'リストから名前を選択して、上の'キャラクターでフィルター'フィールドに追加します。",
+    "delete_char_button_text": "🗑️選択項目を削除",
+    "delete_char_button_tooltip": "'既知のシリーズ/キャラクター'リストから選択した名前を削除します。",
+    "progress_log_label_text": "📜進捗ログ:",
+    "radio_all_tooltip": "投稿で見つかったすべての種類のファイルをダウンロードします。",
+    "radio_images_tooltip": "一般的な画像形式(JPG、PNG、GIF、WEBPなど)のみをダウンロードします。",
+    "radio_videos_tooltip": "一般的な動画形式(MP4、MKV、WEBM、MOVなど)のみをダウンロードします。",
+    "radio_only_archives_tooltip": ".zipファイルと.rarファイルのみを排他的にダウンロードします。他のファイル固有のオプションは無効になります。",
+    "radio_only_audio_tooltip": "一般的な音声形式(MP3、WAV、FLACなど)のみをダウンロードします。",
+    "radio_only_links_tooltip": "ファイルをダウンロードする代わりに、投稿の説明から外部リンクを抽出して表示します。\nダウンロード関連のオプションは無効になります。",
+    "favorite_mode_checkbox_tooltip": "お気に入りモードを有効にして、保存したアーティスト/投稿から閲覧およびダウンロードします。\nこれにより、URL入力フィールドがお気に入り選択ボタンに置き換えられます。",
+    "skip_zip_checkbox_tooltip": "チェックすると、.zipアーカイブファイルはダウンロードされません。\n('アーカイブのみ'が選択されている場合は無効)。",
+    "skip_rar_checkbox_tooltip": "チェックすると、.rarアーカイブファイルはダウンロードされません。\n('アーカイブのみ'が選択されている場合は無効)。",
+    "download_thumbnails_checkbox_tooltip": "APIからフルサイズのファイルではなく、小さなプレビュー画像をダウンロードします(利用可能な場合)。\n'投稿コンテンツをスキャンして画像URLを探す'もチェックされている場合、このモードはコンテンツスキャンで見つかった画像*のみ*をダウンロードします(APIサムネイルは無視)。",
+    "scan_content_images_checkbox_tooltip": "チェックすると、ダウンローダーは投稿のHTMLコンテンツをスキャンして画像URL(<img>タグまたは直接リンクから)を探します。\nこれには、<img>タグからの相対パスを完全なURLに解決することも含まれます。\n<img>タグの相対パス(例: /data/image.jpg)は完全なURLに解決されます。\n画像が投稿の説明にあるが、APIのファイル/添付ファイルリストにない場合に役立ちます。",
+    "compress_images_checkbox_tooltip": "1.5MBを超える画像をWebP形式に圧縮します(Pillowが必要)。",
+    "use_subfolders_checkbox_tooltip": "'キャラクターでフィルター'入力または投稿タイトルに基づいてサブフォルダを作成します。\n特定のフィルターが一致しない場合、フォルダ名のフォールバックとして'既知のシリーズ/キャラクター'リストを使用します。\n単一投稿の'キャラクターでフィルター'および'カスタムフォルダ名'入力を有効にします。",
+    "use_subfolder_per_post_checkbox_tooltip": "投稿ごとにサブフォルダを作成します。'フォルダを分ける'もオンになっている場合、キャラクター/タイトルフォルダ内に作成されます。",
+    "use_cookie_checkbox_tooltip": "チェックすると、アプリケーションディレクトリにある'cookies.txt'(Netscape形式)のCookieを使用してリクエストを試みます。\nKemono/Coomerでログインが必要なコンテンツにアクセスするのに役立ちます。",
+    "cookie_text_input_tooltip": "Cookie文字列を直接入力します。\nこれは、'Cookieを使用'がチェックされていて、'cookies.txt'が見つからないか、このフィールドが空でない場合に使用されます。\n形式はバックエンドがどのように解析するかに依存します(例: 'name1=value1; name2=value2')。",
+    "use_multithreading_checkbox_tooltip": "同時操作を有効にします。詳細については、'スレッド'フィールドを参照してください。",
+    "thread_count_input_tooltip": "同時操作の数。\n- 単一投稿: 同時ファイルダウンロード(1〜10を推奨)。\n- クリエイターフィードURL: 同時に処理する投稿の数(1〜200を推奨)。\n  各投稿のファイルは、そのワーカーによって1つずつダウンロードされます。\n'マルチスレッドを使用'がオフの場合、1つのスレッドが使用されます。",
+    "external_links_checkbox_tooltip": "チェックすると、メインログの下にセカンダリログパネルが表示され、投稿の説明で見つかった外部リンクが表示されます。\n('リンクのみ'または'アーカイブのみ'モードがアクティブな場合は無効)。",
+    "manga_mode_checkbox_tooltip": "投稿を古いものから新しいものへとダウンロードし、投稿タイトルに基づいてファイルの名前を変更します(クリエイターフィードのみ)。",
+    "multipart_on_button_text": "マルチパート: オン",
+    "multipart_on_button_tooltip": "マルチパートダウンロード: オン\n\n大きなファイルを複数のセグメントで同時にダウンロードできるようにします。\n- 単一の大きなファイルのダウンロードを高速化する場合があります(例: 動画)。\n- CPU/ネットワーク使用量が増加する可能性があります。\n- 多くの小さなファイルがあるフィードの場合、速度の利点が得られない可能性があり、UI/ログがビジーになる可能性があります。\n- マルチパートが失敗した場合、単一ストリームとして再試行します。\n\n無効にするにはクリックします。",
+    "multipart_off_button_text": "マルチパート: オフ",
+    "multipart_off_button_tooltip": "マルチパートダウンロード: オフ\n\nすべてのファイルは単一のストリームを使用してダウンロードされます。\n- 安定しており、ほとんどのシナリオ、特に多くの小さなファイルに適しています。\n- 大きなファイルは順次ダウンロードされます。\n\n有効にするにはクリックします(警告を参照)。",
+    "reset_button_text": "🔄リセット",
+    "reset_button_tooltip": "すべての入力とログをデフォルトの状態にリセットします(アプリがアイドル状態の場合のみ)。",
+    "progress_idle_text": "進捗: アイドル",
+    "missed_character_log_label_text": "🚫見逃したキャラクターログ:",
+    "creator_popup_title": "クリエイター選択",
+    "creator_popup_search_placeholder": "名前、サービスで検索、またはクリエイターURLを貼り付け...",
+    "creator_popup_add_selected_button": "選択項目を追加",
+    "creator_popup_scope_characters_button": "スコープ: キャラクター",
+    "creator_popup_scope_creators_button": "スコープ: クリエイター",
+    "favorite_artists_button_text": "🖼️お気に入りのアーティスト",
+    "favorite_artists_button_tooltip": "Kemono.su/Coomer.suでお気に入りのアーティストから閲覧してダウンロードします。",
+    "favorite_posts_button_text": "📄お気に入りの投稿",
+    "favorite_posts_button_tooltip": "Kemono.su/Coomer.suでお気に入りの投稿から閲覧してダウンロードします。",
+    "favorite_scope_selected_location_text": "スコープ: 選択した場所",
+    "favorite_scope_selected_location_tooltip": "現在のお気に入りダウンロードスコープ: 選択した場所\n\n選択したすべてのお気に入りのアーティスト/投稿は、UIで指定したメインの'ダウンロード場所'にダウンロードされます。\nフィルター(キャラクター、スキップワード、ファイルタイプ)は、すべてのコンテンツにグローバルに適用されます。\n\nアーティストフォルダに切り替えるにはクリックします",
+    "favorite_scope_artist_folders_text": "スコープ: アーティストフォルダ",
+    "favorite_scope_artist_folders_tooltip": "現在のお気に入りダウンロードスコープ: アーティストフォルダ\n\n選択したお気に入りのアーティスト/投稿ごとに、メインの'ダウンロード場所'内に新しいサブフォルダ(アーティスト名で命名)が作成されます。\nそのアーティスト/投稿のコンテンツは、特定のサブフォルダにダウンロードされます。\nフィルター(キャラクター、スキップワード、ファイルタイプ)は、各アーティストのフォルダ*内*に適用されます。\n\n選択した場所に切り替えるにはクリックします",
+    "favorite_scope_unknown_text": "スコープ: 不明",
+    "favorite_scope_unknown_tooltip": "お気に入りのダウンロードスコープが不明です。サイクルするにはクリックします。",
+    "manga_style_post_title_text": "名前: 投稿タイトル",
+    "manga_style_original_file_text": "名前: オリジナルファイル",
+    "manga_style_date_based_text": "名前: 日付ベース",
+    "manga_style_title_global_num_text": "名前: タイトル+G.Num",
+    "manga_style_unknown_text": "名前: 不明なスタイル",
+    "fav_artists_dialog_title": "お気に入りのアーティスト",
+    "fav_artists_loading_status": "お気に入りのアーティストを読み込んでいます...",
+    "fav_artists_search_placeholder": "アーティストを検索...",
+    "fav_artists_select_all_button": "すべて選択",
+    "fav_artists_deselect_all_button": "すべて選択解除",
+    "fav_artists_download_selected_button": "選択項目をダウンロード",
+    "fav_artists_cancel_button": "キャンセル",
+    "fav_artists_loading_from_source_status": "⏳{source_name}からお気に入りを読み込んでいます...",
+    "fav_artists_found_status": "合計で{count}人のお気に入りのアーティストが見つかりました。",
+    "fav_artists_none_found_status": "Kemono.suまたはCoomer.suにお気に入りのアーティストが見つかりませんでした。",
+    "fav_artists_failed_status": "お気に入りの取得に失敗しました。",
+    "fav_artists_cookies_required_status": "エラー: Cookieが有効ですが、どのソースからも読み込めませんでした。",
+    "fav_artists_no_favorites_after_processing": "処理後にお気に入りのアーティストが見つかりませんでした。",
+    "fav_artists_no_selection_title": "選択なし",
+    "fav_artists_no_selection_message": "ダウンロードするアーティストを少なくとも1人選択してください。",
+    "fav_posts_dialog_title": "お気に入りの投稿",
+    "fav_posts_loading_status": "お気に入りの投稿を読み込んでいます...",
+    "fav_posts_search_placeholder": "投稿を検索(タイトル、クリエイター、ID、サービス)...",
+    "fav_posts_select_all_button": "すべて選択",
+    "fav_posts_deselect_all_button": "すべて選択解除",
+    "fav_posts_download_selected_button": "選択項目をダウンロード",
+    "fav_posts_cancel_button": "キャンセル",
+    "fav_posts_cookies_required_error": "エラー: お気に入りの投稿にはCookieが必要ですが、読み込めませんでした。",
+    "fav_posts_auth_failed_title": "認証に失敗しました(投稿)",
+    "fav_posts_auth_failed_message": "認証エラーのため、{domain_specific_part}のお気に入りを取得できませんでした:\n\n{error_message}\n\nこれは通常、サイトのCookieがない、無効、または期限切れであることを意味します。Cookieの設定を確認してください。",
+    "fav_posts_fetch_error_title": "フェッチエラー",
+    "fav_posts_fetch_error_message": "{domain}{error_message_part}からお気に入りをフェッチ中にエラーが発生しました",
+    "fav_posts_no_posts_found_status": "お気に入りの投稿が見つかりませんでした。",
+    "fav_posts_found_status": "{count}件のお気に入りの投稿が見つかりました。",
+    "fav_posts_display_error_status": "投稿の表示エラー: {error}",
+    "fav_posts_ui_error_title": "UIエラー",
+    "fav_posts_ui_error_message": "お気に入りの投稿を表示できませんでした: {error}",
+    "fav_posts_auth_failed_message_generic": "認証エラーのため、{domain_specific_part}のお気に入りを取得できませんでした。これは通常、サイトのCookieがない、無効、または期限切れであることを意味します。Cookieの設定を確認してください。",
+    "key_fetching_fav_post_list_init": "お気に入りの投稿リストをフェッチしています...",
+    "key_fetching_from_source_kemono_su": "Kemono.suからお気に入りをフェッチしています...",
+    "key_fetching_from_source_coomer_su": "Coomer.suからお気に入りをフェッチしています...",
+    "fav_posts_fetch_cancelled_status": "お気に入りの投稿のフェッチがキャンセルされました。",
+    "known_names_filter_dialog_title": "既知の名前をフィルターに追加",
+    "known_names_filter_search_placeholder": "名前を検索...",
+    "known_names_filter_select_all_button": "すべて選択",
+    "known_names_filter_deselect_all_button": "すべて選択解除",
+    "known_names_filter_add_selected_button": "選択項目を追加",
+    "error_files_dialog_title": "エラーのためにスキップされたファイル",
+    "error_files_no_errors_label": "前回のセッションまたは再試行後にエラーのためにスキップされたと記録されたファイルはありません。",
+    "error_files_found_label": "次の{count}個のファイルは、ダウンロードエラーのためにスキップされました:",
+    "error_files_select_all_button": "すべて選択",
+    "error_files_retry_selected_button": "選択項目を再試行",
+    "error_files_export_urls_button": "URLを.txtにエクスポート",
+    "error_files_no_selection_retry_message": "再試行するファイルを少なくとも1つ選択してください。",
+    "error_files_no_errors_export_title": "エラーなし",
+    "error_files_no_errors_export_message": "エクスポートするエラーのあるファイルURLはありません。",
+    "error_files_no_urls_found_export_title": "URLが見つかりません",
+    "error_files_no_urls_found_export_message": "エラーのあるファイルのリストからエクスポートするURLを抽出できませんでした。",
+    "error_files_save_dialog_title": "エラーのあるファイルURLを保存",
+    "error_files_export_success_title": "エクスポートに成功しました",
+    "error_files_export_success_message": "{count}個のエントリが正常にエクスポートされました:\n{filepath}",
+    "error_files_export_error_title": "エクスポートエラー",
+    "error_files_export_error_message": "ファイルリンクをエクスポートできませんでした: {error}",
+    "export_options_dialog_title": "エクスポートオプション",
+    "export_options_description_label": "エラーのあるファイルリンクのエクスポート形式を選択してください:",
+    "export_options_radio_link_only": "1行に1リンク(URLのみ)",
+    "export_options_radio_link_only_tooltip": "失敗したファイルごとに直接ダウンロードURLのみをエクスポートし、1行に1つのURLをエクスポートします。",
+    "export_options_radio_with_details": "詳細付きでエクスポート(URL [投稿、ファイル情報])",
+    "export_options_radio_with_details_tooltip": "URLの後に、投稿タイトル、投稿ID、元のファイル名などの詳細を角括弧で囲んでエクスポートします。",
+    "export_options_export_button": "エクスポート",
+    "no_errors_logged_title": "記録されたエラーはありません",
+    "no_errors_logged_message": "前回のセッションまたは再試行後にエラーのためにスキップされたと記録されたファイルはありません。",
+    "progress_initializing_text": "進捗: 初期化中...",
+    "progress_posts_text": "進捗: {processed_posts} / {total_posts} 投稿 ({progress_percent:.1f}%)",
+    "progress_processing_post_text": "進捗: 投稿 {processed_posts} を処理中...",
+    "progress_starting_text": "進捗: 開始中...",
+    "downloading_file_known_size_text": "'{filename}' をダウンロード中 ({downloaded_mb:.1f}MB / {total_mb:.1f}MB)",
+    "downloading_file_unknown_size_text": "'{filename}' をダウンロード中 ({downloaded_mb:.1f}MB)",
+    "downloading_multipart_text": "DL '{filename}...': {downloaded_mb:.1f}/{total_mb:.1f} MB ({parts} parts @ {speed:.2f} MB/s)",
+    "downloading_multipart_initializing_text": "ファイル: {filename} - パーツを初期化中...",
+    "status_completed": "完了",
+    "status_cancelled_by_user": "ユーザーによってキャンセルされました",
+    "files_downloaded_label": "ダウンロード済み",
+    "files_skipped_label": "スキップ済み",
+    "retry_finished_text": "再試行が完了しました",
+    "succeeded_text": "成功",
+    "failed_text": "失敗",
+    "ready_for_new_task_text": "新しいタスクの準備ができました。",
+    "fav_mode_active_label_text": "⭐お気に入りモードがアクティブです。お気に入りのアーティスト/投稿を選択する前に、以下のフィルターを選択してください。以下のアクションを選択してください。",
+    "export_links_button_text": "リンクをエクスポート",
+    "download_extracted_links_button_text": "ダウンロード",
+    "download_selected_button_text": "選択項目をダウンロード",
+    "link_input_placeholder_text": "例: https://kemono.su/patreon/user/12345 または .../post/98765",
+    "link_input_tooltip_text": "Kemono/Coomerクリエイターページまたは特定の投稿の完全なURLを入力します。\n例(クリエイター): https://kemono.su/patreon/user/12345\n例(投稿): https://kemono.su/patreon/user/12345/post/98765",
+    "dir_input_placeholder_text": "ダウンロードを保存するフォルダを選択してください",
+    "dir_input_tooltip_text": "ダウンロードしたすべてのコンテンツを保存するメインフォルダを入力または参照します。\n'リンクのみ'モードが選択されていない限り、これは必須です。",
+    "character_input_placeholder_text": "例: Tifa, Aerith, (Cloud, Zack)",
+    "custom_folder_input_placeholder_text": "オプション: この投稿を特定のフォルダに保存",
+    "custom_folder_input_tooltip_text": "単一の投稿URLをダウンロードしていて、'名前/タイトルでフォルダを分ける'が有効になっている場合は、\nこの投稿のダウンロードフォルダにカスタム名を入力できます。\n例: My Favorite Scene",
+    "skip_words_input_placeholder_text": "例: WM, WIP, sketch, preview",
+    "remove_from_filename_input_placeholder_text": "例: patreon, HD",
+    "cookie_text_input_placeholder_no_file_selected_text": "Cookie文字列(cookies.txtが選択されていない場合)",
+    "cookie_text_input_placeholder_with_file_selected_text": "選択したCookieファイルを使用しています(参照...を参照)",
+    "character_search_input_placeholder_text": "キャラクターを検索...",
+    "character_search_input_tooltip_text": "ここに入力して、下の既知のシリーズ/キャラクターのリストをフィルタリングします。",
+    "new_char_input_placeholder_text": "新しいシリーズ/キャラクター名を追加",
+    "new_char_input_tooltip_text": "上のリストに追加する新しいシリーズ、ゲーム、またはキャラクター名を入力します。",
+    "link_search_input_placeholder_text": "リンクを検索...",
+    "link_search_input_tooltip_text": "'リンクのみ'モードでは、ここに入力して、表示されるリンクをテキスト、URL、またはプラットフォームでフィルタリングします。",
+    "manga_date_prefix_input_placeholder_text": "マンガのファイル名のプレフィックス",
+    "manga_date_prefix_input_tooltip_text": "'日付ベース'または'オリジナルファイル'のマンガのファイル名のオプションのプレフィックス(例: 'シリーズ名')。\n空の場合、ファイルはプレフィックスなしでスタイルに従って名前が付けられます。",
+    "log_display_mode_links_view_text": "🔗リンクビュー",
+    "log_display_mode_progress_view_text": "⬇️進捗ビュー",
+    "download_external_links_dialog_title": "選択した外部リンクをダウンロード",
+    "select_all_button_text": "すべて選択",
+    "deselect_all_button_text": "すべて選択解除",
+    "cookie_browse_button_tooltip": "Cookieファイル(Netscape形式、通常はcookies.txt)を参照します。\nこれは、'Cookieを使用'がチェックされていて、上のテキストフィールドが空の場合に使用されます。",
+    "page_range_label_text": "ページ範囲:",
+    "start_page_input_placeholder": "開始",
+    "start_page_input_tooltip": "クリエイターURLの場合: ダウンロードの開始ページ番号を指定します(例: 1、2、3)。\n最初のページから開始するには、空にするか、1に設定します。\n単一の投稿URLまたはマンガ/コミックモードでは無効になります。",
+    "page_range_to_label_text": "から",
+    "end_page_input_placeholder": "終了",
+    "end_page_input_tooltip": "クリエイターURLの場合: ダウンロードの終了ページ番号を指定します(例: 5、10)。\n開始ページからすべてのページをダウンロードするには、空にします。\n単一の投稿URLまたはマンガ/コミックモードでは無効になります。",
+    "known_names_help_button_tooltip_text": "アプリケーション機能ガイドを開きます。",
+    "future_settings_button_tooltip_text": "アプリケーション設定(テーマ、言語など)を開きます。",
+    "link_search_button_tooltip_text": "表示されるリンクをフィルタリング",
+    "confirm_add_all_dialog_title": "新しい名前の追加を確認",
+    "confirm_add_all_info_label": "'キャラクターでフィルター'入力の次の新しい名前/グループは'Known.txt'にありません。\n追加すると、将来のダウンロードのフォルダ構成が改善される可能性があります。\n\nリストを確認して、アクションを選択してください:",
+    "confirm_add_all_select_all_button": "すべて選択",
+    "confirm_add_all_deselect_all_button": "すべて選択解除",
+    "confirm_add_all_add_selected_button": "選択項目をKnown.txtに追加",
+    "confirm_add_all_skip_adding_button": "これらの追加をスキップ",
+    "confirm_add_all_cancel_download_button": "ダウンロードをキャンセル",
+    "cookie_help_dialog_title": "Cookieファイルの説明",
+    "cookie_help_instruction_intro": "<p>Cookieを使用するには、通常、ブラウザから<b>cookies.txt</b>ファイルが必要です。</p>",
+    "cookie_help_how_to_get_title": "<p><b>cookies.txtの入手方法:</b></p>",
+    "cookie_help_step1_extension_intro": "<li>Chromeベースのブラウザに'Get cookies.txt LOCALLY'拡張機能をインストールします:<br><a href=\"https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc\" style=\"color: #87CEEB;\">ChromeウェブストアでGet cookies.txt LOCALLYを入手</a></li>",
+    "cookie_help_step2_login": "<li>ウェブサイト(例: kemono.suまたはcoomer.su)にアクセスし、必要に応じてログインします。</li>",
+    "cookie_help_step3_click_icon": "<li>ブラウザのツールバーで拡張機能のアイコンをクリックします。</li>",
+    "cookie_help_step4_export": "<li>'エクスポート'ボタン(例: \"エクスポートとして\"、\"cookies.txtをエクスポート\" - 正確な文言は拡張機能のバージョンによって異なる場合があります)をクリックします。</li>",
+    "cookie_help_step5_save_file": "<li>ダウンロードした<code>cookies.txt</code>ファイルをコンピュータに保存します。</li>",
+    "cookie_help_step6_app_intro": "<li>このアプリケーションで:<ul>",
+    "cookie_help_step6a_checkbox": "<li>'Cookieを使用'ボックスがチェックされていることを確認します。</li>",
+    "cookie_help_step6b_browse": "<li>Cookieテキストフィールドの横にある'参照...'ボタンをクリックします。</li>",
+    "cookie_help_step6c_select": "<li>保存した<code>cookies.txt</code>ファイルを選択します。</li></ul></li>",
+    "cookie_help_alternative_paste": "<p>または、一部の拡張機能では、Cookie文字列を直接コピーできます。その場合は、ファイルを参照する代わりにテキストフィールドに貼り付けることができます。</p>",
+    "cookie_help_proceed_without_button": "Cookieなしでダウンロード",
+    "cookie_help_cancel_download_button": "ダウンロードをキャンセル",
+    "character_input_tooltip": "キャラクター名を入力します(コンマ区切り)。高度なグループ化をサポートし、'フォルダを分ける'が有効になっている場合はフォルダの命名に影響します。\n\n例:\n- Nami → 'Nami'に一致し、'Nami'フォルダを作成します。\n- (Ulti, Vivi) → いずれかに一致し、'Ulti Vivi'フォルダを作成し、両方をKnown.txtに個別に追加します。\n- (Boa, Hancock)~ → いずれかに一致し、'Boa Hancock'フォルダを作成し、1つのグループとしてKnown.txtに追加します。\n\n名前は一致のエイリアスとして扱われます。\n\nフィルターモード(ボタンサイクル):\n- ファイル: ファイル名でフィルタリングします。\n- タイトル: 投稿タイトルでフィルタリングします。\n- 両方: 最初にタイトル、次にファイル名。\n- コメント(ベータ): 最初にファイル名、次に投稿コメント。",
+    "tour_dialog_title": "Kemono Downloaderへようこそ!",
+    "tour_dialog_never_show_checkbox": "このツアーを二度と表示しない",
+    "tour_dialog_skip_button": "ツアーをスキップ",
+    "tour_dialog_back_button": "戻る",
+    "tour_dialog_next_button": "次へ",
+    "tour_dialog_finish_button": "完了",
+    "tour_dialog_step1_title": "👋ようこそ!",
+    "tour_dialog_step1_content": "こんにちは！このクイックツアーでは、強化されたフィルタリング、マンガモードの改善、Cookieの処理などの最近の更新を含む、Kemono Downloaderの主な機能について説明します。\n<ul>\n<li>私の目標は、<b>Kemono</b>と<b>Coomer</b>からコンテンツを簡単にダウンロードできるようにすることです。</li><br>\n<li><b>🎨クリエイター選択ボタン:</b> URL入力の横にあるパレットアイコンをクリックしてダイアログを開きます。<code>creators.json</code>ファイルからクリエイターを閲覧して選択し、URL入力に名前をすばやく追加します。</li><br>\n<li><b>重要なヒント: アプリが'(応答なし)'になりますか?</b><br>\n'ダウンロード開始'をクリックした後、特に大規模なクリエイターフィードや多くのスレッドがある場合、アプリが一時的に'(応答なし)'と表示されることがあります。お使いのオペレーティングシステム(Windows、macOS、Linux)によっては、'プロセスを終了'または'強制終了'を提案することさえあります。<br>\n<b>しばらくお待ちください！</b>アプリは多くの場合、バックグラウンドで一生懸命動作しています。強制終了する前に、ファイルエクスプローラーで選択した'ダウンロード場所'を確認してみてください。新しいフォルダが作成されたり、ファイルが表示されたりする場合は、ダウンロードが正常に進行していることを意味します。応答するようになるまで、しばらく時間をおいてください。</li><br>\n<li><b>次へ</b>ボタンと<b>戻る</b>ボタンを使用してナビゲートします。</li><br>\n<li>多くのオプションには、詳細についてはホバーするとツールチップが表示されます。</li><br>\n<li>いつでもこのガイドを閉じるには、<b>ツアーをスキップ</b>をクリックします。</li><br>\n<li>今後の起動時にこれを表示したくない場合は、<b>'このツアーを二度と表示しない'</b>をチェックします。</li>\n</ul>",
+    "tour_dialog_step2_title": "①はじめに",
+    "tour_dialog_step2_content": "ダウンロードの基本から始めましょう:\n<ul>\n<li><b>🔗クリエイター/投稿Kemono URL:</b><br>\nクリエイターのページの完全なWebアドレス(URL)を貼り付けます(例: <i>https://kemono.su/patreon/user/12345</i>)\nまたは特定の投稿(例: <i>.../post/98765</i>)。<br>\nまたはCoomerクリエイター(例: <i>https://coomer.su/onlyfans/user/artistname</i>)</li><br>\n<li><b>📁ダウンロード場所:</b><br>\n'参照...'をクリックして、ダウンロードしたすべてのファイルを保存するコンピュータ上のフォルダを選択します。\n'リンクのみ'モードを使用していない限り、これは必須です。</li><br>\n<li><b>📄ページ範囲(クリエイターURLのみ):</b><br>\nクリエイターのページからダウンロードする場合、取得するページの範囲を指定できます(例: 2〜5ページ)。\nすべてのページの場合は空白のままにします。これは、単一の投稿URLまたは<b>マンガ/コミックモード</b>がアクティブな場合は無効になります。</li>\n</ul>",
+    "tour_dialog_step3_title": "②ダウンロードのフィルタリング",
+    "tour_dialog_step3_content": "これらのフィルターでダウンロードするものを絞り込みます('リンクのみ'または'アーカイブのみ'モードではほとんどが無効になります):\n<ul>\n<li><b>🎯キャラクターでフィルター:</b><br>\nキャラクター名をコンマで区切って入力します(例: <i>Tifa, Aerith</i>)。結合されたフォルダ名のエイリアスをグループ化します: <i>(alias1, alias2, alias3)</i> は、(クリーンアップ後) 'alias1 alias2 alias3' フォルダになります。グループ内のすべての名前は、照合のエイリアスとして使用されます。<br>\nこの入力の横にある<b>'フィルター: [タイプ]'</b>ボタンは、このフィルターの適用方法を変更します:\n<ul><li><i>フィルター: ファイル:</i> 個々のファイル名をチェックします。いずれかのファイルが一致した場合、投稿は保持されます。一致したファイルのみがダウンロードされます。フォルダの命名は、一致したファイル名のキャラクターを使用します('フォルダを分ける'がオンの場合)。</li><br>\n<li><i>フィルター: タイトル:</i> 投稿タイトルをチェックします。一致した投稿のすべてのファイルがダウンロードされます。フォルダの命名は、一致した投稿タイトルのキャラクターを使用します。</li>\n<li><b>⤵️フィルターに追加ボタン(既知の名前):</b> 既知の名前の'追加'ボタンの横に(ステップ5を参照)、これによりポップアップが開きます。チェックボックス(検索バー付き)を介して<code>Known.txt</code>リストから名前を選択し、'キャラクターでフィルター'フィールドにすばやく追加します。Known.txtから<code>(Boa, Hancock)</code>のようなグループ化された名前は、フィルターに<code>(Boa, Hancock)~</code>として追加されます。</li><br>\n<li><i>フィルター: 両方:</i> 最初に投稿タイトルをチェックします。一致した場合、すべてのファイルがダウンロードされます。そうでない場合は、ファイル名をチェックし、一致したファイルのみがダウンロードされます。フォルダの命名は、タイトルの一致を優先し、次にファイルの一致を優先します。</li><br>\n<li><i>フィルター: コメント(ベータ):</i> 最初にファイル名をチェックします。ファイルが一致した場合、投稿内のすべてのファイルがダウンロードされます。ファイルの一致がない場合は、投稿のコメントをチェックします。コメントが一致した場合、すべてのファイルがダウンロードされます。(より多くのAPIリクエストを使用します)。フォルダの命名は、ファイルの一致を優先し、次にコメントの一致を優先します。</li></ul>\nこのフィルターは、'名前/タイトルでフォルダを分ける'がオンの場合にもフォルダの命名に影響します。</li><br>\n<li><b>🚫単語でスキップ:</b><br>\n単語をコンマで区切って入力します(例: <i>WIP, sketch, preview</i>)。\nこの入力の横にある<b>'スコープ: [タイプ]'</b>ボタンは、このフィルターの適用方法を変更します:\n<ul><li><i>スコープ: ファイル:</i> これらの単語のいずれかを含む場合、ファイルをスキップします。</li><br>\n<li><i>スコープ: 投稿:</i> これらの単語のいずれかを含む場合、投稿全体をスキップします。</li><br>\n<li><i>スコープ: 両方:</i> ファイルと投稿タイトルの両方のスキップを適用します(最初に投稿、次にファイル)。</li></ul></li><br>\n<li><b>ファイルをフィルター(ラジオボタン):</b> ダウンロードするものを選択します:\n<ul>\n<li><i>すべて:</i> 見つかったすべての種類のファイルをダウンロードします。</li><br>\n<li><i>画像/GIF:</i> 一般的な画像形式とGIFのみ。</li><br>\n<li><i>動画:</i> 一般的な動画形式のみ。</li><br>\n<li><b><i>📦アーカイブのみ:</i></b> <b>.zip</b>ファイルと<b>.rar</b>ファイルのみを排他的にダウンロードします。これを選択すると、'zipをスキップ'および'rarをスキップ'チェックボックスが自動的に無効になり、オフになります。'外部リンクを表示'も無効になります。</li><br>\n<li><i>🎧音声のみ:</i> 一般的な音声形式(MP3、WAV、FLACなど)のみ。</li><br>\n<li><i>🔗リンクのみ:</i> ファイルをダウンロードする代わりに、投稿の説明から外部リンクを抽出して表示します。ダウンロード関連のオプションと'外部リンクを表示'は無効になります。</li>\n</ul></li>\n</ul>",
+    "tour_dialog_step4_title": "③お気に入りモード(代替ダウンロード)",
+    "tour_dialog_step4_content": "このアプリは、Kemono.suでお気に入りに登録したアーティストからコンテンツをダウンロードするための'お気に入りモード'を提供します。\n<ul>\n<li><b>⭐お気に入りモードチェックボックス:</b><br>\n'🔗リンクのみ'ラジオボタンの横にあります。このボックスをチェックして、お気に入りモードを有効にします。</li><br>\n<li><b>お気に入りモードで何が起こるか:</b>\n<ul><li>'🔗クリエイター/投稿Kemono URL'入力領域が、お気に入りモードがアクティブであることを示すメッセージに置き換えられます。</li><br>\n<li>標準の'ダウンロード開始'、'一時停止'、'キャンセル'ボタンが、'🖼️お気に入りのアーティスト'ボタンと'📄お気に入りの投稿'ボタンに置き換えられます(注: 'お気に入りの投稿'は将来予定されています)。</li><br>\n<li>お気に入りを取得するにはCookieが必要なため、'🍪Cookieを使用'オプションが自動的に有効になり、ロックされます。</li></ul></li><br>\n<li><b>🖼️お気に入りのアーティストボタン:</b><br>\nこれをクリックすると、Kemono.suのお気に入りのアーティストを一覧表示するダイアログが開きます。1人または複数のアーティストを選択してダウンロードできます。</li><br>\n<li><b>お気に入りのダウンロードスコープ(ボタン):</b><br>\nこのボタン('お気に入りの投稿'の横)は、選択したお気に入りをどこにダウンロードするかを制御します:\n<ul><li><i>スコープ: 選択した場所:</i> 選択したすべてのアーティストが、設定したメインの'ダウンロード場所'にダウンロードされます。フィルターはグローバルに適用されます。</li><br>\n<li><i>スコープ: アーティストフォルダ:</i> 選択したアーティストごとに、メインの'ダウンロード場所'にサブフォルダ(アーティスト名で命名)が作成されます。そのアーティストのコンテンツは、特定のフォルダに保存されます。フィルターは各アーティストのフォルダ内に適用されます。</li></ul></li><br>\n<li><b>お気に入りモードのフィルター:</b><br>\n'キャラクターでフィルター'、'単語でスキップ'、および'ファイルをフィルター'オプションは、選択したお気に入りのアーティストからダウンロードしたコンテンツに引き続き適用されます。</li>\n</ul>",
+    "tour_dialog_step5_title": "④ダウンロードの絞り込み",
+    "tour_dialog_step5_content": "ダウンロードをカスタマイズするためのその他のオプション:\n<ul>\n<li><b>.zipをスキップ/.rarをスキップ:</b> これらのアーカイブファイルの種類をダウンロードしないようにするには、これらをチェックします。\n<i>(注: '📦アーカイブのみ'フィルターモードが選択されている場合、これらは無効になり、無視されます)。</i></li><br>\n<li><b>✂️名前から単語を削除:</b><br>\nダウンロードされたファイル名から削除する単語をコンマで区切って入力します(例: <i>patreon, [HD]</i>)(大文字と小文字を区別しません)。</li><br>\n<li><b>サムネイルのみをダウンロード:</b> フルサイズのファイルではなく、小さなプレビュー画像をダウンロードします(利用可能な場合)。</li><br>\n<li><b>大きな画像を圧縮:</b> 'Pillow'ライブラリがインストールされている場合、1.5MBを超える画像は、WebPバージョンが大幅に小さい場合にWebP形式に変換されます。</li><br>\n<li><b>🗄️カスタムフォルダ名(単一投稿のみ):</b><br>\n特定の投稿URLをダウンロードしていて、'名前/タイトルでフォルダを分ける'が有効になっている場合は、\nその投稿のダウンロードフォルダにカスタム名を入力できます。</li><br>\n<li><b>🍪Cookieを使用:</b> リクエストにCookieを使用するには、これをチェックします。次のいずれかを実行できます:\n<ul><li>Cookie文字列をテキストフィールドに直接入力します(例: <i>name1=value1; name2=value2</i>)。</li><br>\n<li>'参照...'をクリックして、<i>cookies.txt</i>ファイル(Netscape形式)を選択します。パスがテキストフィールドに表示されます。</li></ul>\nこれは、ログインが必要なコンテンツにアクセスするのに役立ちます。テキストフィールドが入力されている場合は、テキストフィールドが優先されます。\n'Cookieを使用'がチェックされているが、テキストフィールドと参照ファイルの両方が空の場合、アプリのディレクトリから'cookies.txt'を読み込もうとします。</li>\n</ul>",
+    "tour_dialog_step6_title": "⑤整理とパフォーマンス",
+    "tour_dialog_step6_content": "ダウンロードを整理し、パフォーマンスを管理します:\n<ul>\n<li><b>⚙️名前/タイトルでフォルダを分ける:</b> 'キャラクターでフィルター'入力または投稿タイトルに基づいてサブフォルダを作成します(フォルダ名のフォールバックとして<b>Known.txt</b>リストを使用できます)。</li><br>\n<li><b>投稿ごとにサブフォルダを作成:</b> 'フォルダを分ける'がオンの場合、これにより、メインのキャラクター/タイトルフォルダ内に<i>各個別の投稿</i>の追加のサブフォルダが作成されます。</li><br>\n<li><b>🚀マルチスレッドを使用(スレッド):</b> より高速な操作を有効にします。'スレッド'入力の数値の意味:\n<ul><li><b>クリエイターフィードの場合:</b> 同時に処理する投稿の数。各投稿のファイルは、そのワーカーによって順次ダウンロードされます('日付ベース'のマンガの命名がオンで、1つの投稿ワーカーを強制する場合を除く)。</li><br>\n<li><b>単一投稿URLの場合:</b> その単一投稿から同時にダウンロードするファイルの数。</li></ul>\nオフの場合、1つのスレッドが使用されます。スレッド数が多い場合(例: >40)、警告が表示されることがあります。</li><br>\n<li><b>マルチパートダウンロードの切り替え(ログ領域の右上):</b><br>\n<b>'マルチパート: [オン/オフ]'</b>ボタンは、個々の大きなファイルのマルチセグメントダウンロードを有効/無効にします。\n<ul><li><b>オン:</b> 大きなファイルのダウンロードを高速化する場合があります(例: 動画)が、UIの途切れや、多くの小さなファイルでログがスパムになる可能性があります。有効にすると警告が表示されます。マルチパートダウンロードが失敗した場合、単一ストリームとして再試行します。</li><br>\n<li><b>オフ(デフォルト):</b> ファイルは単一のストリームでダウンロードされます。</li></ul>\n'リンクのみ'または'アーカイブのみ'モードがアクティブな場合は無効になります。</li><br>\n<li><b>📖マンガ/コミックモード(クリエイターURLのみ):</b> 順次コンテンツ用に設計されています。\n<ul>\n<li>投稿を<b>古いものから新しいものへ</b>とダウンロードします。</li><br>\n<li>すべての投稿がフェッチされるため、'ページ範囲'入力は無効になります。</li><br>\n<li>このモードがクリエイターフィードでアクティブな場合、ログ領域の右上に<b>ファイル名スタイルの切り替えボタン</b>(例: '名前: 投稿タイトル')が表示されます。これをクリックして、命名スタイルを切り替えます:\n<ul>\n<li><b><i>名前: 投稿タイトル(デフォルト):</i></b> 投稿の最初のファイルは、クリーンアップされた投稿タイトルにちなんで名前が付けられます(例: 'My Chapter 1.jpg')。*同じ投稿*の後続のファイルは、元のファイル名を保持しようとします(例: 'page_02.png'、'bonus_art.jpg')。投稿にファイルが1つしかない場合は、投稿タイトルにちなんで名前が付けられます。これは、ほとんどのマンガ/コミックに一般的に推奨されます。</li><br>\n<li><b><i>名前: オリジナルファイル:</i></b> すべてのファイルは、元のファイル名を保持しようとします。オプションのプレフィックス(例: 'MySeries_')は、スタイルボタンの横に表示される入力フィールドに入力できます。例: 'MySeries_OriginalFile.jpg'。</li><br>\n<li><b><i>名前: タイトル+G.Num(投稿タイトル+グローバル番号付け):</i></b> 現在のダウンロードセッションのすべての投稿のすべてのファイルは、クリーンアップされた投稿タイトルをプレフィックスとして使用し、その後にグローバルカウンターを付けて順次名前が付けられます。例: 投稿 'Chapter 1' (2ファイル) -> 'Chapter 1_001.jpg'、'Chapter 1_002.png'。次の投稿 'Chapter 2' (1ファイル) は、番号付けを続けます -> 'Chapter 2_003.jpg'。このスタイルの場合、正しいグローバル番号付けを保証するために、投稿処理のマルチスレッドは自動的に無効になります。</li><br>\n<li><b><i>名前: 日付ベース:</i></b> ファイルは、投稿の公開順に基づいて順次名前が付けられます(001.ext、002.ext、...)。オプションのプレフィックス(例: 'MySeries_')は、スタイルボタンの横に表示される入力フィールドに入力できます。例: 'MySeries_001.jpg'。このスタイルの場合、投稿処理のマルチスレッドは自動的に無効になります。</li>\n</ul>\n</li><br>\n<li>'名前: 投稿タイトル'、'名前: タイトル+G.Num'、または'名前: 日付ベース'のスタイルで最良の結果を得るには、フォルダ構成にマンガ/シリーズのタイトルを付けて'キャラクターでフィルター'フィールドを使用します。</li>\n</ul></li><br>\n<li><b>🎭スマートなフォルダ構成のためのKnown.txt:</b><br>\n<code>Known.txt</code>(アプリディレクトリ内)は、'名前/タイトルでフォルダを分ける'がオンの場合の自動フォルダ構成をきめ細かく制御できます。\n<ul>\n<li><b>仕組み:</b> <code>Known.txt</code>の各行はエントリです。\n<ul><li><code>My Awesome Series</code>のような単純な行は、一致するコンテンツが\"My Awesome Series\"という名前のフォルダに保存されることを意味します。</li><br>\n<li><code>(Character A, Char A, Alt Name A)</code>のようなグループ化された行は、\"Character A\"、\"Char A\"、または\"Alt Name A\"に一致するコンテンツがすべて、(クリーンアップ後)\"Character A Char A Alt Name A\"という名前の単一のフォルダに保存されることを意味します。括弧内のすべての用語は、そのフォルダのエイリアスになります。</li></ul></li>\n<li><b>スマートフォールバック:</b> '名前/タイトルでフォルダを分ける'がオンで、投稿が特定の'キャラクターでフィルター'エントリに一致しない場合、ダウンローダーは<code>Known.txt</code>を参照して、フォルダ作成に一致するマスター名を見つけます。</li><br>\n<li><b>ユーザーフレンドリーな管理:</b> 以下のUIリストを介して単純な(グループ化されていない)名前を追加します。高度な編集(グループ化されたエイリアスの作成/変更など)の場合は、<b>'Known.txtを開く'</b>をクリックして、テキストエディタでファイルを編集します。アプリは、次回の使用時または次回の起動時に再読み込みします。</li>\n</ul>\n</li>\n</ul>",
+    "tour_dialog_step7_title": "⑥よくあるエラーとトラブルシューティング",
+    "tour_dialog_step7_content": "ダウンロードで問題が発生することがあります。最も一般的なものをいくつか紹介します:\n<ul>\n<li><b>キャラクター入力ツールチップ:</b><br>\nキャラクター名をコンマで区切って入力します(例: <i>Tifa, Aerith</i>)。<br>\n結合されたフォルダ名のエイリアスをグループ化します: <i>(alias1, alias2, alias3)</i> は、'alias1 alias2 alias3'フォルダになります。<br>\nグループ内のすべての名前は、コンテンツ照合のエイリアスとして使用されます。<br><br>\nこの入力の横にある'フィルター: [タイプ]'ボタンは、このフィルターの適用方法を変更します:<br>\n- フィルター: ファイル: 個々のファイル名をチェックします。一致したファイルのみがダウンロードされます。<br>\n- フィルター: タイトル: 投稿タイトルをチェックします。一致した投稿のすべてのファイルがダウンロードされます。<br>\n- フィルター: 両方: 最初に投稿タイトルをチェックします。一致しない場合は、ファイル名をチェックします。<br>\n- フィルター: コメント(ベータ): 最初にファイル名をチェックします。一致しない場合は、投稿コメントをチェックします。<br><br>\nこのフィルターは、'名前/タイトルでフォルダを分ける'が有効になっている場合にもフォルダの命名に影響します。</li><br>\n<li><b>502 Bad Gateway / 503 Service Unavailable / 504 Gateway Timeout:</b><br>\nこれらは通常、Kemono/Coomerのサーバー側の一次的な問題を示します。サイトが過負荷になっているか、メンテナンス中であるか、問題が発生している可能性があります。<br>\n<b>解決策:</b> しばらく(例: 30分から数時間)待ってから、後でもう一度試してください。ブラウザでサイトを直接確認してください。</li><br>\n<li><b>接続が失われました / 接続が拒否されました / タイムアウト(ファイルダウンロード中):</b><br>\nこれは、インターネット接続、サーバーの不安定性、またはサーバーが大きなファイルの接続を切断した場合に発生する可能性があります。<br>\n<b>解決策:</b> インターネットを確認してください。'スレッド'数が高い場合は、減らしてみてください。アプリは、セッションの最後に失敗した一部のファイルを再試行することを提案する場合があります。</li><br>\n<li><b>IncompleteReadエラー:</b><br>\nサーバーが予期したよりも少ないデータを送信しました。多くの場合、一時的なネットワークの不具合またはサーバーの問題です。<br>\n<b>解決策:</b> アプリは多くの場合、ダウンロードセッションの最後にこれらのファイルを再試行するようにマークします。</li><br>\n<li><b>403 Forbidden / 401 Unauthorized(公開投稿ではあまり一般的ではありません):</b><br>\nコンテンツにアクセスする権限がない可能性があります。一部の有料またはプライベートコンテンツについては、ブラウザセッションの有効なCookieで'Cookieを使用'オプションを使用すると役立つ場合があります。Cookieが最新であることを確認してください。</li><br>\n<li><b>404 Not Found:</b><br>\n投稿またはファイルのURLが正しくないか、コンテンツがサイトから削除されています。URLを再確認してください。</li><br>\n<li><b>'投稿が見つかりません' / 'ターゲット投稿が見つかりません':</b><br>\nURLが正しく、クリエイター/投稿が存在することを確認してください。ページ範囲を使用している場合は、クリエイターに対して有効であることを確認してください。非常に新しい投稿の場合、APIに表示されるまでにわずかな遅延がある場合があります。</li><br>\n<li><b>全体的な低速 / アプリ'(応答なし)':</b><br>\nステップ1で述べたように、特に大規模なクリエイターフィードや多くのスレッドがある場合に起動後にアプリがフリーズするように見える場合は、しばらく時間をおいてください。バックグラウンドでデータを処理している可能性があります。これが頻繁に発生する場合は、スレッド数を減らすと応答性が向上することがあります。</li>\n</ul>",
+    "tour_dialog_step8_title": "⑦ログと最終制御",
+    "tour_dialog_step8_content": "監視と制御:\n<ul>\n<li><b>📜進捗ログ/抽出されたリンクのログ:</b> 詳細なダウンロードメッセージを表示します。'🔗リンクのみ'モードがアクティブな場合、この領域には抽出されたリンクが表示されます。</li><br>\n<li><b>ログに外部リンクを表示:</b> チェックすると、メインログの下にセカンダリログパネルが表示され、投稿の説明で見つかった外部リンクが表示されます。<i>('🔗リンクのみ'または'📦アーカイブのみ'モードがアクティブな場合は無効)。</i></li><br>\n<li><b>ログ表示の切り替え(👁️ / 🙈ボタン):</b><br>\nこのボタン(ログ領域の右上)は、メインログビューを変更します:\n<ul><li><b>👁️進捗ログ(デフォルト):</b> すべてのダウンロードアクティビティ、エラー、および概要を表示します。</li><br>\n<li><b>🙈見逃したキャラクターログ:</b> 'キャラクターでフィルター'設定のためにスキップされた投稿タイトルのキーワードのリストを表示します。意図せずに見逃している可能性のあるコンテンツを特定するのに役立ちます。</li></ul></li><br>\n<li><b>🔄リセット:</b> すべての入力フィールド、ログをクリアし、一時的な設定をデフォルトにリセットします。ダウンロードがアクティブでない場合にのみ使用できます。</li><br>\n<li><b>⬇️ダウンロード開始 / 🔗リンクを抽出 / ⏸️一時停止 / ❌キャンセル:</b> これらのボタンはプロセスを制御します。'キャンセルしてUIをリセット'は、現在の操作を停止し、UIのソフトリセットを実行し、URLとディレクトリの入力を保持します。'一時停止/再開'は、一時的な停止と継続を可能にします。</li><br>\n<li>一部のファイルが回復可能なエラー('IncompleteRead'など)で失敗した場合、セッションの最後に再試行するように求められることがあります。</li>\n</ul>\n<br>これで準備完了です！<b>'完了'</b>をクリックしてツアーを閉じ、ダウンローダーの使用を開始します。",
+    "help_guide_dialog_title": "Kemono Downloader - 機能ガイド",
+    "help_guide_github_tooltip": "プロジェクトのGitHubページにアクセスします(ブラウザで開きます)",
+    "help_guide_instagram_tooltip": "Instagramページにアクセスします(ブラウザで開きます)",
+    "help_guide_discord_tooltip": "Discordコミュニティに参加します(ブラウザで開きます)",
+    "help_guide_step1_title": "①はじめにと主な入力",
+    "help_guide_step1_content": "<html><head/><body>\n<p>このガイドでは、Kemono Downloaderの機能、フィールド、およびボタンの概要を説明します。</p>\n<h3>主な入力領域(左上)</h3>\n<ul>\n<li><b>🔗クリエイター/投稿Kemono URL:</b>\n<ul>\n<li>クリエイターのページの完全なWebアドレスを入力します(例: <i>https://kemono.su/patreon/user/12345</i>)または特定の投稿(例: <i>.../post/98765</i>)。</li>\n<li>Kemono(kemono.su、kemono.party)およびCoomer(coomer.su、coomer.party)のURLをサポートします。</li>\n</ul>\n</li>\n<li><b>ページ範囲(開始から終了):</b>\n<ul>\n<li>クリエイターURLの場合: 取得するページの範囲を指定します(例: 2〜5ページ)。すべてのページの場合は空白のままにします。</li>\n<li>単一の投稿URLまたは<b>マンガ/コミックモード</b>がアクティブな場合は無効になります。</li>\n</ul>\n</li>\n<li><b>📁ダウンロード場所:</b>\n<ul>\n<li><b>'参照...'</b>をクリックして、ダウンロードしたすべてのファイルを保存するコンピュータ上のメインフォルダを選択します。</li>\n<li><b>'🔗リンクのみ'</b>モードを使用していない限り、このフィールドは必須です。</li>\n</ul>\n</li>\n<li><b>🎨クリエイター選択ボタン(URL入力の横):</b>\n<ul>\n<li>パレットアイコン(🎨)をクリックして、'クリエイター選択'ダイアログを開きます。</li>\n<li>このダイアログは、<code>creators.json</code>ファイル(アプリディレクトリにある必要があります)からクリエイターを読み込みます。</li>\n<li><b>ダイアログ内:</b>\n<ul>\n<li><b>検索バー:</b> 名前またはサービスでクリエイターリストをフィルタリングするには、入力します。</li>\n<li><b>クリエイターリスト:</b> <code>creators.json</code>からクリエイターを表示します。'お気に入り'に登録したクリエイター(JSONデータ内)が一番上に表示されます。</li>\n<li><b>チェックボックス:</b> 名前の横にあるボックスをチェックして、1人または複数のクリエイターを選択します。</li>\n<li><b>'スコープ'ボタン(例: 'スコープ: キャラクター'):</b> このボタンは、このポップアップからダウンロードを開始するときのダウンロードの構成を切り替えます:\n<ul><li><i>スコープ: キャラクター:</i> ダウンロードは、メインの'ダウンロード場所'に直接キャラクター名のフォルダに整理されます。同じキャラクターの異なるクリエイターの作品がグループ化されます。</li>\n<li><i>スコープ: クリエイター:</i> ダウンロードは、最初にメインの'ダウンロード場所'にクリエイター名のフォルダを作成します。次に、各クリエイターのフォルダ内にキャラクター名のサブフォルダが作成されます。</li></ul>\n</li>\n<li><b>'選択項目を追加'ボタン:</b> これをクリックすると、チェックされたすべてのクリエイターの名前が取得され、メインの'🔗クリエイター/投稿Kemono URL'入力フィールドにコンマで区切って追加されます。その後、ダイアログが閉じます。</li>\n</ul>\n</li>\n<li>この機能は、各URLを手動で入力または貼り付けることなく、複数のクリエイターのURLフィールドをすばやく入力する方法を提供します。</li>\n</ul>\n</li>\n</ul></body></html>",
+    "help_guide_step2_title": "②ダウンロードのフィルタリング",
+    "help_guide_step2_content": "<html><head/><body>\n<h3>ダウンロードのフィルタリング(左パネル)</h3>\n<ul>\n<li><b>🎯キャラクターでフィルター:</b>\n<ul>\n<li>名前をコンマで区切って入力します(例: <code>Tifa, Aerith</code>)。</li>\n<li><b>共有フォルダのグループ化されたエイリアス(個別のKnown.txtエントリ):</b> <code>(Vivi, Ulti, Uta)</code>。\n<ul><li>\"Vivi\"、\"Ulti\"、または\"Uta\"に一致するコンテンツは、(クリーンアップ後)\"Vivi Ulti Uta\"という名前の共有フォルダに保存されます。</li>\n<li>これらの名前が新しい場合は、\"Vivi\"、\"Ulti\"、および\"Uta\"を<code>Known.txt</code>に<i>個別の個別のエントリ</i>として追加するように求められます。</li>\n</ul>\n</li>\n<li><b>共有フォルダのグループ化されたエイリアス(単一のKnown.txtエントリ):</b> <code>(Yuffie, Sonon)~</code>(チルダ<code>~</code>に注意してください)。\n<ul><li>\"Yuffie\"または\"Sonon\"に一致するコンテンツは、\"Yuffie Sonon\"という名前の共有フォルダに保存されます。</li>\n<li>新しい場合は、(エイリアスYuffie、Sononを持つ)\"Yuffie Sonon\"が、<code>Known.txt</code>に<i>単一のグループエントリ</i>として追加されることが提案されます。</li>\n</ul>\n</li>\n<li>このフィルターは、'名前/タイトルでフォルダを分ける'が有効になっている場合にフォルダの命名に影響します。</li>\n</ul>\n</li>\n<li><b>フィルター: [タイプ]ボタン(キャラクターフィルタースコープ):</b> 'キャラクターでフィルター'の適用方法を切り替えます:\n<ul>\n<li><code>フィルター: ファイル</code>: 個々のファイル名をチェックします。ファイルが一致した場合、投稿は保持されます。一致したファイルのみがダウンロードされます。フォルダの命名は、一致したファイル名のキャラクターを使用します。</li>\n<li><code>フィルター: タイトル</code>: 投稿タイトルをチェックします。一致した投稿のすべてのファイルがダウンロードされます。フォルダの命名は、一致した投稿タイトルのキャラクターを使用します。</li>\n<li><code>フィルター: 両方</code>: 最初に投稿タイトルをチェックします。一致した場合、すべてのファイルがダウンロードされます。そうでない場合は、ファイル名をチェックし、一致したファイルのみがダウンロードされます。フォルダの命名は、タイトルの一致を優先し、次にファイルの一致を優先します。</li>\n<li><code>フィルター: コメント(ベータ)</code>: 最初にファイル名をチェックします。ファイルが一致した場合、投稿内のすべてのファイルがダウンロードされます。ファイルの一致がない場合は、投稿のコメントをチェックします。コメントが一致した場合、すべてのファイルがダウンロードされます。(より多くのAPIリクエストを使用します)。フォルダの命名は、ファイルの一致を優先し、次にコメントの一致を優先します。</li>\n</ul>\n</li>\n<li><b>🗄️カスタムフォルダ名(単一投稿のみ):</b>\n<ul>\n<li>特定の投稿URLをダウンロードしていて、'名前/タイトルでフォルダを分ける'が有効になっている場合にのみ表示および使用できます。</li>\n<li>その単一投稿のダウンロードフォルダにカスタム名を指定できます。</li>\n</ul>\n</li>\n<li><b>🚫単語でスキップ:</b>\n<ul><li>特定のコンテンツを無視するには、単語をコンマで区切って入力します(例: <code>WIP, sketch, preview</code>)。</li></ul>\n</li>\n<li><b>スコープ: [タイプ]ボタン(スキップワードスコープ):</b> '単語でスキップ'の適用方法を切り替えます:\n<ul>\n<li><code>スコープ: ファイル</code>: これらの単語のいずれかを含む場合、個々のファイルをスキップします。</li>\n<li><code>スコープ: 投稿</code>: これらの単語のいずれかを含む場合、投稿全体をスキップします。</li>\n<li><code>スコープ: 両方</code>: 両方を適用します(最初に投稿タイトル、次に個々のファイル)。</li>\n</ul>\n</li>\n<li><b>✂️名前から単語を削除:</b>\n<ul><li>ダウンロードされたファイル名から削除する単語をコンマで区切って入力します(例: <code>patreon, [HD]</code>)(大文字と小文字を区別しません)。</li></ul>\n</li>\n<li><b>ファイルをフィルター(ラジオボタン):</b> ダウンロードするものを選択します:\n<ul>\n<li><code>すべて</code>: 見つかったすべての種類のファイルをダウンロードします。</li>\n<li><code>画像/GIF</code>: 一般的な画像形式(JPG、PNG、GIF、WEBPなど)とGIFのみ。</li>\n<li><code>動画</code>: 一般的な動画形式(MP4、MKV、WEBM、MOVなど)のみ。</li>\n<li><code>📦アーカイブのみ</code>: <b>.zip</b>ファイルと<b>.rar</b>ファイルのみを排他的にダウンロードします。これを選択すると、'zipをスキップ'および'rarをスキップ'チェックボックスが自動的に無効になり、オフになります。'外部リンクを表示'も無効になります。</li>\n<li><code>🎧音声のみ</code>: 一般的な音声形式(MP3、WAV、FLAC、M4A、OGGなど)のみをダウンロードします。他のファイル固有のオプションは、'画像'または'動画'モードと同様に動作します。</li>\n<li><code>🔗リンクのみ</code>: ファイルをダウンロードする代わりに、投稿の説明から外部リンクを抽出して表示します。ダウンロード関連のオプションと'外部リンクを表示'は無効になります。メインのダウンロードボタンは'🔗リンクを抽出'になります。</li>\n</ul>\n</li>\n</ul></body></html>",
+    "help_guide_step3_title": "③ダウンロードオプションと設定",
+    "help_guide_step3_content": "<html><head/><body>\n<h3>ダウンロードオプションと設定(左パネル)</h3>\n<ul>\n<li><b>.zipをスキップ/.rarをスキップ:</b> これらのアーカイブファイルの種類をダウンロードしないようにするには、チェックボックスをオンにします。('📦アーカイブのみ'フィルターモードが選択されている場合は無効になり、無視されます)。</li>\n<li><b>サムネイルのみをダウンロード:</b> フルサイズのファイルではなく、小さなプレビュー画像をダウンロードします(利用可能な場合)。</li>\n<li><b>大きな画像を圧縮(WebPへ):</b> 'Pillow'(PIL)ライブラリがインストールされている場合、1.5MBを超える画像は、WebPバージョンが大幅に小さい場合にWebP形式に変換されます。</li>\n<li><b>⚙️詳細設定:</b>\n<ul>\n<li><b>名前/タイトルでフォルダを分ける:</b> 'キャラクターでフィルター'入力または投稿タイトルに基づいてサブフォルダを作成します。フォルダ名のフォールバックとして<b>Known.txt</b>リストを使用できます。</li></ul></li></ul></body></html>",
+    "help_guide_step4_title": "④詳細設定(パート1)",
+    "help_guide_step4_content": "<html><head/><body><h3>⚙️詳細設定(続き)</h3><ul><ul>\n<li><b>投稿ごとにサブフォルダを作成:</b> 'フォルダを分ける'がオンの場合、これにより、メインのキャラクター/タイトルフォルダ内に<i>各個別の投稿</i>の追加のサブフォルダが作成されます。</li>\n<li><b>Cookieを使用:</b> リクエストにCookieを使用するには、このボックスをチェックします。\n<ul>\n<li><b>テキストフィールド:</b> Cookie文字列を直接入力します(例: <code>name1=value1; name2=value2</code>)。</li>\n<li><b>参照...:</b> <code>cookies.txt</code>ファイル(Netscape形式)を選択します。パスがテキストフィールドに表示されます。</li>\n<li><b>優先度:</b> テキストフィールド(入力されている場合)が参照ファイルよりも優先されます。'Cookieを使用'がチェックされているが、両方が空の場合、アプリのディレクトリから<code>cookies.txt</code>を読み込もうとします。</li>\n</ul>\n</li>\n<li><b>マルチスレッドを使用とスレッド入力:</b>\n<ul>\n<li>より高速な操作を有効にします。'スレッド'入力の数値の意味:\n<ul>\n<li><b>クリエイターフィードの場合:</b> 同時に処理する投稿の数。各投稿のファイルは、そのワーカーによって順次ダウンロードされます('日付ベース'のマンガの命名がオンで、1つの投稿ワーカーを強制する場合を除く)。</li>\n<li><b>単一投稿URLの場合:</b> その単一投稿から同時にダウンロードするファイルの数。</li>\n</ul>\n</li>\n<li>オフの場合、1つのスレッドが使用されます。スレッド数が多い場合(例: >40)、警告が表示されることがあります。</li>\n</ul>\n</li></ul></ul></body></html>",
+    "help_guide_step5_title": "⑤詳細設定(パート2)とアクション",
+    "help_guide_step5_content": "<html><head/><body><h3>⚙️詳細設定(続き)</h3><ul><ul>\n<li><b>ログに外部リンクを表示:</b> チェックすると、メインログの下にセカンダリログパネルが表示され、投稿の説明で見つかった外部リンクが表示されます。('🔗リンクのみ'または'📦アーカイブのみ'モードがアクティブな場合は無効)。</li>\n<li><b>📖マンガ/コミックモード(クリエイターURLのみ):</b> 順次コンテンツ用に設計されています。\n<ul>\n<li>投稿を<b>古いものから新しいものへ</b>とダウンロードします。</li>\n<li>すべての投稿がフェッチされるため、'ページ範囲'入力は無効になります。</li>\n<li>このモードがクリエイターフィードでアクティブな場合、ログ領域の右上に<b>ファイル名スタイルの切り替えボタン</b>(例: '名前: 投稿タイトル')が表示されます。これをクリックして、命名スタイルを切り替えます:\n<ul>\n<li><code>名前: 投稿タイトル(デフォルト)</code>: 投稿の最初のファイルは、クリーンアップされた投稿タイトルにちなんで名前が付けられます(例: 'My Chapter 1.jpg')。*同じ投稿*の後続のファイルは、元のファイル名を保持しようとします(例: 'page_02.png'、'bonus_art.jpg')。投稿にファイルが1つしかない場合は、投稿タイトルにちなんで名前が付けられます。これは、ほとんどのマンガ/コミックに一般的に推奨されます。</li>\n<li><code>名前: オリジナルファイル</code>: すべてのファイルは、元のファイル名を保持しようとします。</li>\n<li><code>名前: オリジナルファイル</code>: すべてのファイルは、元のファイル名を保持しようとします。このスタイルがアクティブな場合、<b>オプションのファイル名プレフィックス</b>(例: 'MySeries_')の入力フィールドがこのスタイルボタンの横に表示されます。例: 'MySeries_OriginalFile.jpg'。</li>\n<li><code>名前: タイトル+G.Num(投稿タイトル+グローバル番号付け)</code>: 現在のダウンロードセッションのすべての投稿のすべてのファイルは、クリーンアップされた投稿タイトルをプレフィックスとして使用し、その後にグローバルカウンターを付けて順次名前が付けられます。例: 投稿 'Chapter 1' (2ファイル) -> 'Chapter 1 001.jpg'、'Chapter 1 002.png'。次の投稿 'Chapter 2' (1ファイル) -> 'Chapter 2 003.jpg'。このスタイルの場合、投稿処理のマルチスレッドは自動的に無効になります。</li>\n<li><code>名前: 日付ベース</code>: ファイルは、公開順に基づいて順次名前が付けられます(001.ext、002.ext、...)。このスタイルがアクティブな場合、<b>オプションのファイル名プレフィックス</b>(例: 'MySeries_')の入力フィールドがこのスタイルボタンの横に表示されます。例: 'MySeries_001.jpg'。このスタイルの場合、投稿処理のマルチスレッドは自動的に無効になります。</li>\n</ul>\n</li>\n<li>'名前: 投稿タイトル'、'名前: タイトル+G.Num'、または'名前: 日付ベース'のスタイルで最良の結果を得るには、フォルダ構成にマンガ/シリーズのタイトルを付けて'キャラクターでフィルター'フィールドを使用します。</li>\n</ul>\n</li>\n</ul></li></ul>\n<h3>主なアクション(左パネル)</h3>\n<ul>\n<li><b>⬇️ダウンロード開始 / 🔗リンクを抽出:</b> このボタンのテキストと機能は、'ファイルをフィルター'ラジオボタンの選択に基づいて変更されます。メイン操作を開始します。</li>\n<li><b>⏸️ダウンロードを一時停止 / ▶️ダウンロードを再開:</b> 現在のダウンロード/抽出プロセスを一時的に停止し、後で再開できます。一時停止中に一部のUI設定を変更できます。</li>\n<li><b>❌キャンセルしてUIをリセット:</b> 現在の操作を停止し、UIのソフトリセットを実行します。URLとダウンロードディレクトリの入力は保持されますが、他の設定とログはクリアされます。</li>\n</ul></body></html>",
+    "help_guide_step6_title": "⑥既知のシリーズ/キャラクターリスト",
+    "help_guide_step6_content": "<html><head/><body>\n<h3>既知のシリーズ/キャラクターリストの管理(左下)</h3>\n<p>このセクションは、'名前/タイトルでフォルダを分ける'がオンの場合のスマートなフォルダ構成に役立つ<code>Known.txt</code>ファイルを管理するのに役立ちます。特に、投稿がアクティブな'キャラクターでフィルター'入力に一致しない場合のフォールバックとして役立ちます。</p>\n<ul>\n<li><b>Known.txtを開く:</b> デフォルトのテキストエディタで<code>Known.txt</code>ファイル(アプリディレクトリにあります)を開き、高度な編集(複雑なグループ化されたエイリアスの作成など)を行います。</li>\n<li><b>キャラクターを検索...:</b> 以下に表示される既知の名前のリストをフィルタリングします。</li>\n<li><b>リストウィジェット:</b> <code>Known.txt</code>からマスター名を表示します。ここでエントリを選択して削除します。</li>\n<li><b>新しいシリーズ/キャラクター名を追加(入力フィールド):</b> 追加する名前またはグループを入力します。\n<ul>\n<li><b>単純な名前:</b> 例: <code>My Awesome Series</code>。単一のエントリとして追加します。</li>\n<li><b>個別のKnown.txtエントリのグループ:</b> 例: <code>(Vivi, Ulti, Uta)</code>。\"Vivi\"、\"Ulti\"、および\"Uta\"を<code>Known.txt</code>に3つの個別の個別のエントリとして追加します。</li>\n<li><b>共有フォルダと単一のKnown.txtエントリのグループ(チルダ<code>~</code>):</b> 例: <code>(Character A, Char A)~</code>。<code>Known.txt</code>に\"Character A Char A\"という名前のエントリを追加します。\"Character A\"と\"Char A\"は、この単一のフォルダ/エントリのエイリアスになります。</li>\n</ul>\n</li>\n<li><b>ボタン➕追加:</b> 上の入力フィールドの名前/グループをリストと<code>Known.txt</code>に追加します。</li>\n<li><b>ボタン⤵️フィルターに追加:</b>\n<ul>\n<li>'既知のシリーズ/キャラクター'リストの'➕追加'ボタンの横にあります。</li>\n<li>これをクリックすると、<code>Known.txt</code>ファイルのすべての名前がチェックボックス付きで表示されるポップアップウィンドウが開きます。</li>\n<li>ポップアップには、名前のリストをすばやくフィルタリングするための検索バーが含まれています。</li>\n<li>チェックボックスを使用して、1つまたは複数の名前を選択できます。</li>\n<li>'選択項目を追加'をクリックして、選択した名前をメインウィンドウの'キャラクターでフィルター'入力フィールドに挿入します。</li>\n<li><code>Known.txt</code>で選択した名前が元々グループであった場合(例: Known.txtで<code>(Boa, Hancock)</code>と定義されている)、フィルターフィールドに<code>(Boa, Hancock)~</code>として追加されます。単純な名前はそのまま追加されます。</li>\n<li>'すべて選択'ボタンと'すべて選択解除'ボタンは、便宜上ポップアップで利用できます。</li>\n<li>'キャンセル'をクリックして、変更せずにポップアップを閉じます。</li>\n</ul>\n</li>\n<li><b>ボタン🗑️選択項目を削除:</b> 選択した名前をリストと<code>Known.txt</code>から削除します。</li>\n<li><b>ボタン❓(これです！):</b> この包括的なヘルプガイドを表示します。</li>\n</ul></body></html>",
+    "help_guide_step7_title": "⑦ログ領域と制御",
+    "help_guide_step7_content": "<html><head/><body>\n<h3>ログ領域と制御(右パネル)</h3>\n<ul>\n<li><b>📜進捗ログ/抽出されたリンクのログ(ラベル):</b> メインログ領域のタイトル。'🔗リンクのみ'モードがアクティブな場合に変化します。</li>\n<li><b>リンクを検索... / ボタン🔍(リンク検索):</b>\n<ul><li>'🔗リンクのみ'モードがアクティブな場合にのみ表示されます。メインログに表示される抽出されたリンクをテキスト、URL、またはプラットフォームでリアルタイムにフィルタリングできます。</li></ul>\n</li>\n<li><b>名前: [スタイル]ボタン(マンガのファイル名スタイル):</b>\n<ul><li><b>マンガ/コミックモード</b>がクリエイターフィードでアクティブで、'リンクのみ'または'アーカイブのみ'モードでない場合にのみ表示されます。</li>\n<li>ファイル名スタイルを切り替えます: <code>投稿タイトル</code>、<code>オリジナルファイル</code>、<code>日付ベース</code>。(詳細については、マンガ/コミックモードのセクションを参照してください)。</li>\n<li>'オリジナルファイル'または'日付ベース'スタイルがアクティブな場合、<b>オプションのファイル名プレフィックス</b>の入力フィールドがこのボタンの横に表示されます。</li>\n</ul>\n</li>\n<li><b>マルチパート: [オン/オフ]ボタン:</b>\n<ul><li>個々の大きなファイルのマルチセグメントダウンロードを切り替えます。\n<ul><li><b>オン:</b> 大きなファイルのダウンロードを高速化する場合があります(例: 動画)が、UIの途切れや、多くの小さなファイルでログがスパムになる可能性があります。有効にすると警告が表示されます。マルチパートダウンロードが失敗した場合、単一ストリームとして再試行します。</li>\n<li><b>オフ(デフォルト):</b> ファイルは単一のストリームでダウンロードされます。</li>\n</ul>\n<li>'🔗リンクのみ'または'📦アーカイブのみ'モードがアクティブな場合は無効になります。</li>\n</ul>\n</li>\n<li><b>ボタン👁️ / 🙈(ログ表示の切り替え):</b> メインログビューを変更します:\n<ul>\n<li><b>👁️進捗ログ(デフォルト):</b> すべてのダウンロードアクティビティ、エラー、および概要を表示します。</li>\n<li><b>🙈見逃したキャラクターログ:</b> 'キャラクターでフィルター'設定のためにスキップされた投稿タイトル/コンテンツのキーワードのリストを表示します。意図せずに見逃している可能性のあるコンテンツを特定するのに役立ちます。</li>\n</ul>\n</li>\n<li><b>ボタン🔄リセット:</b> すべての入力フィールド、ログをクリアし、一時的な設定をデフォルトにリセットします。ダウンロードがアクティブでない場合にのみ使用できます。</li>\n<li><b>メインログ出力(テキスト領域):</b> 詳細な進捗メッセージ、エラー、および概要を表示します。'🔗リンクのみ'モードがアクティブな場合、この領域には抽出されたリンクが表示されます。</li>\n<li><b>見逃したキャラクターログ出力(テキスト領域):</b> (👁️ / 🙈切り替えで表示)キャラクターフィルターのためにスキップされた投稿/ファイルを表示します。</li>\n<li><b>外部リンク出力(テキスト領域):</b> 'ログに外部リンクを表示'がチェックされている場合、メインログの下に表示されます。投稿の説明で見つかった外部リンクを表示します。</li>\n<li><b>リンクをエクスポートボタン:</b>\n<ul><li>'🔗リンクのみ'モードがアクティブで、リンクが抽出されている場合にのみ表示および有効になります。</li>\n<li>抽出されたすべてのリンクを<code>.txt</code>ファイルに保存できます。</li>\n</ul>\n</li>\n<li><b>進捗ラベル: [ステータス]:</b> ダウンロードまたはリンク抽出プロセスの全体的な進捗を表示します(例: 処理済みの投稿)。</li>\n<li><b>ファイル進捗ラベル:</b> 速度やサイズ、またはマルチパートダウンロードステータスなど、個々のファイルのダウンロードの進捗を表示します。</li>\n</ul></body></html>",
+    "help_guide_step8_title": "⑧お気に入りモードと今後の機能",
+    "help_guide_step8_content": "<html><head/><body>\n<h3>お気に入りモード(Kemono.suのお気に入りからダウンロード)</h3>\n<p>このモードでは、Kemono.suでお気に入りに登録したアーティストから直接コンテンツをダウンロードできます。</p>\n<ul>\n<li><b>⭐有効にする方法:</b>\n<ul>\n<li>'🔗リンクのみ'ラジオボタンの横にある<b>'⭐お気に入りモード'</b>チェックボックスをオンにします。</li>\n</ul>\n</li>\n<li><b>お気に入りモードのUIの変更:</b>\n<ul>\n<li>'🔗クリエイター/投稿Kemono URL'入力領域が、お気に入りモードがアクティブであることを示すメッセージに置き換えられます。</li>\n<li>標準の'ダウンロード開始'、'一時停止'、'キャンセル'ボタンが、次のように置き換えられます:\n<ul>\n<li><b>'🖼️お気に入りのアーティスト'</b>ボタン</li>\n<li><b>'📄お気に入りの投稿'</b>ボタン</li>\n</ul>\n</li>\n<li>お気に入りを取得するにはCookieが必要なため、'🍪Cookieを使用'オプションが自動的に有効になり、ロックされます。</li>\n</ul>\n</li>\n<li><b>ボタン🖼️お気に入りのアーティスト:</b>\n<ul>\n<li>これをクリックすると、Kemono.suでお気に入りに登録したすべてのアーティストを一覧表示するダイアログが開きます。</li>\n<li>このリストから1人または複数のアーティストを選択して、コンテンツをダウンロードできます。</li>\n</ul>\n</li>\n<li><b>ボタン📄お気に入りの投稿(今後の機能):</b>\n<ul>\n<li>特定の<i>お気に入りの投稿</i>を(特にシリーズの一部である場合は、順次、マンガのような順序で)ダウンロードすることは、現在開発中の機能です。</li>\n<li>特にマンガのような順次閲覧の場合、お気に入りの投稿を処理する最良の方法はまだ検討中です。</li>\n<li>お気に入りの投稿をダウンロードして整理する方法(例: お気に入りからの\"マンガスタイル\")について具体的なアイデアやユースケースがある場合は、プロジェクトのGitHubページで問題を開くか、ディスカッションに参加することを検討してください。皆様のご意見をお待ちしております！</li>\n</ul>\n</li>\n<li><b>お気に入りのダウンロードスコープ(ボタン):</b>\n<ul>\n<li>このボタン('お気に入りの投稿'の横)は、選択したお気に入りのアーティストのコンテンツをどこにダウンロードするかを制御します:\n<ul>\n<li><b><i>スコープ: 選択した場所:</i></b> 選択したすべてのアーティストが、UIで設定したメインの'ダウンロード場所'にダウンロードされます。フィルターはすべてのコンテンツにグローバルに適用されます。</li>\n<li><b><i>スコープ: アーティストフォルダ:</i></b> 選択したアーティストごとに、メインの'ダウンロード場所'内にサブフォルダ(アーティスト名で命名)が自動的に作成されます。そのアーティストのコンテンツは、特定のフォルダに保存されます。フィルターは、各アーティストの専用フォルダ内に適用されます。</li>\n</ul>\n</li>\n</ul>\n</li>\n<li><b>お気に入りモードのフィルター:</b>\n<ul>\n<li>UIで設定した'🎯キャラクターでフィルター'、'🚫単語でスキップ'、および'ファイルをフィルター'オプションは、選択したお気に入りのアーティストからダウンロードしたコンテンツに引き続き適用されます。</li>\n</ul>\n</li>\n</ul></body></html>",
+    "help_guide_step9_title": "⑨キーファイルとツアー",
+    "help_guide_step9_content": "<html><head/><body>\n<h3>アプリケーションで使用されるキーファイル</h3>\n<ul>\n<li><b><code>Known.txt</code>:</b>\n<ul>\n<li>アプリケーションディレクトリ(<code>.exe</code>または<code>main.py</code>がある場所)にあります。</li>\n<li>'名前/タイトルでフォルダを分ける'が有効になっている場合の自動フォルダ構成のために、既知のシリーズ、キャラクター、またはシリーズタイトルのリストを保存します。</li>\n<li><b>形式:</b>\n<ul>\n<li>各行は1つのエントリです。</li>\n<li><b>単純な名前:</b> 例: <code>My Awesome Series</code>。一致するコンテンツは、\"My Awesome Series\"という名前のフォルダに保存されます。</li>\n<li><b>グループ化されたエイリアス:</b> 例: <code>(Character A, Char A, Alt Name A)</code>。\"Character A\"、\"Char A\"、または\"Alt Name A\"に一致するコンテンツはすべて、(クリーンアップ後)\"Character A Char A Alt Name A\"という名前の単一のフォルダに保存されます。括弧内のすべての用語は、そのフォルダのエイリアスになります。</li>\n</ul>\n</li>\n<li><b>使用法:</b> 投稿がアクティブな'キャラクターでフィルター'入力に一致しない場合のフォルダ命名のフォールバックとして機能します。UIを介して単純なエントリを管理したり、複雑なエイリアスのファイルを直接編集したりできます。アプリは起動時または次回の使用時に再読み込みします。</li>\n</ul>\n</li>\n<li><b><code>cookies.txt</code>(オプション):</b>\n<ul>\n<li>'Cookieを使用'機能を使用していて、直接Cookie文字列を提供しないか、特定のファイルを参照しない場合、アプリはそのディレクトリで<code>cookies.txt</code>という名前のファイルを探します。</li>\n<li><b>形式:</b> Netscape Cookieファイル形式である必要があります。</li>\n<li><b>使用法:</b> ダウンローダーがブラウザのログインセッションを使用して、Kemono/Coomerでログインの背後にある可能性のあるコンテンツにアクセスできるようにします。</li>\n</ul>\n</li>\n</ul>\n<h3>初回ユーザー向けツアー</h3>\n<ul>\n<li>最初の起動時(またはリセットされた場合)、主な機能を案内するウェルカムツアーダイアログが表示されます。スキップするか、\"このツアーを二度と表示しない\"を選択できます。</li>\n</ul>\n<p><em>多くのUI要素には、マウスを合わせると表示されるツールチップもあり、簡単なヒントを提供します。</em></p>\n</body></html>"
 }
 
 def get_translation (language_code ,key ,default_text =""):
