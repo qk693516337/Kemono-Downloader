@@ -29,6 +29,7 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 
 *This v5.0.0 release marks a significant feature milestone. Future updates are expected to be less frequent, focusing on maintenance and minor refinements.*
 *Update v5.2.0 introduces multi-language support, theme selection, and further UI refinements.*
+
 <p align="center">
   <a href="features.md">
     <img alt="Features" src="https://img.shields.io/badge/📚%20Full%20Feature%20List-FFD700?style=for-the-badge&logoColor=black&color=FFD700">
@@ -40,6 +41,7 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
     <img alt="Note" src="https://img.shields.io/badge/⚠️%20Important%20Note-FFCCCB?style=for-the-badge&logoColor=black&color=FFCCCB">
   </a>
 </p>
+
 ---
 
 ## Feature Overview
