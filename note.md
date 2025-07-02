@@ -1,30 +1,30 @@
 # 🛠️ KemonoDownloader Refactor Notes
 
-## Overview
+## What's Going On
 
-The project was previously a large monolithic App Script, which made it difficult to maintain and scale. This version introduces a cleaner and more modular file structure to improve readability, separation of concerns, and future extensibility.
+This project used to be one giant messy App Script. It worked, but it was hard to maintain or expand. So I cleaned it up and split everything into smaller, more manageable files to make it easier to read, update, and add new stuff later.
 
-**⚠️ Note:** Due to the ongoing refactor, some features may not work as expected. The code has been reorganized into a more maintainable layout, but certain logic or dependencies might still require updates to fully function in this new structure.
+**⚠️ Heads up:** Since I'm still in the middle of refactoring things, some features might be broken or not working right now. The layout is better, but I still need to update some parts of the logic and dependencies.
 
 ---
 
-## 📁 Project Structure
+## 📁 Folder Layout
 
-```plaintext
+```
 KemonoDownloader/
-├── main.py                      # Entry point of the application
-├── requirements.txt             # Python dependencies
-├── assets/                      # Static files like icons
+├── main.py                      # Where the app starts
+├── requirements.txt             # List of Python libraries used
+├── assets/                      # Icons and other static files
 │   └── Kemono.ico
-├── data/                        # Persistent user data and config
+├── data/                        # Stuff that gets saved (user config, cookies, etc.)
 │   ├── creators.json
 │   ├── Known.txt
 │   └── cookies.txt
-├── logs/                        # Logging output
+├── logs/                        # Error logs and other output
 │   └── uncaught_exceptions.log
-└── src/                         # Main application source code
+└── src/                         # Main code lives here
     ├── __init__.py
-    ├── ui/                      # UI components
+    ├── ui/                      # UI-related code
     │   ├── __init__.py
     │   ├── main_window.py
     │   └── dialogs/
@@ -33,64 +33,64 @@ KemonoDownloader/
     │       ├── CookieHelpDialog.py
     │       ├── DownloadExtractedLinksDialog.py
     │       ├── DownloadFinishedDialog.py
-    │       └── ... (other dialogs)
-    ├── core/                    # Core logic and app engine
+    │       └── ... (more dialogs)
+    ├── core/                    # The brain of the app
     │   ├── __init__.py
     │   ├── manager.py
     │   ├── workers.py
     │   └── api_client.py
-    ├── services/                # Download services and tools
+    ├── services/                # Downloading stuff happens here
     │   ├── __init__.py
     │   ├── drive_downloader.py
     │   └── multipart_downloader.py
-    ├── utils/                   # Utility/helper functions
+    ├── utils/                   # Helper functions
     │   ├── __init__.py
     │   ├── file_utils.py
     │   ├── network_utils.py
     │   └── text_utils.py
-    ├── config/                  # Configuration and constants
+    ├── config/                  # Constants and settings
     │   ├── __init__.py
     │   └── constants.py
-    └── i18n/                    # Internationalization (translation)
+    └── i18n/                    # Translations (if needed)
         ├── __init__.py
         └── translator.py
 ```
 
 ---
 
-## ✅ Goals of This Refactor
+## ✅ Why Bother Refactoring?
 
-- Improve **modularity** and make each component responsible for a specific domain.
-- Enable easier **testing**, debugging, and maintenance.
-- Prepare the codebase for future **feature expansion**.
-- Make UI and business logic **loosely coupled**.
-
----
-
-## 🚧 Known Issues
-
-- Some features are currently broken or untested in this structure.
-- Further work is required to:
-  - Hook up UI components with new logic paths.
-  - Validate and migrate old script logic into proper services/core modules.
-  - Ensure settings and cookies persist correctly through the new configuration and data layers.
+- Everything’s now broken into smaller parts, so it’s easier to work with.
+- Easier to test, fix, and add stuff.
+- Prepping the project to grow without becoming a mess again.
+- Separated the UI from the app logic so they don’t get tangled.
 
 ---
 
-## 📌 Next Steps
+## 🚧 What’s Still Broken
 
-- Review and test all dialogs and UI flows.
-- Validate downloader services and API integrations.
-- Reconnect UI with backend logic through the `core/manager.py`.
-- Add unit tests and logging as needed.
+- Some features don’t work yet or haven’t been tested since the changes.
+- Still need to:
+  - Reconnect the UI to the updated logic.
+  - Move over some of the old script code into proper modules.
+  - Make sure settings and cookies work properly in the new setup.
 
 ---
 
-## 📣 Found a Bug or Issue?
+## 📌 To-Do List
 
-If you find something broken or not working as expected:
+- Test all the dialogs and UI stuff.
+- Make sure the download services and API calls are working.
+- Reconnect the UI with the new logic in `core/manager.py`.
+- Add more logging and maybe some unit tests too.
 
-- **Open an issue** on the repository so it can be tracked.
-- Or **let me know directly** — feedback is super helpful during this refactor!
+---
 
-Thanks for your patience and support during this restructuring!
+## 🐞 Found a Bug?
+
+If something's busted:
+
+- Feel free to open an issue if you're using this.
+- Or just message me. Feedback helps a lot while I’m still figuring things out.
+
+Thanks for checking it out! Still a work in progress, but getting there.

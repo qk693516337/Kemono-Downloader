@@ -5292,9 +5292,6 @@ class DownloaderApp (QWidget ):
 
         main_download_dir =self .dir_input .text ().strip ()
 
-
-
-
         should_create_artist_folder =False 
         if item_type =='creator_popup_selection'and item_scope ==EmptyPopupDialog .SCOPE_CREATORS :
             should_create_artist_folder =True 
