@@ -17,9 +17,7 @@ KemonoDownloader/
 ├── assets/                      # Icons and other static files
 │   └── Kemono.ico
 ├── data/                        # Stuff that gets saved (user config, cookies, etc.)
-│   ├── creators.json
-│   ├── Known.txt
-│   └── cookies.txt
+│   └── creators.json
 ├── logs/                        # Error logs and other output
 │   └── uncaught_exceptions.log
 └── src/                         # Main code lives here
