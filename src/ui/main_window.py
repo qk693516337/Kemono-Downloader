@@ -4825,124 +4825,254 @@ class DownloaderApp (QWidget ):
                 self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
             if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
 
-    def reset_application_state (self ):
-        if self ._is_download_active ():QMessageBox .warning (self ,"Reset Error","Cannot reset while a download is in progress. Please cancel first.");return 
-        self .log_signal .emit ("🔄 Resetting application state to defaults...");self ._reset_ui_to_defaults ()
-        self .main_log_output .clear ();self .external_log_output .clear ()
-        if self .missed_character_log_output :self .missed_character_log_output .clear ()
+    def reset_application_state(self):
+        # --- Stop all background tasks and threads ---
+        if self._is_download_active():
+            # Try to cancel download thread
+            if self.download_thread and self.download_thread.isRunning():
+                self.log_signal.emit("⚠️ Cancelling active download thread for reset...")
+                self.cancellation_event.set()
+                self.download_thread.requestInterruption()
+                self.download_thread.wait(3000)
+                if self.download_thread.isRunning():
+                    self.log_signal.emit("   ⚠️ Download thread did not terminate gracefully.")
+                self.download_thread.deleteLater()
+                self.download_thread = None
+    
+            # Try to cancel thread pool
+            if self.thread_pool:
+                self.log_signal.emit("   Shutting down thread pool for reset...")
+                self.thread_pool.shutdown(wait=True, cancel_futures=True)
+                self.thread_pool = None
+                self.active_futures = []
+    
+            # Try to cancel external link download thread
+            if self.external_link_download_thread and self.external_link_download_thread.isRunning():
+                self.log_signal.emit("   Cancelling external link download thread for reset...")
+                self.external_link_download_thread.cancel()
+                self.external_link_download_thread.wait(3000)
+                self.external_link_download_thread.deleteLater()
+                self.external_link_download_thread = None
+    
+            # Try to cancel retry thread pool
+            if hasattr(self, 'retry_thread_pool') and self.retry_thread_pool:
+                self.log_signal.emit("   Shutting down retry thread pool for reset...")
+                self.retry_thread_pool.shutdown(wait=True)
+                self.retry_thread_pool = None
+                if hasattr(self, 'active_retry_futures'):
+                    self.active_retry_futures.clear()
+                if hasattr(self, 'active_retry_futures_map'):
+                    self.active_retry_futures_map.clear()
+    
+            self.cancellation_event.clear()
+            if self.pause_event:
+                self.pause_event.clear()
+            self.is_paused = False
+    
+        # --- Reset UI and all state ---
+        self.log_signal.emit("🔄 Resetting application state to defaults...")
+        self._reset_ui_to_defaults()
+        self.main_log_output.clear()
+        self.external_log_output.clear()
+        if self.missed_character_log_output:
+            self.missed_character_log_output.clear()
+    
+        self.current_log_view = 'progress'
+        if self.log_view_stack:
+            self.log_view_stack.setCurrentIndex(0)
+        if self.progress_log_label:
+            self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:"))
+        if self.log_verbosity_toggle_button:
+            self.log_verbosity_toggle_button.setText(self.EYE_ICON)
+            self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
+    
+        # Clear all download-related state
+        self.external_link_queue.clear()
+        self.extracted_links_cache = []
+        self._is_processing_external_link_queue = False
+        self._current_link_post_title = None
+        self.progress_label.setText(self._tr("progress_idle_text", "Progress: Idle"))
+        self.file_progress_label.setText("")
+        with self.downloaded_files_lock:
+            self.downloaded_files.clear()
+        with self.downloaded_file_hashes_lock:
+            self.downloaded_file_hashes.clear()
+        self.missed_title_key_terms_count.clear()
+        self.missed_title_key_terms_examples.clear()
+        self.logged_summary_for_key_term.clear()
+        self.already_logged_bold_key_terms.clear()
+        self.missed_key_terms_buffer.clear()
+        self.favorite_download_queue.clear()
+        self.only_links_log_display_mode = LOG_DISPLAY_LINKS
+        self.mega_download_log_preserved_once = False
+        self.permanently_failed_files_for_dialog.clear()
+        self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
+        self._update_favorite_scope_button_text()
+        self.retryable_failed_files_info.clear()
+        self.cancellation_message_logged_this_session = False
+        self.is_processing_favorites_queue = False
+        self.total_posts_to_process = 0
+        self.processed_posts_count = 0
+        self.download_counter = 0
+        self.skip_counter = 0
+        self.all_kept_original_filenames = []
+        self.is_paused = False
+        self.is_fetcher_thread_running = False
+        self.interrupted_session_data = None
+        self.is_restore_pending = False
+    
+        self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
+        self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
+        self.settings.sync()
+        self._update_manga_filename_style_button_text()
+        self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
+    
+        self.set_ui_enabled(True)
+        self.log_signal.emit("✅ Application fully reset. Ready for new download.")
+        self.is_processing_favorites_queue = False
+        self.current_processing_favorite_item_info = None
+        self.favorite_download_queue.clear()
+        self.interrupted_session_data = None
+        self.is_restore_pending = False
+        self.last_link_input_text_for_queue_sync = ""    
+    # Replace your current reset_application_state with the above.
 
-        self .current_log_view ='progress'
-        if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
-        if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
-        if self .log_verbosity_toggle_button :
-            self .log_verbosity_toggle_button .setText (self .EYE_ICON )
-            self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
-
-        if self .show_external_links and not (self .radio_only_links and self .radio_only_links .isChecked ()):self .external_log_output .append ("🔗 External Links Found:")
-        self .external_link_queue .clear ();self .extracted_links_cache =[];self ._is_processing_external_link_queue =False ;self ._current_link_post_title =None 
-        self .progress_label .setText (self ._tr ("progress_idle_text","Progress: Idle"));self .file_progress_label .setText ("")
-        with self .downloaded_files_lock :count =len (self .downloaded_files );self .downloaded_files .clear ();
-        self .missed_title_key_terms_count .clear ()
-        self .missed_title_key_terms_examples .clear ()
-        self .logged_summary_for_key_term .clear ()
-        self .already_logged_bold_key_terms .clear ()
-        self .missed_key_terms_buffer .clear ()
-        self .favorite_download_queue .clear ()
-        self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
-        self .mega_download_log_preserved_once =False 
-        self .permanently_failed_files_for_dialog .clear ()
-        self .favorite_download_scope =FAVORITE_SCOPE_SELECTED_LOCATION 
-        self ._update_favorite_scope_button_text ()
-        self .retryable_failed_files_info .clear ()
-        self .cancellation_message_logged_this_session =False 
-        self .is_processing_favorites_queue =False 
-
-        if count >0 :self .log_signal .emit (f"    Cleared {count } downloaded filename(s) from session memory.")
-        with self .downloaded_file_hashes_lock :count =len (self .downloaded_file_hashes );self .downloaded_file_hashes .clear ();
-        if count >0 :self .log_signal .emit (f"    Cleared {count } downloaded file hash(es) from session memory.")
-
-        self .total_posts_to_process =0 ;self .processed_posts_count =0 ;self .download_counter =0 ;self .skip_counter =0 
-        self .all_kept_original_filenames =[]
-        self .cancellation_event .clear ()
-        if self .pause_event :self .pause_event .clear ()
-        self .is_paused =False 
-        self .manga_filename_style =STYLE_POST_TITLE 
-        self .settings .setValue (MANGA_FILENAME_STYLE_KEY ,self .manga_filename_style )
-
-        self .skip_words_scope =SKIP_SCOPE_POSTS 
-        self .settings .setValue (SKIP_WORDS_SCOPE_KEY ,self .skip_words_scope )
-        self ._update_skip_scope_button_text ()
-
-        self .char_filter_scope =CHAR_SCOPE_TITLE 
-        self ._update_char_filter_scope_button_text ()
-
-        self .settings .sync ()
-        self ._update_manga_filename_style_button_text ()
-        self .update_ui_for_manga_mode (self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False )
-
-    def _reset_ui_to_defaults (self ):
-        self .link_input .clear ();self .dir_input .clear ();self .custom_folder_input .clear ();self .character_input .clear ();
-        self .skip_words_input .clear ();self .start_page_input .clear ();self .end_page_input .clear ();self .new_char_input .clear ();
-        if hasattr (self ,'remove_from_filename_input'):self .remove_from_filename_input .clear ()
-        self .character_search_input .clear ();self .thread_count_input .setText ("4");self .radio_all .setChecked (True );
-        self .skip_zip_checkbox .setChecked (True );self .skip_rar_checkbox .setChecked (True );self .download_thumbnails_checkbox .setChecked (False );
-        self .compress_images_checkbox .setChecked (False );self .use_subfolders_checkbox .setChecked (True );
-        self .use_subfolder_per_post_checkbox .setChecked (False );self .use_multithreading_checkbox .setChecked (True );
-        if self .favorite_mode_checkbox :self .favorite_mode_checkbox .setChecked (False )
-        self .external_links_checkbox .setChecked (False )
-        if self .manga_mode_checkbox :self .manga_mode_checkbox .setChecked (False )
-        if hasattr (self ,'use_cookie_checkbox'):self .use_cookie_checkbox .setChecked (False )
-        self .selected_cookie_filepath =None 
-
-        if hasattr (self ,'cookie_text_input'):self .cookie_text_input .clear ()
-        self .missed_title_key_terms_count .clear ()
-        self .missed_title_key_terms_examples .clear ()
-        self .logged_summary_for_key_term .clear ()
-        self .already_logged_bold_key_terms .clear ()
-        if hasattr (self ,'manga_date_prefix_input'):self .manga_date_prefix_input .clear ()
-        if self .pause_event :self .pause_event .clear ()
-        self .is_paused =False 
-        self .missed_key_terms_buffer .clear ()
-        if self .download_extracted_links_button :
-            self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
-            self .cancellation_message_logged_this_session =False 
-            self .mega_download_log_preserved_once =False 
-            self .download_extracted_links_button .setEnabled (False )
-
-        if self .missed_character_log_output :self .missed_character_log_output .clear ()
-
-        self .permanently_failed_files_for_dialog .clear ()
-        self .allow_multipart_download_setting =False 
-        self ._update_multipart_toggle_button_text ()
-
-        self .skip_words_scope =SKIP_SCOPE_POSTS 
-        self ._update_skip_scope_button_text ()
-        self .char_filter_scope =CHAR_SCOPE_TITLE 
-        self ._update_char_filter_scope_button_text ()
-
-        self .current_log_view ='progress'
-        self ._update_cookie_input_visibility (False );self ._update_cookie_input_placeholders_and_tooltips ()
-        if self .log_view_stack :self .log_view_stack .setCurrentIndex (0 )
-        if self .progress_log_label :self .progress_log_label .setText ("📜 Progress Log:")
-        if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
-        self ._handle_filter_mode_change (self .radio_all ,True )
-        self ._handle_multithreading_toggle (self .use_multithreading_checkbox .isChecked ())
-        self .filter_character_list ("")
-
-        self .download_btn .setEnabled (True );self .cancel_btn .setEnabled (False )
-        if self .reset_button :self .reset_button .setEnabled (True );self .reset_button .setText (self ._tr ("reset_button_text","🔄 Reset"));self .reset_button .setToolTip (self ._tr ("reset_button_tooltip","Reset all inputs and logs to default state (only when idle)."))
-        if self .log_verbosity_toggle_button :
-            self .log_verbosity_toggle_button .setText (self .EYE_ICON )
-            self .log_verbosity_toggle_button .setToolTip ("Current View: Progress Log. Click to switch to Missed Character Log.")
-        self ._update_manga_filename_style_button_text ()
-        self .update_ui_for_manga_mode (False )
-        if hasattr (self ,'favorite_mode_checkbox'):
-            self ._handle_favorite_mode_toggle (False )
-        if hasattr (self ,'scan_content_images_checkbox'):
-            self .scan_content_images_checkbox .setChecked (False )
-        if hasattr (self ,'download_thumbnails_checkbox'):
-            self ._handle_thumbnail_mode_change (self .download_thumbnails_checkbox .isChecked ())
-
+    def _reset_ui_to_defaults(self):
+        """Resets all UI elements and relevant state to their default values."""
+        # Clear all text fields
+        self.link_input.clear()
+        self.dir_input.clear()
+        self.custom_folder_input.clear()
+        self.character_input.clear()
+        self.skip_words_input.clear()
+        self.start_page_input.clear()
+        self.end_page_input.clear()
+        self.new_char_input.clear()
+        if hasattr(self, 'remove_from_filename_input'):
+            self.remove_from_filename_input.clear()
+        self.character_search_input.clear()
+        self.thread_count_input.setText("4")
+        if hasattr(self, 'manga_date_prefix_input'):
+            self.manga_date_prefix_input.clear()
+    
+        # Set radio buttons and checkboxes to defaults
+        self.radio_all.setChecked(True)
+        self.skip_zip_checkbox.setChecked(True)
+        self.skip_rar_checkbox.setChecked(True)
+        self.download_thumbnails_checkbox.setChecked(False)
+        self.compress_images_checkbox.setChecked(False)
+        self.use_subfolders_checkbox.setChecked(True)
+        self.use_subfolder_per_post_checkbox.setChecked(False)
+        self.use_multithreading_checkbox.setChecked(True)
+        if self.favorite_mode_checkbox:
+            self.favorite_mode_checkbox.setChecked(False)
+        self.external_links_checkbox.setChecked(False)
+        if self.manga_mode_checkbox:
+            self.manga_mode_checkbox.setChecked(False)
+        if hasattr(self, 'use_cookie_checkbox'):
+            self.use_cookie_checkbox.setChecked(False)
+        self.selected_cookie_filepath = None
+        if hasattr(self, 'cookie_text_input'):
+            self.cookie_text_input.clear()
+    
+        # Reset log and progress displays
+        if self.main_log_output:
+            self.main_log_output.clear()
+        if self.external_log_output:
+            self.external_log_output.clear()
+        if self.missed_character_log_output:
+            self.missed_character_log_output.clear()
+        self.progress_label.setText(self._tr("progress_idle_text", "Progress: Idle"))
+        self.file_progress_label.setText("")
+    
+        # Reset internal state
+        self.missed_title_key_terms_count.clear()
+        self.missed_title_key_terms_examples.clear()
+        self.logged_summary_for_key_term.clear()
+        self.already_logged_bold_key_terms.clear()
+        self.missed_key_terms_buffer.clear()
+        self.permanently_failed_files_for_dialog.clear()
+        self.only_links_log_display_mode = LOG_DISPLAY_LINKS
+        self.cancellation_message_logged_this_session = False
+        self.mega_download_log_preserved_once = False
+        self.allow_multipart_download_setting = False
+        self.skip_words_scope = SKIP_SCOPE_POSTS
+        self.char_filter_scope = CHAR_SCOPE_TITLE
+        self.manga_filename_style = STYLE_POST_TITLE
+        self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
+        self._update_skip_scope_button_text()
+        self._update_char_filter_scope_button_text()
+        self._update_manga_filename_style_button_text()
+        self._update_multipart_toggle_button_text()
+        self._update_favorite_scope_button_text()
+        self.current_log_view = 'progress'
+        self.is_paused = False
+        if self.pause_event:
+            self.pause_event.clear()
+    
+        # Reset extracted/external links state
+        self.external_link_queue.clear()
+        self.extracted_links_cache = []
+        self._is_processing_external_link_queue = False
+        self._current_link_post_title = None
+        if self.download_extracted_links_button:
+            self.download_extracted_links_button.setEnabled(False)
+    
+        # Reset favorite/queue/session state
+        self.favorite_download_queue.clear()
+        self.is_processing_favorites_queue = False
+        self.current_processing_favorite_item_info = None
+        self.interrupted_session_data = None
+        self.is_restore_pending = False
+        self.last_link_input_text_for_queue_sync = ""
+        self._update_button_states_and_connections()
+        # Reset counters and progress
+        self.total_posts_to_process = 0
+        self.processed_posts_count = 0
+        self.download_counter = 0
+        self.skip_counter = 0
+        self.all_kept_original_filenames = []
+    
+        # Reset log view and UI state
+        if self.log_view_stack:
+            self.log_view_stack.setCurrentIndex(0)
+        if self.progress_log_label:
+            self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:"))
+        if self.log_verbosity_toggle_button:
+            self.log_verbosity_toggle_button.setText(self.EYE_ICON)
+            self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
+    
+        # Reset character list filter
+        self.filter_character_list("")
+    
+        # Update UI for manga mode and multithreading
+        self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+        self.update_ui_for_manga_mode(False)
+        self.update_custom_folder_visibility(self.link_input.text())
+        self.update_page_range_enabled_state()
+        self._update_cookie_input_visibility(False)
+        self._update_cookie_input_placeholders_and_tooltips()
+    
+        # Reset button states
+        self.download_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(False)
+        if self.reset_button:
+            self.reset_button.setEnabled(True)
+            self.reset_button.setText(self._tr("reset_button_text", "🔄 Reset"))
+            self.reset_button.setToolTip(self._tr("reset_button_tooltip", "Reset all inputs and logs to default state (only when idle)."))
+    
+        # Reset favorite mode UI
+        if hasattr(self, 'favorite_mode_checkbox'):
+            self._handle_favorite_mode_toggle(False)
+        if hasattr(self, 'scan_content_images_checkbox'):
+            self.scan_content_images_checkbox.setChecked(False)
+        if hasattr(self, 'download_thumbnails_checkbox'):
+            self._handle_thumbnail_mode_change(self.download_thumbnails_checkbox.isChecked())
+    
+        self.set_ui_enabled(True)
+        self.log_signal.emit("✅ UI reset to defaults. Ready for new operation.")
+        self._update_button_states_and_connections()
+        
     def _show_feature_guide (self ):
         steps_content_keys =[
         ("help_guide_step1_title","help_guide_step1_content"),

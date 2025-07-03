@@ -987,6 +987,17 @@ class PostProcessorWorker:
             cleaned_post_title_for_sub =clean_folder_name (post_title )
             post_id_for_fallback =self .post .get ('id','unknown_id')
 
+                if getattr(self, 'use_post_date_prefix', False):
+                    post_date = self.post.get('published') or self.post.get('date') or self.post.get('created_at')
+                    if post_date:
+                        # Format date as YYYY-MM-DD (or as you prefer)
+                        try:
+                            date_obj = datetime.datetime.fromisoformat(post_date.replace('Z', '+00:00'))
+                            date_str = date_obj.strftime('%Y-%m-%d')
+                        except Exception:
+                            date_str = str(post_date)[:10]
+                        cleaned_post_title_for_sub = f"{date_str} {cleaned_post_title_for_sub}"
+                        cleaned_post_title_for_sub = clean_folder_name(cleaned_post_title_for_sub)
 
             if not cleaned_post_title_for_sub or cleaned_post_title_for_sub =="untitled_folder":
                 self .logger (f"   ⚠️ Post title '{post_title }' resulted in a generic subfolder name. Using 'post_{post_id_for_fallback }' as base.")
