@@ -9,6 +9,7 @@ STYLE_ORIGINAL_NAME = "original_name"
 STYLE_DATE_BASED = "date_based"
 STYLE_DATE_POST_TITLE = "date_post_title"
 STYLE_POST_TITLE_GLOBAL_NUMBERING = "post_title_global_numbering"
+STYLE_POST_ID = "post_id"  # Add this line
 MANGA_DATE_PREFIX_DEFAULT = ""
 
 # --- Download Scopes ---
@@ -94,6 +95,7 @@ FOLDER_NAME_STOP_WORDS = {
     "me", "my", "net", "not", "of", "on", "or", "org", "our",
     "s", "she", "so", "the", "their", "they", "this",
     "to", "ve", "was", "we", "were", "with", "www", "you", "your",
+ # add more according to need     
 }
 
 # Additional words to ignore specifically for creator-level downloads
@@ -107,4 +109,5 @@ CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
     "oct", "october", "nov", "november", "dec", "december",
     "mon", "monday", "tue", "tuesday", "wed", "wednesday", "thu", "thursday",
     "fri", "friday", "sat", "saturday", "sun", "sunday"
+    # add more according to need 
 }

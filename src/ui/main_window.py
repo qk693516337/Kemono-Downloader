@@ -92,170 +92,176 @@ class DownloaderApp (QWidget ):
     file_progress_signal =pyqtSignal (str ,object )
 
 
-    def __init__ (self ):
-        super ().__init__ ()
-        self .settings =QSettings (CONFIG_ORGANIZATION_NAME ,CONFIG_APP_NAME_MAIN )
-        if getattr (sys ,'frozen',False ):
-            self .app_base_dir =os .path .dirname (sys .executable )
-        else :
+    def __init__(self):
+        super().__init__()
+        self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
+        
+        # --- CORRECT PATH DEFINITION ---
+        # This block correctly determines the application's base directory whether
+        # it's running from source or as a frozen executable.
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+             # Path for PyInstaller one-file bundle
+            self.app_base_dir = os.path.dirname(sys.executable)
+        else:
+            # Path for running from source code
             self.app_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        self .config_file =os .path .join (self .app_base_dir ,"appdata","Known.txt")
 
-        self .download_thread =None 
-        self .thread_pool =None 
-        self .cancellation_event =threading .Event ()      
-        self.session_file_path = os.path.join(self.app_base_dir, "appdata","session.json")
+        # All file paths will now correctly use the single, correct app_base_dir
+        self.config_file = os.path.join(self.app_base_dir, "appdata", "Known.txt")
+        self.session_file_path = os.path.join(self.app_base_dir, "appdata", "session.json")
+        self.persistent_history_file = os.path.join(self.app_base_dir, "appdata", "download_history.json")
+
+        self.download_thread = None
+        self.thread_pool = None
+        self.cancellation_event = threading.Event()
         self.session_lock = threading.Lock()
         self.interrupted_session_data = None
         self.is_restore_pending = False
-        self .external_link_download_thread =None 
-        self .pause_event =threading .Event ()
-        self .active_futures =[]
-        self .total_posts_to_process =0 
-        self .dynamic_character_filter_holder =DynamicFilterHolder ()
-        self .processed_posts_count =0 
-        self .creator_name_cache ={}
-        self .log_signal .emit (f"ℹ️ App base directory: {self .app_base_dir }")
+        self.external_link_download_thread = None
+        self.pause_event = threading.Event()
+        self.active_futures = []
+        self.total_posts_to_process = 0
+        self.dynamic_character_filter_holder = DynamicFilterHolder()
+        self.processed_posts_count = 0
+        self.creator_name_cache = {}
+        self.log_signal.emit(f"ℹ️ App base directory: {self.app_base_dir}")
+        self.log_signal.emit(f"ℹ️ Persistent history file path set to: {self.persistent_history_file}")
 
-        self.app_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        self.persistent_history_file = os.path.join(self.app_base_dir, "appdata", "download_history.json")
-        self .last_downloaded_files_details =deque (maxlen =3 )
-        self .download_history_candidates =deque (maxlen =8 )
-        self .log_signal .emit (f"ℹ️ Persistent history file path set to: {self .persistent_history_file }")
-        self .final_download_history_entries =[]
-        self .favorite_download_queue =deque ()
-        self .is_processing_favorites_queue =False 
-        self .download_counter =0 
-        self .favorite_download_queue =deque ()
-        self .permanently_failed_files_for_dialog =[]
-        self .last_link_input_text_for_queue_sync =""
-        self .is_fetcher_thread_running =False 
-        self ._restart_pending =False 
-        self .is_processing_favorites_queue =False 
-        self .download_history_log =deque (maxlen =50 )
-        self .skip_counter =0 
-        self .all_kept_original_filenames =[]
-        self .cancellation_message_logged_this_session =False 
-        self .favorite_scope_toggle_button =None 
-        self .favorite_download_scope =FAVORITE_SCOPE_SELECTED_LOCATION 
+        # --- The rest of your __init__ method continues from here ---
+        self.last_downloaded_files_details = deque(maxlen=3)
+        self.download_history_candidates = deque(maxlen=8)
+        self.final_download_history_entries = []
+        self.favorite_download_queue = deque()
+        self.is_processing_favorites_queue = False
+        self.download_counter = 0
+        self.permanently_failed_files_for_dialog = []
+        self.last_link_input_text_for_queue_sync = ""
+        self.is_fetcher_thread_running = False
+        self._restart_pending = False
+        self.download_history_log = deque(maxlen=50)
+        self.skip_counter = 0
+        self.all_kept_original_filenames = []
+        self.cancellation_message_logged_this_session = False
+        self.favorite_scope_toggle_button = None
+        self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
+        self.manga_mode_checkbox = None
+        self.selected_cookie_filepath = None
+        self.retryable_failed_files_info = []
+        self.is_paused = False
+        self.worker_to_gui_queue = queue.Queue()
+        self.gui_update_timer = QTimer(self)
+        self.actual_gui_signals = PostProcessorSignals()
+        self.worker_signals = PostProcessorSignals()
+        self.prompt_mutex = QMutex()
+        self._add_character_response = None
+        self._original_scan_content_tooltip = ("If checked, the downloader will scan the HTML content of posts for image URLs (from <img> tags or direct links).\n"
+                                               "now This includes resolving relative paths from <img> tags to full URLs.\n"
+                                               "Relative paths in <img> tags (e.g., /data/image.jpg) will be resolved to full URLs.\n"
+                                               "Useful for cases where images are in the post description but not in the API's file/attachment list.")
+        self.downloaded_files = set()
+        self.downloaded_files_lock = threading.Lock()
+        self.downloaded_file_hashes = set()
+        self.downloaded_file_hashes_lock = threading.Lock()
+        self.show_external_links = False
+        self.external_link_queue = deque()
+        self._is_processing_external_link_queue = False
+        self._current_link_post_title = None
+        self.extracted_links_cache = []
+        self.manga_rename_toggle_button = None
+        self.favorite_mode_checkbox = None
+        self.url_or_placeholder_stack = None
+        self.url_input_widget = None
+        self.url_placeholder_widget = None
+        self.favorite_action_buttons_widget = None
+        self.favorite_mode_artists_button = None
+        self.favorite_mode_posts_button = None
+        self.standard_action_buttons_widget = None
+        self.bottom_action_buttons_stack = None
+        self.main_log_output = None
+        self.external_log_output = None
+        self.log_splitter = None
+        self.main_splitter = None
+        self.reset_button = None
+        self.progress_log_label = None
+        self.log_verbosity_toggle_button = None
+        self.missed_character_log_output = None
+        self.log_view_stack = None
+        self.current_log_view = 'progress'
+        self.link_search_input = None
+        self.link_search_button = None
+        self.export_links_button = None
+        self.radio_only_links = None
+        self.radio_only_archives = None
+        self.missed_title_key_terms_count = {}
+        self.missed_title_key_terms_examples = {}
+        self.logged_summary_for_key_term = set()
+        self.STOP_WORDS = set(["a", "an", "the", "is", "was", "were", "of", "for", "with", "in", "on", "at", "by", "to", "and", "or", "but", "i", "you", "he", "she", "it", "we", "they", "my", "your", "his", "her", "its", "our", "their", "com", "net", "org", "www"])
+        self.already_logged_bold_key_terms = set()
+        self.missed_key_terms_buffer = []
+        self.char_filter_scope_toggle_button = None
+        self.skip_words_scope = SKIP_SCOPE_POSTS
+        self.char_filter_scope = CHAR_SCOPE_TITLE
+        self.manga_filename_style = self.settings.value(MANGA_FILENAME_STYLE_KEY, STYLE_POST_TITLE, type=str)
+        self.current_theme = self.settings.value(THEME_KEY, "dark", type=str)
+        self.only_links_log_display_mode = LOG_DISPLAY_LINKS
+        self.mega_download_log_preserved_once = False
+        self.allow_multipart_download_setting = False
+        self.use_cookie_setting = False
+        self.scan_content_images_setting = self.settings.value(SCAN_CONTENT_IMAGES_KEY, False, type=bool)
+        self.cookie_text_setting = ""
+        self.current_selected_language = self.settings.value(LANGUAGE_KEY, "en", type=str)
 
-        self .manga_mode_checkbox =None 
+        print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
-        self .selected_cookie_filepath =None 
-        self .retryable_failed_files_info =[]
+        try:
+            base_path_for_icon = ""
+            if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                base_path_for_icon = sys._MEIPASS
+            else:
+                base_path_for_icon = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            
+            icon_path_for_window = os.path.join(base_path_for_icon, 'assets', 'Kemono.ico')
+            
+            if os.path.exists(icon_path_for_window):
+                self.setWindowIcon(QIcon(icon_path_for_window))
+            else:
+                if getattr(sys, 'frozen', False):
+                    executable_dir = os.path.dirname(sys.executable)
+                    fallback_icon_path = os.path.join(executable_dir, 'assets', 'Kemono.ico')
+                    if os.path.exists(fallback_icon_path):
+                        self.setWindowIcon(QIcon(fallback_icon_path))
+                    else:
+                        self.log_signal.emit(f"⚠️ Main window icon 'assets/Kemono.ico' not found at {icon_path_for_window} or {fallback_icon_path}")
+                else:
+                    self.log_signal.emit(f"⚠️ Main window icon 'assets/Kemono.ico' not found at {icon_path_for_window}")
+        except Exception as e_icon_app:
+            self.log_signal.emit(f"❌ Error setting main window icon in DownloaderApp init: {e_icon_app}")
 
-        self .is_paused =False 
-        self .worker_to_gui_queue =queue .Queue ()
-        self .gui_update_timer =QTimer (self )
-        self .actual_gui_signals =PostProcessorSignals ()
-
-        self .worker_signals =PostProcessorSignals ()
-        self .prompt_mutex =QMutex ()
-        self ._add_character_response =None 
-
-        self ._original_scan_content_tooltip =("If checked, the downloader will scan the HTML content of posts for image URLs (from <img> tags or direct links).\n"
-        "now This includes resolving relative paths from <img> tags to full URLs.\n"
-        "Relative paths in <img> tags (e.g., /data/image.jpg) will be resolved to full URLs.\n"
-        "Useful for cases where images are in the post description but not in the API's file/attachment list.")
-
-        self .downloaded_files =set ()
-        self .downloaded_files_lock =threading .Lock ()
-        self .downloaded_file_hashes =set ()
-        self .downloaded_file_hashes_lock =threading .Lock ()
-
-        self .show_external_links =False 
-        self .external_link_queue =deque ()
-        self ._is_processing_external_link_queue =False 
-        self ._current_link_post_title =None 
-        self .extracted_links_cache =[]
-        self .manga_rename_toggle_button =None 
-        self .favorite_mode_checkbox =None 
-        self .url_or_placeholder_stack =None 
-        self .url_input_widget =None 
-        self .url_placeholder_widget =None 
-        self .favorite_action_buttons_widget =None 
-        self .favorite_mode_artists_button =None 
-        self .favorite_mode_posts_button =None 
-        self .standard_action_buttons_widget =None 
-        self .bottom_action_buttons_stack =None 
-        self .main_log_output =None 
-        self .external_log_output =None 
-        self .log_splitter =None 
-        self .main_splitter =None 
-        self .reset_button =None 
-        self .progress_log_label =None 
-        self .log_verbosity_toggle_button =None 
-
-        self .missed_character_log_output =None 
-        self .log_view_stack =None 
-        self .current_log_view ='progress'
-
-        self .link_search_input =None 
-        self .link_search_button =None 
-        self .export_links_button =None 
-        self .radio_only_links =None 
-        self .radio_only_archives =None 
-        self .missed_title_key_terms_count ={}
-        self .missed_title_key_terms_examples ={}
-        self .logged_summary_for_key_term =set ()
-        self .STOP_WORDS =set (["a","an","the","is","was","were","of","for","with","in","on","at","by","to","and","or","but","i","you","he","she","it","we","they","my","your","his","her","its","our","their","com","net","org","www"])
-        self .already_logged_bold_key_terms =set ()
-        self .missed_key_terms_buffer =[]
-        self .char_filter_scope_toggle_button =None 
-        self .skip_words_scope =SKIP_SCOPE_POSTS 
-        self .char_filter_scope =CHAR_SCOPE_TITLE 
-        self .manga_filename_style =self .settings .value (MANGA_FILENAME_STYLE_KEY ,STYLE_POST_TITLE ,type =str )
-        self .current_theme =self .settings .value (THEME_KEY ,"dark",type =str )
-        self .only_links_log_display_mode =LOG_DISPLAY_LINKS 
-        self .mega_download_log_preserved_once =False 
-        self .allow_multipart_download_setting =False 
-        self .use_cookie_setting =False 
-        self .scan_content_images_setting =self .settings .value (SCAN_CONTENT_IMAGES_KEY ,False ,type =bool )
-        self .cookie_text_setting =""
-        self .current_selected_language =self .settings .value (LANGUAGE_KEY ,"en",type =str )
-
-        print (f"ℹ️ Known.txt will be loaded/saved at: {self .config_file }")
-        try :
-            if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
-
-                base_dir_for_icon =sys ._MEIPASS 
-            else :
-                app_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-            icon_path_for_window =os .path .join (app_base_dir  ,'assets','Kemono.ico')
-            if os .path .exists (icon_path_for_window ):
-                self .setWindowIcon (QIcon (icon_path_for_window ))
-            else :
-                self .log_signal .emit (f"⚠️ Main window icon 'assets/Kemono.ico' not found at {icon_path_for_window } (tried in DownloaderApp init)")
-        except Exception as e_icon_app :
-            self .log_signal .emit (f"❌ Error setting main window icon in DownloaderApp init: {e_icon_app }")
-
-        self .url_label_widget =None 
-        self .download_location_label_widget =None 
-
-        self .remove_from_filename_label_widget =None 
-        self .skip_words_label_widget =None 
-
-        self .setWindowTitle ("Kemono Downloader v5.5.0")
-
-        self .init_ui ()
-        self ._connect_signals ()
-        self .log_signal .emit ("ℹ️ Local API server functionality has been removed.")
-        self .log_signal .emit ("ℹ️ 'Skip Current File' button has been removed.")
-        if hasattr (self ,'character_input'):
-            self .character_input .setToolTip (self ._tr ("character_input_tooltip","Enter character names (comma-separated)..."))
-        self .log_signal .emit (f"ℹ️ Manga filename style loaded: '{self .manga_filename_style }'")
-        self .log_signal .emit (f"ℹ️ Skip words scope loaded: '{self .skip_words_scope }'")
-        self .log_signal .emit (f"ℹ️ Character filter scope set to default: '{self .char_filter_scope }'")
-        self .log_signal .emit (f"ℹ️ Multi-part download defaults to: {'Enabled'if self .allow_multipart_download_setting else 'Disabled'}")
-        self .log_signal .emit (f"ℹ️ Cookie text defaults to: Empty on launch")
-        self .log_signal .emit (f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
-        self .log_signal .emit (f"ℹ️ Scan post content for images defaults to: {'Enabled'if self .scan_content_images_setting else 'Disabled'}")
-        self .log_signal .emit (f"ℹ️ Application language loaded: '{self .current_selected_language .upper ()}' (UI may not reflect this yet).")
-        self ._retranslate_main_ui ()
-        self ._load_persistent_history ()
-        self ._load_saved_download_location ()
-        self._update_button_states_and_connections() # Initial button state setup        
+        self.url_label_widget = None
+        self.download_location_label_widget = None
+        self.remove_from_filename_label_widget = None
+        self.skip_words_label_widget = None
+        self.setWindowTitle("Kemono Downloader v5.5.0")
+        self.init_ui()
+        self._connect_signals()
+        self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
+        self.log_signal.emit("ℹ️ 'Skip Current File' button has been removed.")
+        if hasattr(self, 'character_input'):
+            self.character_input.setToolTip(self._tr("character_input_tooltip", "Enter character names (comma-separated)..."))
+        self.log_signal.emit(f"ℹ️ Manga filename style loaded: '{self.manga_filename_style}'")
+        self.log_signal.emit(f"ℹ️ Skip words scope loaded: '{self.skip_words_scope}'")
+        self.log_signal.emit(f"ℹ️ Character filter scope set to default: '{self.char_filter_scope}'")
+        self.log_signal.emit(f"ℹ️ Multi-part download defaults to: {'Enabled' if self.allow_multipart_download_setting else 'Disabled'}")
+        self.log_signal.emit(f"ℹ️ Cookie text defaults to: Empty on launch")
+        self.log_signal.emit(f"ℹ️ 'Use Cookie' setting defaults to: Disabled on launch")
+        self.log_signal.emit(f"ℹ️ Scan post content for images defaults to: {'Enabled' if self.scan_content_images_setting else 'Disabled'}")
+        self.log_signal.emit(f"ℹ️ Application language loaded: '{self.current_selected_language.upper()}' (UI may not reflect this yet).")
+        self._retranslate_main_ui()
+        self._load_persistent_history()
+        self._load_saved_download_location()
+        self._update_button_states_and_connections()
         self._check_for_interrupted_session()
+
 
     def get_checkbox_map(self):
         """Returns a mapping of checkbox attribute names to their corresponding settings key."""
@@ -851,20 +857,40 @@ class DownloaderApp (QWidget ):
 
             self .character_list .addItems ([entry ["name"]for entry in KNOWN_NAMES ])
 
-    def save_known_names (self ):
-        global KNOWN_NAMES 
-        try :
-            with open (self .config_file ,'w',encoding ='utf-8')as f :
-                for entry in KNOWN_NAMES :
-                    if entry ["is_group"]:
-                        f .write (f"({', '.join (sorted (entry ['aliases'],key =str .lower ))})\n")
-                    else :
-                        f .write (entry ["name"]+'\n')
-            if hasattr (self ,'log_signal'):self .log_signal .emit (f"💾 Saved {len (KNOWN_NAMES )} known entries to {self .config_file }")
-        except Exception as e :
-            log_msg =f"❌ Error saving config '{self .config_file }': {e }"
-            if hasattr (self ,'log_signal'):self .log_signal .emit (log_msg )
-            QMessageBox .warning (self ,"Config Save Error",f"Could not save list to {self .config_file }:\n{e }")
+    def save_known_names(self):
+        """
+        Saves the current list of known names (KNOWN_NAMES) to the config file.
+        This version includes a fix to ensure the destination directory exists
+        before attempting to write the file, preventing crashes in new installations.
+        """
+        global KNOWN_NAMES
+        try:
+            # --- FIX STARTS HERE ---
+            # Get the directory path from the full file path.
+            config_dir = os.path.dirname(self.config_file)
+            # Create the directory if it doesn't exist. 'exist_ok=True' prevents
+            # an error if the directory is already there.
+            os.makedirs(config_dir, exist_ok=True)
+            # --- FIX ENDS HERE ---
+
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                for entry in KNOWN_NAMES:
+                    if entry["is_group"]:
+                        # For groups, write the aliases in a sorted, comma-separated format inside parentheses.
+                        f.write(f"({', '.join(sorted(entry['aliases'], key=str.lower))})\n")
+                    else:
+                        # For single entries, write the name on its own line.
+                        f.write(entry["name"] + '\n')
+
+            if hasattr(self, 'log_signal'):
+                self.log_signal.emit(f"💾 Saved {len(KNOWN_NAMES)} known entries to {self.config_file}")
+
+        except Exception as e:
+            # If any error occurs during saving, log it and show a warning popup.
+            log_msg = f"❌ Error saving config '{self.config_file}': {e}"
+            if hasattr(self, 'log_signal'):
+                self.log_signal.emit(log_msg)
+            QMessageBox.warning(self, "Config Save Error", f"Could not save list to {self.config_file}:\n{e}")
 
     def closeEvent (self ,event ):
         self .save_known_names ()
@@ -1526,25 +1552,28 @@ class DownloaderApp (QWidget ):
             self .final_download_history_entries =[]
             self ._save_persistent_history ()
 
-    def _save_persistent_history (self ):
+
+    def _save_persistent_history(self):
         """Saves download history to a persistent file."""
-        self .log_signal .emit (f"📜 Attempting to save history to: {self .persistent_history_file }")
-        try :
-            history_dir =os .path .dirname (self .persistent_history_file )
-            self .log_signal .emit (f"   History directory: {history_dir }")
-            if not os .path .exists (history_dir ):
-                os .makedirs (history_dir ,exist_ok =True )
-                self .log_signal .emit (f"   Created history directory: {history_dir }")
+        self.log_signal.emit(f"📜 Attempting to save history to: {self.persistent_history_file}")
+        try:
+            history_dir = os.path.dirname(self.persistent_history_file)
+            self.log_signal.emit(f"   History directory: {history_dir}")
+            if not os.path.exists(history_dir):
+                os.makedirs(history_dir, exist_ok=True)
+                self.log_signal.emit(f"   Created history directory: {history_dir}")
             
             history_data = {
                 "last_downloaded_files": list(self.last_downloaded_files_details),
                 "first_processed_posts": self.final_download_history_entries
             }
-            with open (self .persistent_history_file ,'w',encoding ='utf-8')as f :
-                json .dump (history_data ,f ,indent =2 )
-            self .log_signal .emit (f"✅ Saved {len (self .final_download_history_entries )} history entries to: {self .persistent_history_file }")
-        except Exception as e :
-            self .log_signal .emit (f"❌ Error saving persistent history to {self .persistent_history_file }: {e }")
+            with open(self.persistent_history_file, 'w', encoding='utf-8') as f:
+                json.dump(history_data, f, indent=2)
+            self.log_signal.emit(f"✅ Saved {len(self.final_download_history_entries)} history entries to: {self.persistent_history_file}")
+        except Exception as e:
+            self.log_signal.emit(f"❌ Error saving persistent history to {self.persistent_history_file}: {e}")
+
+   
     def _load_creator_name_cache_from_json (self ):
         """Loads creator id-name-service mappings from creators.json into self.creator_name_cache."""
         self .log_signal .emit ("ℹ️ Attempting to load creators.json for creator name cache.")
@@ -2751,7 +2780,9 @@ class DownloaderApp (QWidget ):
 
             elif self .manga_filename_style ==STYLE_DATE_BASED :
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_date_based_text","Name: Date Based"))
-
+            
+            elif self .manga_filename_style ==STYLE_POST_ID: # Add this block
+                self .manga_rename_toggle_button .setText (self ._tr ("manga_style_post_id_text","Name: Post ID"))
 
             elif self .manga_filename_style ==STYLE_DATE_POST_TITLE :
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_date_post_title_text","Name: Date + Title"))
@@ -2762,6 +2793,8 @@ class DownloaderApp (QWidget ):
 
             self .manga_rename_toggle_button .setToolTip ("Click to cycle Manga Filename Style (when Manga Mode is active for a creator feed).")
 
+
+# In main_window.py
 
     def _toggle_manga_filename_style (self ):
         current_style =self .manga_filename_style 
@@ -2775,7 +2808,9 @@ class DownloaderApp (QWidget ):
         elif current_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
             new_style =STYLE_DATE_BASED 
         elif current_style ==STYLE_DATE_BASED :
-            new_style =STYLE_POST_TITLE 
+            new_style =STYLE_POST_ID # Change this line
+        elif current_style ==STYLE_POST_ID: # Add this block
+            new_style =STYLE_POST_TITLE
         else :
             self .log_signal .emit (f"⚠️ Unknown current manga filename style: {current_style }. Resetting to default ('{STYLE_POST_TITLE }').")
             new_style =STYLE_POST_TITLE 

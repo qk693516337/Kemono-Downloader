@@ -167,6 +167,7 @@ class PostProcessorWorker:
         if self .dynamic_filter_holder :
             return self .dynamic_filter_holder .get_filters ()
         return self .filter_character_list_objects_initial 
+
     def _download_single_file (self ,file_info ,target_folder_path ,headers ,original_post_id_for_log ,skip_event ,
     post_title ="",file_index_in_post =0 ,num_files_in_this_post =1 ,
     manga_date_file_counter_ref =None ,
@@ -273,6 +274,15 @@ class PostProcessorWorker:
                         self .logger (f"⚠️ Manga Title+GlobalNum Mode: Counter ref not provided or malformed for '{api_original_filename }'. Using original. Ref: {manga_global_file_counter_ref }")
                         filename_to_save_in_main_path =cleaned_original_api_filename 
                         self .logger (f"⚠️ Manga mode (Title+GlobalNum Style Fallback): Using cleaned original filename '{filename_to_save_in_main_path }' for post {original_post_id_for_log }.")
+                elif self.manga_filename_style == STYLE_POST_ID:
+                    if original_post_id_for_log and original_post_id_for_log != 'unknown_id':
+                        base_name = str(original_post_id_for_log)
+                        # Always append the file index for consistency (e.g., xxxxxx_0, xxxxxx_1)
+                        filename_to_save_in_main_path = f"{base_name}_{file_index_in_post}{original_ext}"
+                    else:
+                        # Fallback if post_id is somehow not available
+                        self.logger(f"⚠️ Manga mode (Post ID Style): Post ID missing. Using cleaned original filename '{cleaned_original_api_filename}'.")
+                        filename_to_save_in_main_path = cleaned_original_api_filename
                 elif self .manga_filename_style ==STYLE_DATE_POST_TITLE :
                     published_date_str =self .post .get ('published')
                     added_date_str =self .post .get ('added')
@@ -716,7 +726,6 @@ class PostProcessorWorker:
         finally :
             if data_to_write_io and hasattr (data_to_write_io ,'close'):
                 data_to_write_io .close ()
-
 
     def process (self ):
         if self ._check_pause (f"Post processing for ID {self .post .get ('id','N/A')}"):return 0 ,0 ,[],[],[],None 

@@ -9,24 +9,26 @@ from PyQt5.QtWidgets import QApplication, QDialog
 from PyQt5.QtCore import QCoreApplication
 
 # --- Local Application Imports ---
-# These imports reflect the new, organized project structure.
 from src.ui.main_window import DownloaderApp
 from src.ui.dialogs.TourDialog import TourDialog
 from src.config.constants import CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN
 
+# --- Define APP_BASE_DIR globally and make available early ---
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    APP_BASE_DIR = sys._MEIPASS
+else:
+    APP_BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+
+# Optional: Set a global variable or pass it into modules if needed
+# Or re-export it via constants.py for cleaner imports
 
 def handle_uncaught_exception(exc_type, exc_value, exc_traceback):
     """
     Handles uncaught exceptions by logging them to a file for easier debugging,
     especially for bundled applications.
     """
-    # Determine the base directory for logging
-    if getattr(sys, 'frozen', False):
-        base_dir_for_log = os.path.dirname(sys.executable)
-    else:
-        base_dir_for_log = os.path.dirname(os.path.abspath(__file__))
-
-    log_dir = os.path.join(base_dir_for_log, "logs")
+    # Use APP_BASE_DIR to determine logging location
+    log_dir = os.path.join(APP_BASE_DIR, "logs")
     log_file_path = os.path.join(log_dir, "uncaught_exceptions.log")
 
     try:
@@ -57,41 +59,35 @@ def main():
         
         qt_app = QApplication(sys.argv)
 
-        # Create the main application window from its new module
+        # Create the main application window
         downloader_app_instance = DownloaderApp()
 
         # --- Window Sizing and Positioning ---
-        # Logic moved from the old main.py to set an appropriate initial size
         primary_screen = QApplication.primaryScreen()
         if not primary_screen:
-            # Fallback for systems with no primary screen detected
             downloader_app_instance.resize(1024, 768)
         else:
             available_geo = primary_screen.availableGeometry()
             screen_width = available_geo.width()
             screen_height = available_geo.height()
             
-            # Define minimums and desired ratios
             min_app_width, min_app_height = 960, 680
             desired_width_ratio, desired_height_ratio = 0.80, 0.85
 
             app_width = max(min_app_width, int(screen_width * desired_width_ratio))
             app_height = max(min_app_height, int(screen_height * desired_height_ratio))
 
-            # Ensure the window is not larger than the screen
             app_width = min(app_width, screen_width)
             app_height = min(app_height, screen_height)
             
             downloader_app_instance.resize(app_width, app_height)
 
-        # Show the main window and center it
+        # Show and center the main window
         downloader_app_instance.show()
         if hasattr(downloader_app_instance, '_center_on_screen'):
             downloader_app_instance._center_on_screen()
 
         # --- First-Run Welcome Tour ---
-        # Check if the tour should be shown and run it.
-        # This static method call keeps the logic clean and contained.
         if TourDialog.should_show_tour():
             tour_dialog = TourDialog(parent_app=downloader_app_instance)
             tour_dialog.exec_()
@@ -102,7 +98,6 @@ def main():
         sys.exit(exit_code)
 
     except SystemExit:
-        # Allow sys.exit() to work as intended
         pass
     except Exception as e:
         print("--- CRITICAL APPLICATION STARTUP ERROR ---")
