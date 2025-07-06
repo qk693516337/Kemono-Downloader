@@ -13,10 +13,9 @@ This project used to be one giant messy App Script. It worked, but it was hard t
 ```
 KemonoDownloader/
 ├── main.py                      # Where the app starts
-├── requirements.txt             # List of Python libraries used
 ├── assets/                      # Icons and other static files
 │   └── Kemono.ico
-├── data/                        # Stuff that gets saved (user config, cookies, etc.)
+├── data/ 
 │   └── creators.json
 ├── logs/                        # Error logs and other output
 │   └── uncaught_exceptions.log
