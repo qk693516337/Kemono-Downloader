@@ -1223,6 +1223,11 @@ class DownloaderApp (QWidget ):
         self .use_subfolder_per_post_checkbox .toggled .connect (self .update_ui_for_subfolders )
         advanced_row1_layout .addWidget (self .use_subfolder_per_post_checkbox )
 
+        self.date_prefix_checkbox = QCheckBox("Date Prefix")
+        self.date_prefix_checkbox.setChecked(False)
+        self.date_prefix_checkbox.setToolTip("When 'Subfolder per Post' is active, prefix the folder name with the post's upload date (e.g., YYYY-MM-DD Post Title).")
+        advanced_row1_layout.addWidget(self.date_prefix_checkbox)
+
         self .use_cookie_checkbox =QCheckBox ("Use Cookie")
         self .use_cookie_checkbox .setChecked (self .use_cookie_setting )
 
@@ -2721,6 +2726,13 @@ class DownloaderApp (QWidget ):
             if not can_enable_subfolder_per_post_checkbox :
                 self .use_subfolder_per_post_checkbox .setChecked (False )
 
+        if hasattr(self, 'date_prefix_checkbox'):
+            # The Date Prefix checkbox should only be enabled if "Subfolder per Post" is both enabled and checked
+            can_enable_date_prefix = self.use_subfolder_per_post_checkbox.isEnabled() and self.use_subfolder_per_post_checkbox.isChecked()
+            self.date_prefix_checkbox.setEnabled(can_enable_date_prefix)
+            if not can_enable_date_prefix:
+                self.date_prefix_checkbox.setChecked(False)
+
         self .update_custom_folder_visibility ()
 
 
@@ -3718,6 +3730,7 @@ class DownloaderApp (QWidget ):
         'session_file_path': self.session_file_path,
         'session_lock': self.session_lock,
         'creator_download_folder_ignore_words':creator_folder_ignore_words_for_run ,
+        'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
         }
 
         args_template ['override_output_dir']=override_output_dir 
@@ -4070,21 +4083,56 @@ class DownloaderApp (QWidget ):
         num_file_dl_threads_for_each_worker =worker_args_template .get ('num_file_threads_for_worker',1 )
 
 
-        ppw_expected_keys =[
-        'post_data','download_root','known_names','filter_character_list','unwanted_keywords',
-        'filter_mode','skip_zip','skip_rar','use_subfolders','use_post_subfolders',
-        'target_post_id_from_initial_url','custom_folder_name','compress_images','emitter','pause_event',
-        'download_thumbnails','service','user_id','api_url_input',
-        'cancellation_event','downloaded_files','downloaded_file_hashes',
-        'downloaded_files_lock','downloaded_file_hashes_lock','remove_from_filename_words_list','dynamic_character_filter_holder',
-        'skip_words_list','skip_words_scope','char_filter_scope',
-        'show_external_links','extract_links_only','allow_multipart_download','use_cookie','cookie_text',
-        'app_base_dir','selected_cookie_file','override_output_dir',
-        'num_file_threads','skip_current_file_flag','manga_date_file_counter_ref','scan_content_for_images',
-        'manga_mode_active','manga_filename_style','manga_date_prefix',
-        'manga_global_file_counter_ref'
-        ,'creator_download_folder_ignore_words'
-        , 'session_file_path', 'session_lock'
+        ppw_expected_keys = [
+                'post_data',
+                'download_root',
+                'known_names',
+                'filter_character_list',
+                'unwanted_keywords',
+                'filter_mode',
+                'skip_zip',
+                'skip_rar',
+                'use_subfolders',
+                'use_post_subfolders',
+                'target_post_id_from_initial_url',
+                'custom_folder_name',
+                'compress_images',
+                'emitter',
+                'pause_event',
+                'download_thumbnails',
+                'service',
+                'user_id',
+                'api_url_input',
+                'cancellation_event',
+                'downloaded_files',
+                'downloaded_file_hashes',
+                'downloaded_files_lock',
+                'downloaded_file_hashes_lock',
+                'remove_from_filename_words_list',
+                'dynamic_character_filter_holder',
+                'skip_words_list',
+                'skip_words_scope',
+                'char_filter_scope',
+                'show_external_links',
+                'extract_links_only',
+                'allow_multipart_download',
+                'use_cookie',
+                'cookie_text',
+                'app_base_dir',
+                'selected_cookie_file',
+                'override_output_dir',
+                'num_file_threads',
+                'skip_current_file_flag',
+                'manga_date_file_counter_ref',
+                'scan_content_for_images',
+                'manga_mode_active',
+                'manga_filename_style',
+                'manga_date_prefix',
+                'use_date_prefix_for_subfolder',
+                'manga_global_file_counter_ref',
+                'creator_download_folder_ignore_words',
+                'session_file_path',
+                'session_lock'
         ]
 
         ppw_optional_keys_with_defaults ={

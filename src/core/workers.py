@@ -77,6 +77,7 @@ class PostProcessorWorker:
     scan_content_for_images =False ,
     creator_download_folder_ignore_words =None ,
     manga_global_file_counter_ref =None ,
+    use_date_prefix_for_subfolder=False,
     session_file_path=None,
     session_lock=None,
     ):
@@ -128,6 +129,7 @@ class PostProcessorWorker:
         self .override_output_dir =override_output_dir 
         self .scan_content_for_images =scan_content_for_images 
         self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
+        self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
         self.session_file_path = session_file_path
         self.session_lock = session_lock
         if self .compress_images and Image is None :
@@ -1003,6 +1005,20 @@ class PostProcessorWorker:
             else :
                 original_cleaned_post_title_for_sub =cleaned_post_title_for_sub 
 
+            if self.use_date_prefix_for_subfolder:
+                # Prioritize 'published' date, fall back to 'added' date
+                published_date_str = self.post.get('published') or self.post.get('added')
+                if published_date_str:
+                    try:
+                        # Extract just the date part (YYYY-MM-DD)
+                        date_prefix = published_date_str.split('T')[0]
+                        # Prepend the date to the folder name
+                        original_cleaned_post_title_for_sub = f"{date_prefix} {original_cleaned_post_title_for_sub}"
+                        self.logger(f"   ℹ️ Applying date prefix to subfolder: '{original_cleaned_post_title_for_sub}'")
+                    except Exception as e:
+                        self.logger(f"   ⚠️ Could not parse date '{published_date_str}' for prefix. Using original name. Error: {e}")
+                else:
+                    self.logger("   ⚠️ 'Date Prefix' is checked, but post has no 'published' or 'added' date. Omitting prefix.")
 
             base_path_for_post_subfolder =determined_post_save_path_for_history 
 
@@ -1443,6 +1459,7 @@ class DownloadThread (QThread ):
     use_cookie =False ,
     scan_content_for_images =False ,
     creator_download_folder_ignore_words =None ,
+    use_date_prefix_for_subfolder=False,
     cookie_text ="",
     session_file_path=None,
     session_lock=None,
@@ -1495,6 +1512,7 @@ class DownloadThread (QThread ):
         self .manga_date_file_counter_ref =manga_date_file_counter_ref 
         self .scan_content_for_images =scan_content_for_images 
         self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
+        self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
         self .manga_global_file_counter_ref =manga_global_file_counter_ref 
         self.session_file_path = session_file_path
         self.session_lock = session_lock
@@ -1627,6 +1645,7 @@ class DownloadThread (QThread ):
                     manga_global_file_counter_ref =self .manga_global_file_counter_ref ,
                     use_cookie =self .use_cookie ,
                     manga_date_file_counter_ref =self .manga_date_file_counter_ref ,
+                    use_date_prefix_for_subfolder=self.use_date_prefix_for_subfolder,
                     creator_download_folder_ignore_words =self .creator_download_folder_ignore_words ,
                     session_file_path=self.session_file_path,
                     session_lock=self.session_lock,
