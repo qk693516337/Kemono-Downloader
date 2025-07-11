@@ -109,7 +109,7 @@ This release focuses on providing more granular control over file organization a
   A **"Keep Duplicates"** option has been added to preserve all files from a post — even if some have the same name.  
   Instead of skipping or overwriting, the downloader will save duplicates with numbered suffixes (e.g., `image.jpg`, `image_1.jpg`, etc.), which is especially useful when the same file name points to different media.
 
-### Bug Fixes & Quality of Life Improvements
+### Bug Fixes
 
 - The downloader now correctly renames large `.part` files when completed, avoiding leftover temp files.
 - The list of failed files shown in the Error Dialog is now saved and restored with your session — so no errors get lost if you close the app.
