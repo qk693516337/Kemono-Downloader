@@ -35,102 +35,120 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 
 <div align="center">
 
-[![](https://img.shields.io/badge/Full_Feature_List-FFD700?style=for-the-badge&logoColor=black&color=FFD700)](features.md)
-[![](https://img.shields.io/badge/License-90EE90?style=for-the-badge&logoColor=black&color=90EE90)](LICENSE)
-[![](https://img.shields.io/badge/Important_Note-FFCCCB?style=for-the-badge&logoColor=black&color=FFCCCB)](note.md)
+[![](https://img.shields.io/badge/📚%20Full%20Feature%20List-FFD700?style=for-the-badge&logoColor=black&color=FFD700)](features.md)
+[![](https://img.shields.io/badge/📝%20License-90EE90?style=for-the-badge&logoColor=black&color=90EE90)](LICENSE)
+[![](https://img.shields.io/badge/⚠️%20Important%20Note-FFCCCB?style=for-the-badge&logoColor=black&color=FFCCCB)](note.md)
 
 </div>
 
 ---
 
-## 🚀 Feature Overview
+## Feature Overview
 
-Kemono Downloader offers a wide range of features to streamline your content downloading experience:
+Kemono Downloader offers a range of features to streamline your content downloading experience:
 
-### 🎛️ User-Friendly Interface
-- Built with PyQt5 for a modern and intuitive experience.
+- **User-Friendly Interface:** A modern PyQt5 GUI for easy navigation and operation.
 
-### 📥 Flexible Downloading
-- Download from Kemono.su and Coomer.party (and their mirrors).
-- Supports full creator pages and individual post URLs.
-- Standard download controls: Start, Pause, Resume, Cancel.
+- **Flexible Downloading:**
+  - Download content from Kemono.su (and mirrors) and Coomer.party (and mirrors).
+  - Supports creator pages (with page range selection) and individual post URLs.
+  - Standard download controls: Start, Pause, Resume, and Cancel.
 
-### 🔎 Powerful Filtering
-- **Character Filtering**: Filter by comma-separated or grouped character names.
-- **Keyword Skipping**: Skip posts/files by keywords.
-- **Filename Cleaning**: Clean downloaded filenames.
-- **File Type Selection**: Choose all, images, videos, audio, archives, or external links only.
+- **Powerful Filtering:**
+  - **Character Filtering:** Filter content by character names. Supports simple comma-separated names and grouped names for shared folders.
+  - **Keyword Skipping:** Skip posts or files based on specified keywords.
+  - **Filename Cleaning:** Remove unwanted words or phrases from downloaded filenames.
+  - **File Type Selection:** Choose to download all files, or limit to images/GIFs, videos, audio, or archives. Can also extract external links only.
 
-### 📁 Customizable Downloads
-- **Thumbnails Only**: Download preview images only.
-- **Content Scanning**: Finds `<img>` tags and image links in HTML.
-- **WebP Conversion**: Convert images to WebP (requires Pillow).
+- **Customizable Downloads:**
+  - **Thumbnails Only:** Option to download only small preview images.
+  - **Content Scanning:** Scan post HTML for `<img>` tags and direct image links, useful for images embedded in descriptions.
+  - **WebP Conversion:** Convert images to WebP format for smaller file sizes (requires Pillow library).
 
-### 🗂 Organized Output
-- **Subfolders by Character or Post Title**
-- **Per-Post Subfolders**: Optional for better organization.
+- **Organized Output:**
+  - **Automatic Subfolders:** Create subfolders based on character names (from filters or `Known.txt`) or post titles.
+  - **Per-Post Subfolders:** Option to create an additional subfolder for each individual post.
 
-### 📚 Manga/Comic Mode
-- Downloads posts chronologically.
-- Various filename styles for reading convenience.
+- **Manga/Comic Mode:**
+  - Downloads posts from a creator's feed in chronological order (oldest to newest).
+  - Offers various filename styling options for sequential reading (e.g., post title, original name, global numbering).
 
-### ⭐ Favorite Mode
-- Download from your favorited artists and posts.
-- Requires a valid cookie.
-- Supports global or per-artist subfolders.
+- **⭐ Favorite Mode:**
+  - Directly download from your favorited artists and posts on Kemono.su.
+  - Requires a valid cookie and adapts the UI for easy selection from your favorites.
+  - Supports downloading into a single location or artist-specific subfolders.
 
-### ⚙️ Performance & Advanced Options
-- **Cookie Support**: Paste string or use `cookies.txt`.
-- **Multithreading**: Configure threads for speed.
+- **Performance & Advanced Options:**
+  - **Cookie Support:** Use cookies (paste string or load from `cookies.txt`) to access restricted content.
+  - **Multithreading:** Configure the number of simultaneous downloads/post processing threads for improved speed.
 
-### 🧾 Logging
-- Detailed logs of download activity, errors, and status.
+- **Logging:**
+  - A detailed progress log displays download activity, errors, and summaries.
 
-### 🌐 Multi-language Support
-- UI in English, Japanese, French, Spanish, German, Russian, Korean, Chinese (Simplified).
+- **Multi-language Interface:** Choose from several languages for the UI (English, Japanese, French, Spanish, German, Russian, Korean, Chinese Simplified).
 
-### 🎨 Theme Customization
-- Light and Dark themes available.
+- **Theme Customization:** Selectable Light and Dark themes for user comfort.
 
 ---
 
 ## ✨ What's New in v6.0.0
 
-### 🔔 New Features
+This release focuses on providing more granular control over file organization and improving at-a-glance status monitoring.
 
-- **Live Error Count**: Error button shows live count like `(3) Error`.
-- **Date Prefix for Subfolders**: Adds upload date to subfolder names (e.g. `2025-07-11 Post Title`).
-- **Keep Duplicates**: Save all files in a post, even with duplicate names (adds `_1`, `_2`, etc.).
+### New Features
 
-### 🐞 Bug Fixes & Improvements
+- **Live Error Count on Button**  
+  The **"Error" button** now dynamically displays the number of failed files during a download. Instead of opening the dialog, you can quickly see a live count like `(3) Error`, helping you track issues at a glance.
 
-- `.part` files now correctly renamed after completion.
-- Failed files list is saved/restored with sessions.
-- Download location now remembered after clicking "Reset".
-- "Cancel" is available on session restore.
-- Cleaner final download log.
+- **Date Prefix for Post Subfolders**  
+  A new checkbox labeled **"Date Prefix"** is now available in the advanced settings.  
+  When enabled alongside **"Subfolder per Post"**, it prepends the post's upload date to the folder name (e.g., `2025-07-11 Post Title`).  
+  This makes your downloads sortable and easier to browse chronologically.
 
----
+- **Keep Duplicates Within a Post**  
+  A **"Keep Duplicates"** option has been added to preserve all files from a post — even if some have the same name.  
+  Instead of skipping or overwriting, the downloader will save duplicates with numbered suffixes (e.g., `image.jpg`, `image_1.jpg`, etc.), which is especially useful when the same file name points to different media.
 
-## 🛠️ Planned for v6.1.0
+### Bug Fixes & Quality of Life Improvements
 
-### 🔖 Tag Filtering
-- Filter posts by **tags**.
-- Combine with existing filters.
-- Use tag presets for repeatable workflows.
-
-### 📁 Creator Download History
-- Save a `.json` with already-downloaded posts.
-- Skip previously downloaded posts automatically.
+- The downloader now correctly renames large `.part` files when completed, avoiding leftover temp files.
+- The list of failed files shown in the Error Dialog is now saved and restored with your session — so no errors get lost if you close the app.
+- Your selected download location is remembered, even after pressing the **Reset** button.
+- The **Cancel** button is now enabled when restoring a pending session, so you can abort stuck jobs more easily.
+- Internal cleanup logs (like "Deleting post cache") are now excluded from the final download summary for clarity.
 
 ---
 
-## 📦 Installation
+## 📅 Next Update Plans
+
+### 🔖 Post Tag Filtering (Planned for v6.1.0)
+
+A powerful new **"Filter by Post Tags"** feature is planned:
+
+- Filter and download content based on specific post tags.
+- Combine tag filtering with current filters (character, file type, etc.).
+- Use tag presets to automate frequent downloads.
+
+This will provide **much greater control** over what gets downloaded, especially for creators who use tags consistently.
+
+### 📁 Creator Download History (.json Save)
+
+To streamline incremental downloads, a new system will allow the app to:
+
+- Save a `.json` file with metadata about already-downloaded posts.
+- Compare that file on future runs, so only **new** posts are downloaded.
+- Avoids duplication and makes regular syncs fast and efficient.
+
+Ideal for users managing large collections or syncing favorites regularly.
+
+---
+
+## 💻 Installation
 
 ### Requirements
 
-- Python 3.6 or newer
-- `pip` (Python package installer)
+- Python 3.6 or higher
+- pip (Python package installer)
 
 ### Install Dependencies
 
