@@ -241,7 +241,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v5.5.0")
+        self.setWindowTitle("Kemono Downloader v6.0.0")
         self.init_ui()
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -274,6 +274,8 @@ class DownloaderApp (QWidget ):
             'use_subfolder_per_post_checkbox': 'use_post_subfolders',
             'use_multithreading_checkbox': 'use_multithreading',
             'external_links_checkbox': 'show_external_links',
+            'keep_duplicates_checkbox': 'keep_in_post_duplicates',
+            'date_prefix_checkbox': 'use_date_prefix_for_subfolder',
             'manga_mode_checkbox': 'manga_mode_active',
             'scan_content_images_checkbox': 'scan_content_for_images',
             'use_cookie_checkbox': 'use_cookie',
@@ -341,6 +343,12 @@ class DownloaderApp (QWidget ):
                 
                 if "ui_settings" not in session_data or "download_state" not in session_data:
                     raise ValueError("Invalid session file structure.")
+
+                failed_files_from_session = session_data.get('download_state', {}).get('permanently_failed_files', [])
+                if failed_files_from_session:
+                    self.permanently_failed_files_for_dialog.clear()
+                    self.permanently_failed_files_for_dialog.extend(failed_files_from_session)
+                    self.log_signal.emit(f"ℹ️ Restored {len(failed_files_from_session)} failed file entries from the previous session.")
 
                 self.interrupted_session_data = session_data
                 self.log_signal.emit("ℹ️ Incomplete download session found. UI updated for restore.")
@@ -422,11 +430,13 @@ class DownloaderApp (QWidget ):
             self.pause_btn.setEnabled(True)
             self.pause_btn.clicked.connect(self.restore_download)
             self.pause_btn.setToolTip(self._tr("restore_download_button_tooltip", "Click to restore the interrupted download."))
-            self.cancel_btn.setEnabled(True)
 
-            self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
-            self.cancel_btn.setEnabled(False) # Nothing to cancel yet
-            self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+            # --- START: CORRECTED CANCEL BUTTON LOGIC ---
+            self.cancel_btn.setText(self._tr("discard_session_button_text", "🗑️ Discard Session"))
+            self.cancel_btn.setEnabled(True)
+            self.cancel_btn.clicked.connect(self._clear_session_and_reset_ui)
+            self.cancel_btn.setToolTip(self._tr("discard_session_tooltip", "Click to discard the interrupted session and reset the UI."))
+
         elif is_download_active:
             # State: Downloading / Paused
             self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
@@ -1205,6 +1215,11 @@ class DownloaderApp (QWidget ):
         self .compress_images_checkbox .setChecked (False )
         self .compress_images_checkbox .setToolTip ("Compress images > 1.5MB to WebP format (requires Pillow).")
         row1_layout .addWidget (self .compress_images_checkbox )
+
+        self.keep_duplicates_checkbox = QCheckBox("Keep Duplicates")
+        self.keep_duplicates_checkbox.setChecked(False)
+        self.keep_duplicates_checkbox.setToolTip("If checked, downloads all files from a post even if they have the same name.\nUnique files will be renamed with a suffix; identical files will still be skipped by hash.")
+        row1_layout.addWidget(self.keep_duplicates_checkbox)
 
         row1_layout .addStretch (1 )
         checkboxes_group_layout .addLayout (row1_layout )
@@ -3578,6 +3593,7 @@ class DownloaderApp (QWidget ):
 
         self .retryable_failed_files_info .clear ()
         self .permanently_failed_files_for_dialog .clear ()
+        self._update_error_button_count()
 
         manga_date_file_counter_ref_for_thread =None 
         if manga_mode and self .manga_filename_style ==STYLE_DATE_BASED and not extract_links_only :
@@ -3627,6 +3643,9 @@ class DownloaderApp (QWidget ):
 
         if not extract_links_only :
             log_messages .append (f"    Subfolders: {'Enabled'if use_subfolders else 'Disabled'}")
+            if use_subfolders and self.use_subfolder_per_post_checkbox.isChecked():
+                use_date_prefix = self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False
+                log_messages.append(f"      ↳ Date Prefix for Post Subfolders: {'Enabled' if use_date_prefix else 'Disabled'}")                    
             if use_subfolders :
                 if custom_folder_name_cleaned :log_messages .append (f"    Custom Folder (Post): '{custom_folder_name_cleaned }'")
             if actual_filters_to_use_for_run :
@@ -3636,14 +3655,15 @@ class DownloaderApp (QWidget ):
                 log_messages .append (f"    Folder Naming: Automatic (based on title/known names)")
 
 
-            log_messages .extend ([
-            f"    File Type Filter: {user_selected_filter_text } (Backend processing as: {backend_filter_mode })",
-            f"    Skip Archives: {'.zip'if effective_skip_zip else ''}{', 'if effective_skip_zip and effective_skip_rar else ''}{'.rar'if effective_skip_rar else ''}{'None (Archive Mode)'if backend_filter_mode =='archive'else ('None'if not (effective_skip_zip or effective_skip_rar )else '')}",
-            f"    Skip Words (posts/files): {', '.join (skip_words_list )if skip_words_list else 'None'}",
-            f"    Skip Words Scope: {current_skip_words_scope .capitalize ()}",
-            f"    Remove Words from Filename: {', '.join (remove_from_filename_words_list )if remove_from_filename_words_list else 'None'}",
-            f"    Compress Images: {'Enabled'if compress_images else 'Disabled'}",
-            f"    Thumbnails Only: {'Enabled'if download_thumbnails else 'Disabled'}"
+            keep_duplicates = self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False
+            log_messages.extend([
+                f"    File Type Filter: {user_selected_filter_text} (Backend processing as: {backend_filter_mode})",
+                f"    Keep In-Post Duplicates: {'Enabled' if keep_duplicates else 'Disabled'}",
+                f"    Skip Archives: {'.zip' if effective_skip_zip else ''}{', ' if effective_skip_zip and effective_skip_rar else ''}{'.rar' if effective_skip_rar else ''}{'None (Archive Mode)' if backend_filter_mode == 'archive' else ('None' if not (effective_skip_zip or effective_skip_rar) else '')}",
+                f"    Skip Words Scope: {current_skip_words_scope .capitalize ()}",
+                f"    Remove Words from Filename: {', '.join (remove_from_filename_words_list )if remove_from_filename_words_list else 'None'}",
+                f"    Compress Images: {'Enabled'if compress_images else 'Disabled'}",
+                f"    Thumbnails Only: {'Enabled'if download_thumbnails else 'Disabled'}"
             ])
             log_messages .append (f"    Scan Post Content for Images: {'Enabled'if scan_content_for_images else 'Disabled'}")
         else :
@@ -3731,6 +3751,7 @@ class DownloaderApp (QWidget ):
         'session_lock': self.session_lock,
         'creator_download_folder_ignore_words':creator_folder_ignore_words_for_run ,
         'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
+        'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False,        
         }
 
         args_template ['override_output_dir']=override_output_dir 
@@ -3830,6 +3851,7 @@ class DownloaderApp (QWidget ):
         dialog .exec_ ()
     def _handle_retry_from_error_dialog (self ,selected_files_to_retry ):
         self ._start_failed_files_retry_session (files_to_retry_list =selected_files_to_retry )
+        self._update_error_button_count()
 
     def _handle_retryable_file_failure (self ,list_of_retry_details ):
         """Appends details of files that failed but might be retryable later."""
@@ -3841,6 +3863,7 @@ class DownloaderApp (QWidget ):
         if list_of_permanent_failure_details :
             self .permanently_failed_files_for_dialog .extend (list_of_permanent_failure_details )
             self .log_signal .emit (f"ℹ️ {len (list_of_permanent_failure_details )} file(s) from single-thread download marked as permanently failed for this session.")
+            self._update_error_button_count()
 
     def _submit_post_to_worker_pool (self ,post_data_item ,worker_args_template ,num_file_dl_threads_for_each_worker ,emitter_for_worker ,ppw_expected_keys ,ppw_optional_keys_with_defaults ):
         """Helper to prepare and submit a single post processing task to the thread pool."""
@@ -4129,6 +4152,7 @@ class DownloaderApp (QWidget ):
                 'manga_filename_style',
                 'manga_date_prefix',
                 'use_date_prefix_for_subfolder',
+                'keep_in_post_duplicates',                
                 'manga_global_file_counter_ref',
                 'creator_download_folder_ignore_words',
                 'session_file_path',
@@ -4242,6 +4266,7 @@ class DownloaderApp (QWidget ):
                     self ._add_to_history_candidates (history_data_from_worker )
                 if permanent_failures_from_post :
                     self .permanently_failed_files_for_dialog .extend (permanent_failures_from_post )
+                    self._update_error_button_count()                    
                     self ._add_to_history_candidates (history_data_from_worker )
             with self .downloaded_files_lock :
                 self .download_counter +=downloaded_files_from_future 
@@ -4955,6 +4980,7 @@ class DownloaderApp (QWidget ):
         # --- Reset UI and all state ---
         self.log_signal.emit("🔄 Resetting application state to defaults...")
         self._reset_ui_to_defaults()
+        self._load_saved_download_location()
         self.main_log_output.clear()
         self.external_log_output.clear()
         if self.missed_character_log_output:
@@ -4989,6 +5015,7 @@ class DownloaderApp (QWidget ):
         self.only_links_log_display_mode = LOG_DISPLAY_LINKS
         self.mega_download_log_preserved_once = False
         self.permanently_failed_files_for_dialog.clear()
+        self._update_error_button_count()        
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
         self._update_favorite_scope_button_text()
         self.retryable_failed_files_info.clear()
@@ -5024,7 +5051,6 @@ class DownloaderApp (QWidget ):
         """Resets all UI elements and relevant state to their default values."""
         # Clear all text fields
         self.link_input.clear()
-        self.dir_input.clear()
         self.custom_folder_input.clear()
         self.character_input.clear()
         self.skip_words_input.clear()
@@ -5206,6 +5232,19 @@ class DownloaderApp (QWidget ):
             else :
                 self .multipart_toggle_button .setText (self ._tr ("multipart_off_button_text","Multi-part: OFF"))
                 self .multipart_toggle_button .setToolTip (self ._tr ("multipart_off_button_tooltip","Tooltip for multipart OFF"))
+
+    def _update_error_button_count(self):
+        """Updates the Error button text to show the count of failed files."""
+        if not hasattr(self, 'error_btn'):
+            return
+
+        count = len(self.permanently_failed_files_for_dialog)
+        base_text = self._tr("error_button_text", "Error")
+
+        if count > 0:
+            self.error_btn.setText(f"({count}) {base_text}")
+        else:
+            self.error_btn.setText(base_text)
 
     def _toggle_multipart_mode (self ):
         if not self .allow_multipart_download_setting :

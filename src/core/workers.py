@@ -78,6 +78,7 @@ class PostProcessorWorker:
     creator_download_folder_ignore_words =None ,
     manga_global_file_counter_ref =None ,
     use_date_prefix_for_subfolder=False,
+    keep_in_post_duplicates=False,
     session_file_path=None,
     session_lock=None,
     ):
@@ -130,6 +131,7 @@ class PostProcessorWorker:
         self .scan_content_for_images =scan_content_for_images 
         self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
         self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
+        self.keep_in_post_duplicates = keep_in_post_duplicates
         self.session_file_path = session_file_path
         self.session_lock = session_lock
         if self .compress_images and Image is None :
@@ -555,58 +557,175 @@ class PostProcessorWorker:
         final_total_for_progress =total_size_bytes if download_successful_flag and total_size_bytes >0 else downloaded_size_bytes 
         self ._emit_signal ('file_progress',api_original_filename ,(downloaded_size_bytes ,final_total_for_progress ))
 
-        if self .check_cancel ()or (skip_event and skip_event .is_set ())or (self .pause_event and self .pause_event .is_set ()and not download_successful_flag ):
-            self .logger (f"   ⚠️ Download process interrupted for {api_original_filename }.")
-            if downloaded_part_file_path and os .path .exists (downloaded_part_file_path ):
-                try :os .remove (downloaded_part_file_path )
-                except OSError :pass 
-            return 0 ,1 ,filename_to_save_in_main_path ,was_original_name_kept_flag ,FILE_DOWNLOAD_STATUS_SKIPPED ,None 
+        # Rescue download if an IncompleteRead error occurred but the file is complete
+        if (not download_successful_flag and
+                isinstance(last_exception_for_retry_later, http.client.IncompleteRead) and
+                total_size_bytes > 0 and downloaded_part_file_path and os.path.exists(downloaded_part_file_path)):
+            try:
+                actual_size = os.path.getsize(downloaded_part_file_path)
+                if actual_size == total_size_bytes:
+                    self.logger(f"   ✅ Rescued '{api_original_filename}': IncompleteRead error occurred, but file size matches. Proceeding with save.")
+                    download_successful_flag = True
+                    # The hash must be recalculated now that we've verified the file
+                    md5_hasher = hashlib.md5()
+                    with open(downloaded_part_file_path, 'rb') as f_verify:
+                        for chunk in iter(lambda: f_verify.read(8192), b""): # Read in chunks
+                            md5_hasher.update(chunk)
+                    calculated_file_hash = md5_hasher.hexdigest()
+            except Exception as rescue_exc:
+                self.logger(f"   ⚠️ Failed to rescue file despite matching size. Error: {rescue_exc}")
 
-        if not download_successful_flag :
-            self .logger (f"❌ Download failed for '{api_original_filename }' after {max_retries +1 } attempts.")
+        if self.check_cancel() or (skip_event and skip_event.is_set()) or (self.pause_event and self.pause_event.is_set() and not download_successful_flag):
+            self.logger(f"   ⚠️ Download process interrupted for {api_original_filename}.")
+            if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                try: os.remove(downloaded_part_file_path)
+                except OSError: pass
+            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
+        # This logic block now correctly handles all outcomes: success, failure, or rescued.
+        if download_successful_flag:
+            # --- This is the success path ---
+            if self._check_pause(f"Post-download hash check for '{api_original_filename}'"):
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
-            is_actually_incomplete_read =False 
-            if isinstance (last_exception_for_retry_later ,http .client .IncompleteRead ):
-                is_actually_incomplete_read =True 
-            elif hasattr (last_exception_for_retry_later ,'__cause__')and isinstance (last_exception_for_retry_later .__cause__ ,http .client .IncompleteRead ):
-                is_actually_incomplete_read =True 
+            with self.downloaded_file_hashes_lock:
+                if calculated_file_hash in self.downloaded_file_hashes:
+                    self.logger(f"   -> Skip Saving Duplicate (Hash Match): '{api_original_filename}' (Hash: {calculated_file_hash[:8]}...).")
+                    with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+                    if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                        try: os.remove(downloaded_part_file_path)
+                        except OSError as e_rem: self.logger(f"  -> Failed to remove .part file for hash duplicate: {e_rem}")
+                    return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
-            elif last_exception_for_retry_later is not None :
-                str_exc =str (last_exception_for_retry_later ).lower ()
+            effective_save_folder = target_folder_path
+            filename_after_styling_and_word_removal = filename_to_save_in_main_path
 
-                if "incompleteread"in str_exc or (isinstance (last_exception_for_retry_later ,tuple )and any ("incompleteread"in str (arg ).lower ()for arg in last_exception_for_retry_later if isinstance (arg ,(str ,Exception )))):
-                    is_actually_incomplete_read =True 
+            try:
+                os.makedirs(effective_save_folder, exist_ok=True)
+            except OSError as e:
+                self.logger(f"   ❌ Critical error creating directory '{effective_save_folder}': {e}. Skipping file '{api_original_filename}'.")
+                if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                    try: os.remove(downloaded_part_file_path)
+                    except OSError: pass
+                return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
-            if is_actually_incomplete_read :
-                self .logger (f"   Marking '{api_original_filename }' for potential retry later due to IncompleteRead.")
-                retry_later_details ={
-                'file_info':file_info ,
-                'target_folder_path':target_folder_path ,
-                'headers':headers ,
-                'original_post_id_for_log':original_post_id_for_log ,
-                'post_title':post_title ,
-                'file_index_in_post':file_index_in_post ,
-                'num_files_in_this_post':num_files_in_this_post ,
-                'forced_filename_override':filename_to_save_in_main_path ,
-                'manga_mode_active_for_file':self .manga_mode_active ,
-                'manga_filename_style_for_file':self .manga_filename_style ,
+            data_to_write_io = None
+            filename_after_compression = filename_after_styling_and_word_removal
+            is_img_for_compress_check = is_image(api_original_filename)
+
+            if is_img_for_compress_check and self.compress_images and Image and downloaded_size_bytes > (1.5 * 1024 * 1024):
+                # ... (This block for image compression remains the same)
+                self .logger (f"   Compressing '{api_original_filename }' ({downloaded_size_bytes /(1024 *1024 ):.2f} MB)...")
+                if self ._check_pause (f"Image compression for '{api_original_filename }'"):return 0 ,1 ,filename_to_save_in_main_path ,was_original_name_kept_flag ,FILE_DOWNLOAD_STATUS_SKIPPED ,None
+                img_content_for_pillow =None
+                try :
+                    with open (downloaded_part_file_path ,'rb')as f_img_in :
+                        img_content_for_pillow =BytesIO (f_img_in .read ())
+                    with Image .open (img_content_for_pillow )as img_obj :
+                        if img_obj .mode =='P':img_obj =img_obj .convert ('RGBA')
+                        elif img_obj .mode not in ['RGB','RGBA','L']:img_obj =img_obj .convert ('RGB')
+                        compressed_output_io =BytesIO ()
+                        img_obj .save (compressed_output_io ,format ='WebP',quality =80 ,method =4 )
+                        compressed_size =compressed_output_io .getbuffer ().nbytes
+                        if compressed_size <downloaded_size_bytes *0.9 :
+                            self .logger (f"   Compression success: {compressed_size /(1024 *1024 ):.2f} MB.")
+                            data_to_write_io =compressed_output_io
+                            data_to_write_io .seek (0 )
+                            base_name_orig ,_ =os .path .splitext (filename_after_compression )
+                            filename_after_compression =base_name_orig +'.webp'
+                            self .logger (f"   Updated filename (compressed): {filename_after_compression }")
+                        else :
+                            self .logger (f"   Compression skipped: WebP not significantly smaller.")
+                            if compressed_output_io :compressed_output_io .close ()
+                except Exception as comp_e :
+                    self .logger (f"❌ Compression failed for '{api_original_filename }': {comp_e }. Saving original.")
+                finally :
+                    if img_content_for_pillow :img_content_for_pillow .close ()
+            
+            final_filename_on_disk = filename_after_compression
+            temp_base, temp_ext = os.path.splitext(final_filename_on_disk)
+            suffix_counter = 1
+            while os.path.exists(os.path.join(effective_save_folder, final_filename_on_disk)):
+                final_filename_on_disk = f"{temp_base}_{suffix_counter}{temp_ext}"
+                suffix_counter += 1
+            if final_filename_on_disk != filename_after_compression:
+                self.logger(f"     Applied numeric suffix in '{os.path.basename(effective_save_folder)}': '{final_filename_on_disk}' (was '{filename_after_compression}')")
+
+            if self._check_pause(f"File saving for '{final_filename_on_disk}'"):
+                return 0, 1, final_filename_on_disk, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+            
+            final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
+            try:
+                if data_to_write_io:
+                    with open(final_save_path, 'wb') as f_out:
+                        time.sleep(0.05)
+                        f_out.write(data_to_write_io.getvalue())
+                    if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                        try:
+                            os.remove(downloaded_part_file_path)
+                        except OSError as e_rem:
+                            self.logger(f"  -> Failed to remove .part after compression: {e_rem}")
+                else:
+                    if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                        time.sleep(0.1)
+                        os.rename(downloaded_part_file_path, final_save_path)
+                    else:
+                        raise FileNotFoundError(f"Original .part file not found for saving: {downloaded_part_file_path}")
+                
+                with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
+                with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+                
+                final_filename_saved_for_return = final_filename_on_disk
+                self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024 * 1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
+
+                downloaded_file_details = {
+                    'disk_filename': final_filename_saved_for_return,
+                    'post_title': post_title,
+                    'post_id': original_post_id_for_log,
+                    'upload_date_str': self.post.get('published') or self.post.get('added') or "N/A",
+                    'download_timestamp': time.time(),
+                    'download_path': effective_save_folder,
+                    'service': self.service,
+                    'user_id': self.user_id,
+                    'api_original_filename': api_original_filename,
+                    'folder_context_name': folder_context_name_for_history or os.path.basename(effective_save_folder)
                 }
-                return 0 ,1 ,filename_to_save_in_main_path ,was_original_name_kept_flag ,FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER ,retry_later_details 
-            else :
-                self .logger (f"   Marking '{api_original_filename }' as permanently failed for this session.")
-                permanent_failure_details ={
-                'file_info':file_info ,
-                'target_folder_path':target_folder_path ,
-                'headers':headers ,
-                'original_post_id_for_log':original_post_id_for_log ,
-                'post_title':post_title ,
-                'file_index_in_post':file_index_in_post ,
-                'num_files_in_this_post':num_files_in_this_post ,
-                'forced_filename_override':filename_to_save_in_main_path ,
-                }
-                return 0 ,1 ,filename_to_save_in_main_path ,was_original_name_kept_flag ,FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION ,permanent_failure_details 
-        if self ._check_pause (f"Post-download hash check for '{api_original_filename }'"):return 0 ,1 ,filename_to_save_in_main_path ,was_original_name_kept_flag ,FILE_DOWNLOAD_STATUS_SKIPPED ,None 
+                self._emit_signal('file_successfully_downloaded', downloaded_file_details)
+                time.sleep(0.05)
+
+                return 1, 0, final_filename_saved_for_return, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SUCCESS, None
+            except Exception as save_err:
+                self.logger(f"->>Save Fail for '{final_filename_on_disk}': {save_err}")
+                if os.path.exists(final_save_path):
+                    try: os.remove(final_save_path)
+                    except OSError: self.logger(f"  -> Failed to remove partially saved file: {final_save_path}")
+                return 0, 1, final_filename_saved_for_return, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+            finally:
+                if data_to_write_io and hasattr(data_to_write_io, 'close'):
+                    data_to_write_io.close()
+        
+        else:
+            # --- This is the failure path ---
+            self.logger(f"❌ Download failed for '{api_original_filename}' after {max_retries + 1} attempts.")
+            
+            is_actually_incomplete_read = False
+            if isinstance(last_exception_for_retry_later, http.client.IncompleteRead):
+                is_actually_incomplete_read = True
+            elif hasattr(last_exception_for_retry_later, '__cause__') and isinstance(last_exception_for_retry_later.__cause__, http.client.IncompleteRead):
+                is_actually_incomplete_read = True
+            elif last_exception_for_retry_later is not None:
+                str_exc = str(last_exception_for_retry_later).lower()
+                if "incompleteread" in str_exc or (isinstance(last_exception_for_retry_later, tuple) and any("incompleteread" in str(arg).lower() for arg in last_exception_for_retry_later if isinstance(arg, (str, Exception)))):
+                    is_actually_incomplete_read = True
+            
+            if is_actually_incomplete_read:
+                self.logger(f"   Marking '{api_original_filename}' for potential retry later due to IncompleteRead.")
+                retry_later_details = { 'file_info': file_info, 'target_folder_path': target_folder_path, 'headers': headers, 'original_post_id_for_log': original_post_id_for_log, 'post_title': post_title, 'file_index_in_post': file_index_in_post, 'num_files_in_this_post': num_files_in_this_post, 'forced_filename_override': filename_to_save_in_main_path, 'manga_mode_active_for_file': self.manga_mode_active, 'manga_filename_style_for_file': self.manga_filename_style, }
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, retry_later_details
+            else:
+                self.logger(f"   Marking '{api_original_filename}' as permanently failed for this session.")
+                permanent_failure_details = { 'file_info': file_info, 'target_folder_path': target_folder_path, 'headers': headers, 'original_post_id_for_log': original_post_id_for_log, 'post_title': post_title, 'file_index_in_post': file_index_in_post, 'num_files_in_this_post': num_files_in_this_post, 'forced_filename_override': filename_to_save_in_main_path, }
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION, permanent_failure_details
         with self .downloaded_file_hashes_lock :
             if calculated_file_hash in self .downloaded_file_hashes :
                 self .logger (f"   -> Skip Saving Duplicate (Hash Match): '{api_original_filename }' (Hash: {calculated_file_hash [:8 ]}...).")
@@ -1207,16 +1326,26 @@ class PostProcessorWorker:
             return 0 ,0 ,[],[],[],None 
         files_to_download_info_list =[]
         processed_original_filenames_in_this_post =set ()
-        for file_info in all_files_from_post_api :
-            current_api_original_filename =file_info .get ('_original_name_for_log')
-            if current_api_original_filename in processed_original_filenames_in_this_post :
-                self .logger (f"   -> Skip Duplicate Original Name (within post {post_id }): '{current_api_original_filename }' already processed/listed for this post.")
-                total_skipped_this_post +=1 
-            else :
-                files_to_download_info_list .append (file_info )
-                if current_api_original_filename :
-                    processed_original_filenames_in_this_post .add (current_api_original_filename )
-        if not files_to_download_info_list :
+
+        if self.keep_in_post_duplicates:
+            # If we keep duplicates, just add every file to the list to be processed.
+            # The downstream hash check and rename-on-collision logic will handle them.
+            files_to_download_info_list.extend(all_files_from_post_api)
+            self.logger(f"   ℹ️ 'Keep Duplicates' is on. All {len(all_files_from_post_api)} files from post will be processed.")
+        else:
+            # This is the original logic that skips duplicates by name within a post.
+            for file_info in all_files_from_post_api:
+                current_api_original_filename = file_info.get('_original_name_for_log')
+                if current_api_original_filename in processed_original_filenames_in_this_post:
+                    self.logger(f"   -> Skip Duplicate Original Name (within post {post_id}): '{current_api_original_filename}' already processed/listed for this post.")
+                    total_skipped_this_post += 1
+                else:
+                    files_to_download_info_list.append(file_info)
+                    if current_api_original_filename:
+                        processed_original_filenames_in_this_post.add(current_api_original_filename)
+
+        if not files_to_download_info_list:
+
             self .logger (f"   All files for post {post_id } were duplicate original names or skipped earlier.")
             return 0 ,total_skipped_this_post ,[],[],[],None 
 
@@ -1366,12 +1495,24 @@ class PostProcessorWorker:
                         with open(self.session_file_path, 'r', encoding='utf-8') as f:
                             session_data = json.load(f)
                         
-                        # Modify in memory
-                        if not isinstance(session_data.get('download_state', {}).get('processed_post_ids'), list):
-                            if 'download_state' not in session_data:
-                                session_data['download_state'] = {}
+                        if 'download_state' not in session_data:
+                            session_data['download_state'] = {}
+
+                        # Add processed ID
+                        if not isinstance(session_data['download_state'].get('processed_post_ids'), list):
                             session_data['download_state']['processed_post_ids'] = []
                         session_data['download_state']['processed_post_ids'].append(self.post.get('id'))
+
+                        # Add any permanent failures from this worker to the session file
+                        if permanent_failures_this_post:
+                            if not isinstance(session_data['download_state'].get('permanently_failed_files'), list):
+                                session_data['download_state']['permanently_failed_files'] = []
+                            # To avoid duplicates if the same post is somehow re-processed
+                            existing_failed_urls = {f.get('file_info', {}).get('url') for f in session_data['download_state']['permanently_failed_files']}
+                            for failure in permanent_failures_this_post:
+                                if failure.get('file_info', {}).get('url') not in existing_failed_urls:
+                                    session_data['download_state']['permanently_failed_files'].append(failure)
+
                         # Write to temp file and then atomically replace
                         temp_file_path = self.session_file_path + ".tmp"
                         with open(temp_file_path, 'w', encoding='utf-8') as f_tmp:
@@ -1460,6 +1601,7 @@ class DownloadThread (QThread ):
     scan_content_for_images =False ,
     creator_download_folder_ignore_words =None ,
     use_date_prefix_for_subfolder=False,
+    keep_in_post_duplicates=False,
     cookie_text ="",
     session_file_path=None,
     session_lock=None,
@@ -1513,6 +1655,7 @@ class DownloadThread (QThread ):
         self .scan_content_for_images =scan_content_for_images 
         self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
         self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
+        self.keep_in_post_duplicates = keep_in_post_duplicates
         self .manga_global_file_counter_ref =manga_global_file_counter_ref 
         self.session_file_path = session_file_path
         self.session_lock = session_lock
@@ -1646,6 +1789,7 @@ class DownloadThread (QThread ):
                     use_cookie =self .use_cookie ,
                     manga_date_file_counter_ref =self .manga_date_file_counter_ref ,
                     use_date_prefix_for_subfolder=self.use_date_prefix_for_subfolder,
+                    keep_in_post_duplicates=self.keep_in_post_duplicates,                    
                     creator_download_folder_ignore_words =self .creator_download_folder_ignore_words ,
                     session_file_path=self.session_file_path,
                     session_lock=self.session_lock,

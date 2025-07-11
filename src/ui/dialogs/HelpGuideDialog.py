@@ -4,7 +4,7 @@ import sys
 
 # --- PyQt5 Imports ---
 from PyQt5.QtCore import QUrl, QSize, Qt
-from PyQt5.QtGui import QIcon
+from PyQt5.QtGui import QIcon, QDesktopServices
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QStackedWidget, QScrollArea, QFrame, QWidget
