@@ -144,7 +144,7 @@ class EmptyPopupDialog (QDialog ):
         self .setMinimumSize (int (400 *scale_factor ),int (300 *scale_factor ))
 
         self .parent_app =parent_app_ref 
-        self .current_scope_mode =self .SCOPE_CHARACTERS 
+        self.current_scope_mode = self.SCOPE_CREATORS
         self .app_base_dir =app_base_dir 
 
         app_icon =get_app_icon_object ()

@@ -126,6 +126,21 @@ class FavoriteArtistsDialog (QDialog ):
         self .artist_list_widget .setVisible (show )
 
     def _fetch_favorite_artists (self ):
+
+        if self.cookies_config['use_cookie']:
+            # Check if we can load cookies for at least one of the services.
+            kemono_cookies = prepare_cookies_for_request(True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'], self.cookies_config['app_base_dir'], self._logger, target_domain="kemono.su")
+            coomer_cookies = prepare_cookies_for_request(True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'], self.cookies_config['app_base_dir'], self._logger, target_domain="coomer.su")
+
+            if not kemono_cookies and not coomer_cookies:
+                # If cookies are enabled but none could be loaded, show help and stop.
+                self.status_label.setText(self._tr("fav_artists_cookies_required_status", "Error: Cookies enabled but could not be loaded for any source."))
+                self._logger("Error: Cookies enabled but no valid cookies were loaded. Showing help dialog.")
+                cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
+                cookie_help_dialog.exec_()
+                self.download_button.setEnabled(False)
+                return # Stop further execution
+
         kemono_fav_url ="https://kemono.su/api/v1/account/favorites?type=artist"
         coomer_fav_url ="https://coomer.su/api/v1/account/favorites?type=artist"
 

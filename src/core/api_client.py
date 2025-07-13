@@ -1,12 +1,10 @@
-# --- Standard Library Imports ---
 import time
 import traceback
 from urllib.parse import urlparse
-
-# --- Third-Party Library Imports ---
+import json # Ensure json is imported
 import requests
 
-# --- Local Application Imports ---
+# (Keep the rest of your imports)
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ..config.constants import (
     STYLE_DATE_POST_TITLE
@@ -15,36 +13,24 @@ from ..config.constants import (
 
 def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None):
     """
-    Fetches a single page of posts from the API with retry logic.
-
-    Args:
-        api_url_base (str): The base URL for the user's posts.
-        headers (dict): The request headers.
-        offset (int): The offset for pagination.
-        logger (callable): Function to log messages.
-        cancellation_event (threading.Event): Event to signal cancellation.
-        pause_event (threading.Event): Event to signal pause.
-        cookies_dict (dict): A dictionary of cookies to include in the request.
-
-    Returns:
-        list: A list of post data dictionaries from the API.
-
-    Raises:
-        RuntimeError: If the fetch fails after all retries or encounters a non-retryable error.
+    Fetches a single page of posts from the API with robust retry logic.
+    NEW: Requests only essential fields to keep the response size small and reliable.
     """
     if cancellation_event and cancellation_event.is_set():
-        logger("   Fetch cancelled before request.")
         raise RuntimeError("Fetch operation cancelled by user.")
     if pause_event and pause_event.is_set():
         logger("   Post fetching paused...")
         while pause_event.is_set():
             if cancellation_event and cancellation_event.is_set():
-                logger("   Post fetching cancelled while paused.")
-                raise RuntimeError("Fetch operation cancelled by user.")
+                raise RuntimeError("Fetch operation cancelled by user while paused.")
             time.sleep(0.5)
         logger("   Post fetching resumed.")
-        
-    paginated_url = f'{api_url_base}?o={offset}'
+    
+    # --- MODIFICATION: Added `fields` to the URL to request only metadata ---
+    # This prevents the large 'content' field from being included in the list, avoiding timeouts.
+    fields_to_request = "id,user,service,title,shared_file,added,published,edited,file,attachments,tags"
+    paginated_url = f'{api_url_base}?o={offset}&fields={fields_to_request}'
+    
     max_retries = 3
     retry_delay = 5
 
@@ -52,22 +38,18 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         if cancellation_event and cancellation_event.is_set():
             raise RuntimeError("Fetch operation cancelled by user during retry loop.")
 
-        log_message = f"   Fetching: {paginated_url} (Page approx. {offset // 50 + 1})"
+        log_message = f"   Fetching post list: {api_url_base}?o={offset} (Page approx. {offset // 50 + 1})"
         if attempt > 0:
             log_message += f" (Attempt {attempt + 1}/{max_retries})"
         logger(log_message)
 
         try:
-            response = requests.get(paginated_url, headers=headers, timeout=(15, 90), cookies=cookies_dict)
+            # We can now remove the streaming logic as the response will be small and fast.
+            response = requests.get(paginated_url, headers=headers, timeout=(15, 60), cookies=cookies_dict)
             response.raise_for_status()
-
-            if 'application/json' not in response.headers.get('Content-Type', '').lower():
-                logger(f"⚠️ Unexpected content type from API: {response.headers.get('Content-Type')}. Body: {response.text[:200]}")
-                return []
-
             return response.json()
 
-        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as e:
+        except requests.exceptions.RequestException as e:
             logger(f"   ⚠️ Retryable network error on page fetch (Attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
                 delay = retry_delay * (2 ** attempt)
@@ -76,18 +58,46 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
                 continue
             else:
                 logger(f"   ❌ Failed to fetch page after {max_retries} attempts.")
-                raise RuntimeError(f"Timeout or connection error fetching offset {offset}")
-        except requests.exceptions.RequestException as e:
-            err_msg = f"Error fetching offset {offset}: {e}"
-            if e.response is not None:
-                err_msg += f" (Status: {e.response.status_code}, Body: {e.response.text[:200]})"
-            raise RuntimeError(err_msg)
-        except ValueError as e: # JSON decode error
-            raise RuntimeError(f"Error decoding JSON from offset {offset}: {e}. Response: {response.text[:200]}")
+                raise RuntimeError(f"Network error fetching offset {offset}")
+        except json.JSONDecodeError as e:
+            logger(f"   ❌ Failed to decode JSON on page fetch (Attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                delay = retry_delay * (2 ** attempt)
+                logger(f"      Retrying in {delay} seconds...")
+                time.sleep(delay)
+                continue
+            else:
+                raise RuntimeError(f"JSONDecodeError fetching offset {offset}")
 
     raise RuntimeError(f"Failed to fetch page {paginated_url} after all attempts.")
 
 
+def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logger, cookies_dict=None):
+    """
+    --- NEW FUNCTION ---
+    Fetches the full data, including the 'content' field, for a single post.
+    """
+    post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}"
+    logger(f"      Fetching full content for post ID {post_id}...")
+    try:
+        # Use streaming here as a precaution for single posts that are still very large.
+        with requests.get(post_api_url, headers=headers, timeout=(15, 300), cookies=cookies_dict, stream=True) as response:
+            response.raise_for_status()
+            response_body = b""
+            for chunk in response.iter_content(chunk_size=8192):
+                response_body += chunk
+            
+            full_post_data = json.loads(response_body)
+            # The API sometimes wraps the post in a list, handle that.
+            if isinstance(full_post_data, list) and full_post_data:
+                return full_post_data[0]
+            return full_post_data
+            
+    except Exception as e:
+        logger(f"      ❌ Failed to fetch full content for post {post_id}: {e}")
+        return None
+
+        
 def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, cancellation_event=None, pause_event=None, cookies_dict=None):
     """Fetches all comments for a specific post."""
     if cancellation_event and cancellation_event.is_set():

@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QFileDialog, QMessageBox, QListWidget, QRadioButton,
     QButtonGroup, QCheckBox, QSplitter, QGroupBox, QDialog, QStackedWidget,
     QScrollArea, QListWidgetItem, QSizePolicy, QProgressBar, QAbstractItemView, QFrame,
-    QMainWindow, QAction, QGridLayout
+    QMainWindow, QAction
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QTimer, QSettings, QStandardPaths, QUrl, QSize, QProcess, QMutex, QMutexLocker
 
@@ -52,8 +52,6 @@ from .dialogs.DownloadExtractedLinksDialog import DownloadExtractedLinksDialog
 from .dialogs.FavoritePostsDialog import FavoritePostsDialog
 from .dialogs.FavoriteArtistsDialog import FavoriteArtistsDialog
 from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
-from .dialogs.MoreOptionsDialog import MoreOptionsDialog
-from .dialogs.SinglePDF import create_single_pdf_from_content
 
 class DynamicFilterHolder:
     """A thread-safe class to hold and update character filters during a download."""
@@ -78,7 +76,6 @@ class PostProcessorSignals(QObject):
     file_progress_signal = pyqtSignal(str, object)
     file_successfully_downloaded_signal = pyqtSignal(dict)
     missed_character_post_signal = pyqtSignal(str, str)
-    worker_finished_signal = pyqtSignal(tuple)
     finished_signal = pyqtSignal(int, int, bool, list)
     retryable_file_failed_signal = pyqtSignal(list)
     permanent_file_failed_signal = pyqtSignal(list)
@@ -213,11 +210,7 @@ class DownloaderApp (QWidget ):
         self.scan_content_images_setting = self.settings.value(SCAN_CONTENT_IMAGES_KEY, False, type=bool)
         self.cookie_text_setting = ""
         self.current_selected_language = self.settings.value(LANGUAGE_KEY, "en", type=str)
-        self.more_filter_scope = None 
-        self.text_export_format = 'pdf'
-        self.single_pdf_setting = False
-        self.session_temp_files = []
-        
+
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
         try:
@@ -643,7 +636,6 @@ class DownloaderApp (QWidget ):
         self .actual_gui_signals .missed_character_post_signal .connect (self .handle_missed_character_post )
         self .actual_gui_signals .external_link_signal .connect (self .handle_external_link_signal )
         self .actual_gui_signals .file_successfully_downloaded_signal .connect (self ._handle_actual_file_downloaded )
-        self.actual_gui_signals.worker_finished_signal.connect(self._handle_worker_result)       
         self .actual_gui_signals .file_download_status_signal .connect (lambda status :None )
 
         if hasattr (self ,'character_input'):
@@ -809,9 +801,7 @@ class DownloaderApp (QWidget ):
                     self ._handle_actual_file_downloaded (payload [0 ]if payload else {})
                 elif signal_type =='file_successfully_downloaded':
                     self ._handle_file_successfully_downloaded (payload [0 ])
-                elif signal_type == 'worker_finished': # <-- ADD THIS ELIF BLOCK
-                    self.actual_gui_signals.worker_finished_signal.emit(payload[0] if payload else tuple())
-                else:
+                else :
                     self .log_signal .emit (f"⚠️ Unknown signal type from worker queue: {signal_type }")
                 self .worker_to_gui_queue .task_done ()
             except queue .Empty :
@@ -994,7 +984,8 @@ class DownloaderApp (QWidget ):
             QMessageBox .critical (self ,"Restart Failed",
             f"Could not automatically restart the application: {e }\n\nPlease restart it manually.")
 
-    def init_ui(self):
+
+def init_ui(self):
         self.main_splitter = QSplitter(Qt.Horizontal)
         
         # --- Use a scroll area for the left panel for consistency ---
@@ -1152,10 +1143,8 @@ class DownloaderApp (QWidget ):
         self.radio_only_archives = QRadioButton("📦 Only Archives")
         self.radio_only_audio = QRadioButton("🎧 Only Audio")
         self.radio_only_links = QRadioButton("🔗 Only Links")
-        self.radio_more = QRadioButton("More") 
-
         self.radio_all.setChecked(True)
-        for btn in [self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives, self.radio_only_audio, self.radio_only_links, self.radio_more]:
+        for btn in [self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives, self.radio_only_audio, self.radio_only_links]:
             self.radio_group.addButton(btn)
             radio_button_layout.addWidget(btn)
         self.favorite_mode_checkbox = QCheckBox()
@@ -1446,8 +1435,6 @@ class DownloaderApp (QWidget ):
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         if hasattr(self, 'radio_group') and self.radio_group.checkedButton():
             self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
-            self.radio_group.buttonToggled.connect(self._handle_more_options_toggled) # Add this line
-            
         self._update_manga_filename_style_button_text()
         self._update_skip_scope_button_text()
         self._update_char_filter_scope_button_text()
@@ -1456,7 +1443,7 @@ class DownloaderApp (QWidget ):
             self._handle_thumbnail_mode_change(self.download_thumbnails_checkbox.isChecked())
         if hasattr(self, 'favorite_mode_checkbox'):
             self._handle_favorite_mode_toggle(False)
-
+            
     def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
         self .log_signal .emit (f"📜 Attempting to load history from: {self .persistent_history_file }")
@@ -1524,7 +1511,7 @@ class DownloaderApp (QWidget ):
         else :
             base_path_for_creators =self .app_base_dir 
 
-        creators_file_path =os .path .join (base_path_for_creators ,"data" ,"creators.json")
+        creators_file_path =os .path .join (base_path_for_creators ,"creators.json")
 
         if not os .path .exists (creators_file_path ):
             self .log_signal .emit (f"⚠️ 'creators.json' not found at {creators_file_path }. Creator name cache will be empty.")
@@ -1567,7 +1554,7 @@ class DownloaderApp (QWidget ):
             )
             return 
 
-        dialog = DownloadHistoryDialog(last_3_downloaded, first_processed, self)
+        dialog =DownloadHistoryDialog (last_3_downloaded ,first_processed ,self ,self )
         dialog .exec_ ()
 
     def _handle_actual_file_downloaded (self ,file_details_dict ):
@@ -1650,7 +1637,7 @@ class DownloaderApp (QWidget ):
             QMessageBox .information (self ,"No Supported Links","No Mega, Google Drive, or Dropbox links were found in the extracted links.")
             return 
 
-        dialog = DownloadExtractedLinksDialog(links_to_show_in_dialog, self)
+        dialog =DownloadExtractedLinksDialog (links_to_show_in_dialog ,self ,self )
         dialog .download_requested .connect (self ._handle_extracted_links_download_request )
         dialog .exec_ ()
 
@@ -1749,33 +1736,14 @@ class DownloaderApp (QWidget ):
             self .external_link_download_thread =None 
 
     def _on_single_external_file_complete (self ,url ,success ):
+
+
         pass 
-
-
-    def _show_future_settings_dialog(self):
+    def _show_future_settings_dialog (self ):
         """Shows the placeholder dialog for future settings."""
-        # --- DEBUGGING CODE TO FIND THE UNEXPECTED CALL ---
-        import traceback
-        print("--- DEBUG: _show_future_settings_dialog() was called. See stack trace below. ---")
-        traceback.print_stack()
-        print("--------------------------------------------------------------------------------")
-        
-        # Correctly create the dialog instance once with the parent set to self.
-        dialog = FutureSettingsDialog(self)
-        dialog.exec_()
-
-    def _check_if_all_work_is_done(self):
-        """
-        Checks if the fetcher thread is done AND if all submitted tasks have been processed.
-        If so, finalizes the download.
-        """
-        # Conditions for being completely finished:
-        fetcher_is_done = not self.is_fetcher_thread_running
-        all_workers_are_done = (self.total_posts_to_process > 0 and self.processed_posts_count >= self.total_posts_to_process)
-
-        if fetcher_is_done and all_workers_are_done:
-            self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
-            self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
+        dialog =FutureSettingsDialog (self )
+        dialog =FutureSettingsDialog (self ,self )
+        dialog .exec_ ()
 
     def _sync_queue_with_link_input (self ,current_text ):
         """
@@ -1872,8 +1840,7 @@ class DownloaderApp (QWidget ):
         QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
                           color: #F0F0F0; border-radius: 4px; 
                           font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }
-        /* --- FIX: Adjusted padding to match QLineEdit and removed min-height --- */
-        QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 5px 12px; border-radius: 4px; }
+        QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 6px 12px; border-radius: 4px; min-height: 22px; }
         QPushButton:hover { background-color: #656565; border: 1px solid #7A7A7A; }
         QPushButton:pressed { background-color: #4A4A4A; }
         QPushButton:disabled { background-color: #404040; color: #888; border-color: #555; }
@@ -1928,12 +1895,6 @@ class DownloaderApp (QWidget ):
             QMessageBox .critical (self ,"Dialog Error",f"An unexpected error occurred with the folder selection dialog: {e }")
 
     def handle_main_log (self ,message ):
-        # vvv ADD THIS BLOCK AT THE TOP OF THE METHOD vvv
-        if message.startswith("TEMP_FILE_PATH:"):
-            filepath = message.split(":", 1)[1]
-            if self.single_pdf_setting:
-                self.session_temp_files.append(filepath)
-            return
         is_html_message =message .startswith (HTML_PREFIX )
         display_message =message 
         use_html =False 
@@ -2166,36 +2127,6 @@ class DownloaderApp (QWidget ):
         elif not filename and not progress_info :
             self .file_progress_label .setText ("")
 
-    def _clear_stale_temp_files(self):
-        """On startup, cleans any temp files from a previous crashed session."""
-        try:
-            temp_dir = os.path.join(self.app_base_dir, "appdata")
-            if not os.path.isdir(temp_dir):
-                return
-            
-            for filename in os.listdir(temp_dir):
-                if filename.startswith("tmp_") and filename.endswith(".json"):
-                    try:
-                        os.remove(os.path.join(temp_dir, filename))
-                        self.log_signal.emit(f"   🧹 Removed stale temp file: {filename}")
-                    except OSError:
-                        pass # File might be locked, skip
-        except Exception as e:
-            self.log_signal.emit(f"⚠️ Error cleaning stale temp files: {e}")
-
-    def _cleanup_temp_files(self):
-        """Deletes all temporary files collected during the session."""
-        if not self.session_temp_files:
-            return
-        
-        self.log_signal.emit("   Cleaning up temporary files...")
-        for filepath in self.session_temp_files:
-            try:
-                if os.path.exists(filepath):
-                    os.remove(filepath)
-            except Exception as e:
-                self.log_signal.emit(f"   ⚠️ Could not delete temp file '{filepath}': {e}")
-        self.session_temp_files = []
 
     def update_external_links_setting (self ,checked ):
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
@@ -2226,15 +2157,9 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit ("\n"+"="*40 +"\n🔗 External Links Log Disabled\n"+"="*40 )
 
 
-    def _handle_filter_mode_change(self, button, checked):
-        # Add this logic at the very beginning of the method
-        if button != self.radio_more and checked:
-            # If a button other than "More" is selected, reset its text and state
-            self.radio_more.setText("More")
-            self.more_filter_scope = None
-
-        if not button or not checked:
-            return
+    def _handle_filter_mode_change (self ,button ,checked ):
+        if not button or not checked :
+            return 
 
 
         is_only_links =(button ==self .radio_only_links )
@@ -2461,9 +2386,7 @@ class DownloaderApp (QWidget ):
 
 
     def get_filter_mode (self ):
-        if self.radio_more and self.radio_more.isChecked():
-            return 'text_only'
-        elif self.radio_only_links and self.radio_only_links.isChecked():
+        if self .radio_only_links and self .radio_only_links .isChecked ():
             return 'all'
         elif self .radio_images .isChecked ():
             return 'image'
@@ -2663,34 +2586,6 @@ class DownloaderApp (QWidget ):
         self .new_char_input .clear ()
         return True 
 
-    def _handle_more_options_toggled(self, button, checked):
-        """Shows the MoreOptionsDialog when the 'More' radio button is selected."""
-        if button == self.radio_more and checked:
-            current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
-            current_format = self.text_export_format or 'pdf'
-            
-            # Pass the current setting to the dialog
-            dialog = MoreOptionsDialog(self, current_scope=current_scope, current_format=current_format, single_pdf_checked=self.single_pdf_setting)
-
-            if dialog.exec_() == QDialog.Accepted:
-                self.more_filter_scope = dialog.get_selected_scope()
-                self.text_export_format = dialog.get_selected_format()
-                self.single_pdf_setting = dialog.get_single_pdf_state() # Get the new setting
-
-                scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
-                
-                # Update button text to show the selected format
-                format_display = f" ({self.text_export_format.upper()})"
-                if self.single_pdf_setting:
-                    format_display = " (Single PDF)"
-
-                self.radio_more.setText(f"{scope_text}{format_display}")
-                
-                self.log_signal.emit(f"ℹ️ 'More' filter scope set to: {scope_text}, Format: {self.text_export_format.upper()}")
-                self.log_signal.emit(f"ℹ️ Single PDF setting: {'Enabled' if self.single_pdf_setting else 'Disabled'}")
-            else:
-                self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
-                self.radio_all.setChecked(True)
 
     def delete_selected_character (self ):
         global KNOWN_NAMES 
@@ -3043,9 +2938,6 @@ class DownloaderApp (QWidget ):
     def start_download (self ,direct_api_url =None ,override_output_dir =None, is_restore=False ):
         global KNOWN_NAMES ,BackendDownloadThread ,PostProcessorWorker ,extract_post_info ,clean_folder_name ,MAX_FILE_THREADS_PER_POST_OR_WORKER 
 
-        self._clear_stale_temp_files() 
-        self.session_temp_files = []  
-
         if self ._is_download_active ():
             QMessageBox.warning(self, "Busy", "A download is already in progress.")
             return False 
@@ -3161,7 +3053,7 @@ class DownloaderApp (QWidget ):
             lambda msg :self .log_signal .emit (f"[UI Cookie Check] {msg }")
             )
             if temp_cookies_for_check is None :
-                cookie_dialog = CookieHelpDialog(self, offer_download_without_option=True)
+                cookie_dialog =CookieHelpDialog (self ,self ,offer_download_without_option =True )
                 dialog_exec_result =cookie_dialog .exec_ ()
 
                 if cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result ==QDialog .Accepted :
@@ -3179,8 +3071,6 @@ class DownloaderApp (QWidget ):
 
         extract_links_only =(self .radio_only_links and self .radio_only_links .isChecked ())
         backend_filter_mode =self .get_filter_mode ()
-        text_only_scope_for_run = self.more_filter_scope if backend_filter_mode == 'text_only' else None 
-        export_format_for_run = self.text_export_format if backend_filter_mode == 'text_only' else 'txt'        
         checked_radio_button =self .radio_group .checkedButton ()
         user_selected_filter_text =checked_radio_button .text ()if checked_radio_button else "All"
 
@@ -3560,7 +3450,27 @@ class DownloaderApp (QWidget ):
             else :
                 self .log_signal .emit (f"ℹ️ Using character filters for link extraction: {', '.join (item ['name']for item in actual_filters_to_use_for_run )}")
 
+
+        if manga_mode and not actual_filters_to_use_for_run and not extract_links_only :
+            msg_box =QMessageBox (self )
+            msg_box .setIcon (QMessageBox .Warning )
+            msg_box .setWindowTitle ("Manga Mode Filter Warning")
+            msg_box .setText (
+            "Manga Mode is enabled, but 'Filter by Character(s)' is empty.\n\n"
+            "For best results (correct file naming and folder organization if subfolders are on), "
+            "please enter the Manga/Series title into the filter field.\n\n"
+            "Proceed without a filter (names might be generic, folder might be less specific)?"
+            )
+            proceed_button =msg_box .addButton ("Proceed Anyway",QMessageBox .AcceptRole )
+            cancel_button =msg_box .addButton ("Cancel Download",QMessageBox .RejectRole )
+            msg_box .exec_ ()
+            if msg_box .clickedButton ()==cancel_button :
+                self .log_signal .emit ("❌ Download cancelled due to Manga Mode filter warning.")
+                return False 
+            else :
+                self .log_signal .emit ("⚠️ Proceeding with Manga Mode without a specific title filter.")
         self .dynamic_character_filter_holder .set_filters (actual_filters_to_use_for_run )
+
 
         creator_folder_ignore_words_for_run =None 
         character_filters_are_empty =not actual_filters_to_use_for_run 
@@ -3707,9 +3617,6 @@ class DownloaderApp (QWidget ):
         'known_names_copy':list (KNOWN_NAMES ),
         'filter_character_list':actual_filters_to_use_for_run ,
         'filter_mode':backend_filter_mode ,
-        'text_only_scope': text_only_scope_for_run,
-        'text_export_format': export_format_for_run,
-        'single_pdf_mode': self.single_pdf_setting,
         'skip_zip':effective_skip_zip ,
         'skip_rar':effective_skip_rar ,
         'use_subfolders':use_subfolders ,
@@ -3747,14 +3654,12 @@ class DownloaderApp (QWidget ):
         'selected_cookie_file':selected_cookie_file_path_for_backend ,
         'manga_global_file_counter_ref':manga_global_file_counter_ref_for_thread ,
         'app_base_dir':app_base_dir_for_cookies ,
-        'project_root_dir': self.app_base_dir,
         'use_cookie':use_cookie_for_this_run ,
         'session_file_path': self.session_file_path,
         'session_lock': self.session_lock,
         'creator_download_folder_ignore_words':creator_folder_ignore_words_for_run ,
         'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
         'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False,        
-        'skip_current_file_flag': None,
         }
 
         args_template ['override_output_dir']=override_output_dir 
@@ -3779,9 +3684,7 @@ class DownloaderApp (QWidget ):
                 'manga_date_file_counter_ref',
                 'manga_global_file_counter_ref','manga_date_prefix',
                 'manga_mode_active','unwanted_keywords','manga_filename_style','scan_content_for_images',
-                'allow_multipart_download','use_cookie','cookie_text','app_base_dir','selected_cookie_file','override_output_dir','project_root_dir',
-                'text_only_scope',
-                'single_pdf_mode'
+                'allow_multipart_download','use_cookie','cookie_text','app_base_dir','selected_cookie_file','override_output_dir'
                 ]
                 args_template ['skip_current_file_flag']=None 
                 single_thread_args ={key :args_template [key ]for key in dt_expected_keys if key in args_template }
@@ -3896,6 +3799,7 @@ class DownloaderApp (QWidget ):
             worker_instance =PostProcessorWorker (**worker_init_args )
             if self .thread_pool :
                 future =self .thread_pool .submit (worker_instance .process )
+                future .add_done_callback (self ._handle_future_result )
                 self .active_futures .append (future )
                 return True 
             else :
@@ -3983,138 +3887,313 @@ class DownloaderApp (QWidget ):
         self .log_signal .emit (f"✅ Post fetcher thread started. {num_post_workers } post worker threads initializing...")
         self._update_button_states_and_connections() # Update buttons after fetcher thread starts
 
-    def _fetch_and_queue_posts(self, api_url_input_for_fetcher, worker_args_template, num_post_workers):
-        """
-        Fetches post data and submits tasks to the pool. It does NOT wait for completion.
-        """
-        global PostProcessorWorker, download_from_api
-        
-        try:
-            # This section remains the same as before
-            post_generator = download_from_api(
-                api_url_input_for_fetcher,
-                logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"),
-                start_page=worker_args_template.get('start_page'),
-                end_page=worker_args_template.get('end_page'),
-                manga_mode=worker_args_template.get('manga_mode_active', False),
-                cancellation_event=self.cancellation_event,
-                pause_event=self.pause_event,
-                use_cookie=worker_args_template.get('use_cookie'),
-                cookie_text=worker_args_template.get('cookie_text'),
-                selected_cookie_file=worker_args_template.get('selected_cookie_file'),
-                app_base_dir=worker_args_template.get('app_base_dir'),
-                manga_filename_style_for_sort_check=worker_args_template.get('manga_filename_style')
-            )
-
-            ppw_expected_keys = [
-                'post_data','download_root','known_names','filter_character_list','unwanted_keywords',
-                'filter_mode','skip_zip','skip_rar','use_subfolders','use_post_subfolders',
-                'target_post_id_from_initial_url','custom_folder_name','compress_images','emitter',
-                'pause_event','download_thumbnails','service','user_id','api_url_input',
-                'cancellation_event','downloaded_files','downloaded_file_hashes','downloaded_files_lock',
-                'downloaded_file_hashes_lock','remove_from_filename_words_list','dynamic_character_filter_holder',
-                'skip_words_list','skip_words_scope','char_filter_scope','show_external_links',
-                'extract_links_only','allow_multipart_download','use_cookie','cookie_text',
-                'app_base_dir','selected_cookie_file','override_output_dir','num_file_threads',
-                'skip_current_file_flag','manga_date_file_counter_ref','scan_content_for_images',
-                'manga_mode_active','manga_filename_style','manga_date_prefix','text_only_scope',
-                'text_export_format', 'single_pdf_mode',
-                'use_date_prefix_for_subfolder','keep_in_post_duplicates','manga_global_file_counter_ref',
-                'creator_download_folder_ignore_words','session_file_path','project_root_dir','session_lock'
-            ]
-            
-            num_file_dl_threads_for_each_worker = worker_args_template.get('num_file_threads_for_worker', 1)
-            emitter_for_worker = worker_args_template.get('emitter')
-
-            for posts_batch in post_generator:
-                if self.cancellation_event.is_set():
-                    break
-                if isinstance(posts_batch, list) and posts_batch:
-                    for post_data_item in posts_batch:
-                        self._submit_post_to_worker_pool(post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, {})
-                    self.total_posts_to_process += len(posts_batch)
-                    self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
-        
-        except Exception as e:
-            self.log_signal.emit(f"❌ Error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
-        finally:
-            # The fetcher's only job is to mark itself as done.
-            self.is_fetcher_thread_running = False
-            self.log_signal.emit("ℹ️ Post fetcher thread has finished submitting tasks.")
-
-    def _handle_worker_result(self, result_tuple: tuple):
-        """
-        Safely processes results from a worker. This is now the ONLY place
-        that checks if the entire download process is complete.
-        """
-        self.processed_posts_count += 1
-        
-        try:
-            (downloaded, skipped, kept_originals, retryable,
-             permanent, history_data,
-             temp_filepath) = result_tuple
-
-            if temp_filepath: self.session_temp_files.append(temp_filepath)
-            
-            with self.downloaded_files_lock:
-                self.download_counter += downloaded
-                self.skip_counter += skipped
-
-            # Other result handling can go here if needed
-            if history_data: self._add_to_history_candidates(history_data)
-            if permanent: self.permanently_failed_files_for_dialog.extend(permanent)
-
+    def _fetch_and_queue_posts (self ,api_url_input_for_fetcher ,worker_args_template ,num_post_workers ):
+        global PostProcessorWorker ,download_from_api 
+        all_posts_data =[]
+        fetch_error_occurred =False 
+        manga_mode_active_for_fetch =worker_args_template .get ('manga_mode_active',False )
+        emitter_for_worker =worker_args_template .get ('emitter')
+       
+        is_restore = self.interrupted_session_data is not None
+        if is_restore:
+            all_posts_data = self.interrupted_session_data['download_state']['all_posts_data']
+            processed_ids = set(self.interrupted_session_data['download_state']['processed_post_ids'])
+            posts_to_process = [p for p in all_posts_data if p.get('id') not in processed_ids]
+            self.log_signal.emit(f"Restoring session. {len(posts_to_process)} posts remaining out of {len(all_posts_data)}.")
+            self.total_posts_to_process = len(all_posts_data)
+            self.processed_posts_count = len(processed_ids)
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
+            
+            # Re-assign all_posts_data to only what needs processing
+            all_posts_data = posts_to_process
+       
+        if not emitter_for_worker :
+            self .log_signal .emit ("❌ CRITICAL ERROR: Emitter (queue) missing for worker in _fetch_and_queue_posts.");
+            self .finished_signal .emit (0 ,0 ,True ,[]);
+            return 
 
-        except Exception as e:
-            self.log_signal.emit(f"❌ Error in _handle_worker_result: {e}\n{traceback.format_exc(limit=2)}")
-        
-        # THE CRITICAL CHECK:
-        # Is the fetcher thread done AND have we processed all the tasks it submitted?
-        if not self.is_fetcher_thread_running and self.processed_posts_count >= self.total_posts_to_process:
-            self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
-            self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
+        try:
+            self.log_signal.emit("    Fetching post data from API (this may take a moment for large feeds)...")
+            if not is_restore: # Only fetch new data if not restoring
+                post_generator = download_from_api(
+                    api_url_input_for_fetcher,
+                    logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"),
+                    start_page=worker_args_template.get('start_page'),
+                    end_page=worker_args_template.get('end_page'),
+                    manga_mode=manga_mode_active_for_fetch,
+                    cancellation_event=self.cancellation_event,
+                    pause_event=worker_args_template.get('pause_event'),
+                    use_cookie=worker_args_template.get('use_cookie'),
+                    cookie_text=worker_args_template.get('cookie_text'),
+                    selected_cookie_file=worker_args_template.get('selected_cookie_file'),
+                    app_base_dir=worker_args_template.get('app_base_dir'),
+                    manga_filename_style_for_sort_check=(
+                        worker_args_template.get('manga_filename_style')
+                        if manga_mode_active_for_fetch
+                        else None
+                    )
+                )
 
-    def _trigger_single_pdf_creation(self):
-        """Reads temp files, sorts them by date, then creates the single PDF."""
-        self.log_signal.emit("="*40)
-        self.log_signal.emit("Creating single PDF from collected text files...")
+                for posts_batch in post_generator:
+                    if self.cancellation_event.is_set():
+                        fetch_error_occurred = True; self.log_signal.emit("    Post fetching cancelled by user."); break
+                    if isinstance(posts_batch, list):
+                        all_posts_data.extend(posts_batch)
+                        self.total_posts_to_process = len(all_posts_data)
+                        if self.total_posts_to_process > 0 and self.total_posts_to_process % 100 == 0:
+                            self.log_signal.emit(f"    Fetched {self.total_posts_to_process} posts so far...")
+                    else:
+                        fetch_error_occurred = True; self.log_signal.emit(f"❌ API fetcher returned non-list type: {type(posts_batch)}"); break
 
-        posts_content_data = []
-        for temp_filepath in self.session_temp_files:
-            try:
-                with open(temp_filepath, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    posts_content_data.append(data)
-            except Exception as e:
-                self.log_signal.emit(f"   ⚠️ Could not read temp file '{temp_filepath}': {e}")
-        
-        if not posts_content_data:
-            self.log_signal.emit("   No content was collected. Aborting PDF creation.")
-            return
+                if not fetch_error_occurred and not self.cancellation_event.is_set():
+                    self.log_signal.emit(f"✅ Post fetching complete. Total posts to process: {self.total_posts_to_process}")
 
-        output_dir = self.dir_input.text().strip() or QStandardPaths.writableLocation(QStandardPaths.DownloadLocation)
-        default_filename = os.path.join(output_dir, "Consolidated_Content.pdf")
-        filepath, _ = QFileDialog.getSaveFileName(self, "Save Single PDF", default_filename, "PDF Files (*.pdf)")
+                # Get a clean, serializable dictionary of UI settings
+                output_dir_for_session = worker_args_template.get('output_dir', self.dir_input.text().strip())
+                ui_settings_for_session = self._get_current_ui_settings_as_dict(
+                    api_url_override=api_url_input_for_fetcher,
+                    output_dir_override=output_dir_for_session
+                )
 
-        if not filepath:
-            self.log_signal.emit("   Single PDF creation cancelled by user.")
-            return
+                # Save initial session state
+                session_data = {
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "ui_settings": ui_settings_for_session,
+                    "download_state": {
+                        "all_posts_data": all_posts_data,
+                        "processed_post_ids": []
+                    }
+                }
+                self._save_session_file(session_data)
 
-        if not filepath.lower().endswith('.pdf'):
-            filepath += '.pdf'
-        
-        font_path = os.path.join(self.app_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
-        
-        # vvv THIS IS THE KEY CHANGE vvv
-        # Sort content by the 'published' date. ISO-formatted dates sort correctly as strings.
-        # Use a fallback value 'Z' to place any posts without a date at the end.
-        self.log_signal.emit("   Sorting collected posts by date (oldest first)...")
-        sorted_content = sorted(posts_content_data, key=lambda x: x.get('published', 'Z'))
-        # ^^^ END OF KEY CHANGE ^^^
+            # From here, all_posts_data is the list of posts to process (either new or restored)
+            unique_posts_dict ={}
+            for post in all_posts_data :
+                post_id =post .get ('id')
+                if post_id is not None :
+                    if post_id not in unique_posts_dict :
+                        unique_posts_dict [post_id ]=post 
+                else :
+                    self .log_signal .emit (f"⚠️ Skipping post with no ID: {post .get ('title','Untitled')}")
 
-        create_single_pdf_from_content(sorted_content, filepath, font_path, logger=self.log_signal.emit)
-        self.log_signal.emit("="*40)
+            posts_to_process_final = list(unique_posts_dict.values())
+
+            if not is_restore:
+                self.total_posts_to_process = len(posts_to_process_final)
+                self.log_signal.emit(f"    Processed {len(posts_to_process_final)} unique posts after de-duplication.")
+                if len(posts_to_process_final) < len(all_posts_data):
+                    self.log_signal.emit(f"    Note: {len(all_posts_data) - len(posts_to_process_final)} duplicate post IDs were removed.")
+            all_posts_data = posts_to_process_final
+
+        except TypeError as te :
+            self .log_signal .emit (f"❌ TypeError calling download_from_api: {te }\n    Check 'downloader_utils.py' signature.\n{traceback .format_exc (limit =2 )}");fetch_error_occurred =True 
+        except RuntimeError as re_err :
+            self .log_signal .emit (f"ℹ️ Post fetching runtime error (likely cancellation or API issue): {re_err }");fetch_error_occurred =True 
+        except Exception as e :
+            self .log_signal .emit (f"❌ Error during post fetching: {e }\n{traceback .format_exc (limit =2 )}");fetch_error_occurred =True 
+
+        finally :
+            self .is_fetcher_thread_running =False 
+            self .log_signal .emit (f"ℹ️ Post fetcher thread (_fetch_and_queue_posts) has completed its task. is_fetcher_thread_running set to False.")
+
+        if self .cancellation_event .is_set ()or fetch_error_occurred :
+            self .finished_signal .emit (self .download_counter ,self .skip_counter ,self .cancellation_event .is_set (),self .all_kept_original_filenames )
+            if self .thread_pool :self .thread_pool .shutdown (wait =False ,cancel_futures =True );self .thread_pool =None 
+            return 
+
+        if not all_posts_data:
+            self .log_signal .emit ("😕 No posts found or fetched to process.")
+            self .finished_signal .emit (0 ,0 ,False ,[])
+            return 
+
+        self .log_signal .emit (f"    Preparing to submit {self .total_posts_to_process } post processing tasks to thread pool...")
+        if not is_restore:
+            self.processed_posts_count = 0
+        self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
+
+        num_file_dl_threads_for_each_worker =worker_args_template .get ('num_file_threads_for_worker',1 )
+
+
+        ppw_expected_keys = [
+                'post_data',
+                'download_root',
+                'known_names',
+                'filter_character_list',
+                'unwanted_keywords',
+                'filter_mode',
+                'skip_zip',
+                'skip_rar',
+                'use_subfolders',
+                'use_post_subfolders',
+                'target_post_id_from_initial_url',
+                'custom_folder_name',
+                'compress_images',
+                'emitter',
+                'pause_event',
+                'download_thumbnails',
+                'service',
+                'user_id',
+                'api_url_input',
+                'cancellation_event',
+                'downloaded_files',
+                'downloaded_file_hashes',
+                'downloaded_files_lock',
+                'downloaded_file_hashes_lock',
+                'remove_from_filename_words_list',
+                'dynamic_character_filter_holder',
+                'skip_words_list',
+                'skip_words_scope',
+                'char_filter_scope',
+                'show_external_links',
+                'extract_links_only',
+                'allow_multipart_download',
+                'use_cookie',
+                'cookie_text',
+                'app_base_dir',
+                'selected_cookie_file',
+                'override_output_dir',
+                'num_file_threads',
+                'skip_current_file_flag',
+                'manga_date_file_counter_ref',
+                'scan_content_for_images',
+                'manga_mode_active',
+                'manga_filename_style',
+                'manga_date_prefix',
+                'use_date_prefix_for_subfolder',
+                'keep_in_post_duplicates',                
+                'manga_global_file_counter_ref',
+                'creator_download_folder_ignore_words',
+                'session_file_path',
+                'session_lock'
+        ]
+
+        ppw_optional_keys_with_defaults ={
+        'skip_words_list','skip_words_scope','char_filter_scope','remove_from_filename_words_list',
+        'show_external_links','extract_links_only','duplicate_file_mode',
+        'num_file_threads','skip_current_file_flag','manga_mode_active','manga_filename_style','manga_date_prefix',
+        'manga_date_file_counter_ref','use_cookie','cookie_text','app_base_dir','selected_cookie_file'
+        }
+        if num_post_workers >POST_WORKER_BATCH_THRESHOLD and self .total_posts_to_process >POST_WORKER_NUM_BATCHES :
+            self .log_signal .emit (f"    High thread count ({num_post_workers }) detected. Batching post submissions into {POST_WORKER_NUM_BATCHES } parts.")
+
+            import math 
+            tasks_submitted_in_batch_segment =0 
+            batch_size =math .ceil (self .total_posts_to_process /POST_WORKER_NUM_BATCHES )
+            submitted_count_in_batching =0 
+
+            for batch_num in range (POST_WORKER_NUM_BATCHES ):
+                if self .cancellation_event .is_set ():break 
+
+                if self .pause_event and self .pause_event .is_set ():
+                    self .log_signal .emit (f"    [Fetcher] Batch submission paused before batch {batch_num +1 }/{POST_WORKER_NUM_BATCHES }...")
+                    while self .pause_event .is_set ():
+                        if self .cancellation_event .is_set ():
+                            self .log_signal .emit ("    [Fetcher] Batch submission cancelled while paused.")
+                            break 
+                        time .sleep (0.5 )
+                    if self .cancellation_event .is_set ():break 
+                    if not self .cancellation_event .is_set ():
+                        self .log_signal .emit (f"    [Fetcher] Batch submission resumed. Processing batch {batch_num +1 }/{POST_WORKER_NUM_BATCHES }.")
+
+                start_index =batch_num *batch_size 
+                end_index =min ((batch_num +1 )*batch_size ,self .total_posts_to_process )
+                current_batch_posts =all_posts_data [start_index :end_index ]
+
+                if not current_batch_posts :continue 
+
+                self .log_signal .emit (f"    Submitting batch {batch_num +1 }/{POST_WORKER_NUM_BATCHES } ({len (current_batch_posts )} posts) to pool...")
+                for post_data_item in current_batch_posts :
+                    if self .cancellation_event .is_set ():break 
+                    success =self ._submit_post_to_worker_pool (post_data_item ,worker_args_template ,num_file_dl_threads_for_each_worker ,emitter_for_worker ,ppw_expected_keys ,ppw_optional_keys_with_defaults )
+                    if success :
+                        submitted_count_in_batching +=1 
+                        tasks_submitted_in_batch_segment +=1 
+                        if tasks_submitted_in_batch_segment %10 ==0 :
+                            time .sleep (0.005 )
+                            tasks_submitted_in_batch_segment =0 
+                    elif self .cancellation_event .is_set ():
+                        break 
+
+                if self .cancellation_event .is_set ():break 
+
+                if batch_num <POST_WORKER_NUM_BATCHES -1 :
+                    self .log_signal .emit (f"    Batch {batch_num +1 } submitted. Waiting {POST_WORKER_BATCH_DELAY_SECONDS }s before next batch...")
+                    delay_start_time =time .time ()
+                    while time .time ()-delay_start_time <POST_WORKER_BATCH_DELAY_SECONDS :
+                        if self .cancellation_event .is_set ():break 
+                        time .sleep (0.1 )
+                    if self .cancellation_event .is_set ():break 
+
+            self .log_signal .emit (f"    All {POST_WORKER_NUM_BATCHES } batches ({submitted_count_in_batching } total tasks) submitted to pool via batching.")
+
+        else :
+            self .log_signal .emit (f"    Submitting all {self .total_posts_to_process } tasks to pool directly...")
+            submitted_count_direct =0 
+            tasks_submitted_since_last_yield =0 
+            for post_data_item in all_posts_data :
+                if self .cancellation_event .is_set ():break 
+                success =self ._submit_post_to_worker_pool (post_data_item ,worker_args_template ,num_file_dl_threads_for_each_worker ,emitter_for_worker ,ppw_expected_keys ,ppw_optional_keys_with_defaults )
+                if success :
+                    submitted_count_direct +=1 
+                    tasks_submitted_since_last_yield +=1 
+                    if tasks_submitted_since_last_yield %10 ==0 :
+                        time .sleep (0.005 )
+                        tasks_submitted_since_last_yield =0 
+                elif self .cancellation_event .is_set ():
+                    break 
+
+            if not self .cancellation_event .is_set ():
+                self .log_signal .emit (f"    All {submitted_count_direct } post processing tasks submitted directly to pool.")
+
+        if self .cancellation_event .is_set ():
+            self .log_signal .emit ("    Cancellation detected after/during task submission loop.")
+
+            if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
+                self .mega_download_thread .cancel ()
+
+
+            self .finished_signal .emit (self .download_counter ,self .skip_counter ,True ,self .all_kept_original_filenames )
+            if self .thread_pool :self .thread_pool .shutdown (wait =False ,cancel_futures =True );self .thread_pool =None 
+
+    def _handle_future_result (self ,future :Future ):
+        self .processed_posts_count +=1 
+        downloaded_files_from_future ,skipped_files_from_future =0 ,0 
+        kept_originals_from_future =[]
+        try :
+            if future .cancelled ():
+                if not self .cancellation_message_logged_this_session :
+                    self .log_signal .emit ("    A post processing task was cancelled.")
+                    self .cancellation_message_logged_this_session =True 
+            elif future .exception ():
+                self .log_signal .emit (f"❌ Post processing worker error: {future .exception ()}")
+            else :
+
+                result_tuple =future .result ()
+                downloaded_files_from_future ,skipped_files_from_future ,kept_originals_from_future ,retryable_failures_from_post ,permanent_failures_from_post ,history_data_from_worker =result_tuple 
+                if history_data_from_worker :
+                    self ._add_to_history_candidates (history_data_from_worker )
+                if permanent_failures_from_post :
+                    self .permanently_failed_files_for_dialog .extend (permanent_failures_from_post )
+                    self._update_error_button_count()                    
+                    self ._add_to_history_candidates (history_data_from_worker )
+            with self .downloaded_files_lock :
+                self .download_counter +=downloaded_files_from_future 
+                self .skip_counter +=skipped_files_from_future 
+
+            if kept_originals_from_future :
+                self .all_kept_original_filenames .extend (kept_originals_from_future )
+
+            self .overall_progress_signal .emit (self .total_posts_to_process ,self .processed_posts_count )
+        except Exception as e :
+            self .log_signal .emit (f"❌ Error in _handle_future_result callback: {e }\n{traceback .format_exc (limit =2 )}")
+            if self .processed_posts_count <self .total_posts_to_process :
+                self .processed_posts_count =self .total_posts_to_process 
+
+        if self .total_posts_to_process >0 and self .processed_posts_count >=self .total_posts_to_process :
+            if all (f .done ()for f in self .active_futures ):
+                QApplication .processEvents ()
+                self .log_signal .emit ("🏁 All submitted post tasks have completed or failed.")
+                self .finished_signal .emit (self .download_counter ,self .skip_counter ,self .cancellation_event .is_set (),self .all_kept_original_filenames )
 
     def _add_to_history_candidates (self ,history_data ):
         """Adds processed post data to the history candidates list."""
@@ -4471,26 +4550,7 @@ class DownloaderApp (QWidget ):
         summary_log ="="*40 
         summary_log +=f"\n🏁 Download {status_message }!\n    Summary: Downloaded Files={total_downloaded }, Skipped Files={total_skipped }\n"
         summary_log +="="*40 
-        self.log_signal.emit (summary_log)
-
-        # Safely shut down the thread pool now that all work is done.
-        if self.thread_pool:
-            self.log_signal.emit("    Shutting down worker thread pool...")
-            self.thread_pool.shutdown(wait=False)
-            self.thread_pool = None
-            self.log_signal.emit("    Thread pool shut down.")
-
-        try:
-            if self.single_pdf_setting and self.session_temp_files and not cancelled_by_user:
-                self._trigger_single_pdf_creation()
-        finally:
-            # This ensures cleanup happens even if PDF creation fails or is cancelled
-            self._cleanup_temp_files() 
-            self.single_pdf_setting = False
-
-        # Reset session state for the next run
-        self.session_text_content = [] 
-        self.single_pdf_setting = False
+        self .log_signal .emit (summary_log )
 
         if kept_original_names_list :
             intro_msg =(
@@ -5154,7 +5214,7 @@ class DownloaderApp (QWidget ):
             QMessageBox .information (self ,"No Known Names","Your 'Known.txt' list is empty. Add some names first.")
             return 
 
-        dialog = KnownNamesFilterDialog(KNOWN_NAMES, self)
+        dialog =KnownNamesFilterDialog (KNOWN_NAMES ,self ,self )
         if dialog .exec_ ()==QDialog .Accepted :
             selected_entries =dialog .get_selected_entries ()
             if selected_entries :
@@ -5215,42 +5275,32 @@ class DownloaderApp (QWidget ):
                                              "Please 'Restore Download' or 'Discard Session' before selecting new creators."))
             return
 
-        # Correctly create the dialog instance
-        dialog = EmptyPopupDialog(self.app_base_dir, self)
-        if dialog.exec_() == QDialog.Accepted:
-            if hasattr(dialog, 'selected_creators_for_queue') and dialog.selected_creators_for_queue:
-                self.favorite_download_queue.clear()
+        dialog =EmptyPopupDialog (self .app_base_dir ,self ,self )
+        if dialog .exec_ ()==QDialog .Accepted :
+            if hasattr (dialog ,'selected_creators_for_queue')and dialog .selected_creators_for_queue :
+                self .favorite_download_queue .clear ()
 
-                for creator_data in dialog.selected_creators_for_queue:
-                    service = creator_data.get('service')
-                    creator_id = creator_data.get('id')
-                    creator_name = creator_data.get('name', 'Unknown Creator')
-                    domain = dialog._get_domain_for_service(service)
+                for creator_data in dialog .selected_creators_for_queue :
+                    service =creator_data .get ('service')
+                    creator_id =creator_data .get ('id')
+                    creator_name =creator_data .get ('name','Unknown Creator')
+                    domain =dialog ._get_domain_for_service (service )
 
-                    if service and creator_id:
-                        url = f"https://{domain}/{service}/user/{creator_id}"
-                        queue_item = {
-                            'url': url,
-                            'name': creator_name,
-                            'name_for_folder': creator_name,
-                            'type': 'creator_popup_selection',
-                            'scope_from_popup': dialog.current_scope_mode
+                    if service and creator_id :
+                        url =f"https://{domain }/{service }/user/{creator_id }"
+                        queue_item ={
+                        'url':url ,
+                        'name':creator_name ,
+                        'name_for_folder':creator_name ,
+                        'type':'creator_popup_selection',
+                        'scope_from_popup':dialog .current_scope_mode 
                         }
-                        self.favorite_download_queue.append(queue_item)
+                        self .favorite_download_queue .append (queue_item )
 
-                if self.favorite_download_queue:
-                    # --- NEW: This block adds the selected creator names to the input field ---
-                    if hasattr(self, 'link_input'):
-                        # 1. Get all the names from the queue
-                        creator_names = [item['name'] for item in self.favorite_download_queue]
-                        # 2. Join them into a single string
-                        display_text = ", ".join(creator_names)
-                        # 3. Set the text of the URL input field
-                        self.link_input.setText(display_text)
-                    
-                    self.log_signal.emit(f"ℹ️ {len(self.favorite_download_queue)} creators added to download queue from popup. Click 'Start Download' to process.")
-                    if hasattr(self, 'link_input'):
-                        self.last_link_input_text_for_queue_sync = self.link_input.text()
+                if self .favorite_download_queue :
+                    self .log_signal .emit (f"ℹ️ {len (self .favorite_download_queue )} creators added to download queue from popup. Click 'Start Download' to process.")
+                    if hasattr (self ,'link_input'):
+                        self .last_link_input_text_for_queue_sync =self .link_input .text ()
 
     def _show_favorite_artists_dialog (self ):
         if self ._is_download_active ()or self .is_processing_favorites_queue :
@@ -5374,32 +5424,6 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit ("ℹ️ Favorite posts selection cancelled.")
 
     def _process_next_favorite_download (self ):
-
-        if self.favorite_download_queue and not self.is_processing_favorites_queue:
-            manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
-            char_filter_is_empty = not self.character_input.text().strip()
-            extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
-
-            if manga_mode_is_checked and char_filter_is_empty and not extract_links_only:
-                msg_box = QMessageBox(self)
-                msg_box.setIcon(QMessageBox.Warning)
-                msg_box.setWindowTitle("Manga Mode Filter Warning")
-                msg_box.setText(
-                    "Manga Mode is enabled, but 'Filter by Character(s)' is empty.\n\n"
-                    "This is a one-time warning for this entire batch of downloads.\n\n"
-                    "Proceeding without a filter may result in generic filenames and folders.\n\n"
-                    "Proceed with the entire batch?"
-                )
-                proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
-                cancel_button = msg_box.addButton("Cancel Entire Batch", QMessageBox.RejectRole)
-                msg_box.exec_()
-                if msg_box.clickedButton() == cancel_button:
-                    self.log_signal.emit("❌ Entire favorite queue cancelled by user at Manga Mode warning.")
-                    self.favorite_download_queue.clear()
-                    self.is_processing_favorites_queue = False
-                    self.set_ui_enabled(True)
-                    return # Stop processing the queue
-
         if self ._is_download_active ():
             self .log_signal .emit ("ℹ️ Waiting for current download to finish before starting next favorite.")
             return 
