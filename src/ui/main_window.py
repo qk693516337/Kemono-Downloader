@@ -2227,15 +2227,17 @@ class DownloaderApp (QWidget ):
 
 
     def _handle_filter_mode_change(self, button, checked):
-        # Add this logic at the very beginning of the method
+        # If a button other than "More" is selected, reset the UI
         if button != self.radio_more and checked:
-            # If a button other than "More" is selected, reset its text and state
             self.radio_more.setText("More")
             self.more_filter_scope = None
+            self.single_pdf_setting = False # Reset the setting
+            # Re-enable the checkboxes
+            if hasattr(self, 'use_multithreading_checkbox'): self.use_multithreading_checkbox.setEnabled(True)
+            if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setEnabled(True)
 
         if not button or not checked:
             return
-
 
         is_only_links =(button ==self .radio_only_links )
         is_only_audio =(hasattr (self ,'radio_only_audio')and self .radio_only_audio is not None and button ==self .radio_only_audio )
@@ -2669,20 +2671,30 @@ class DownloaderApp (QWidget ):
             current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
             current_format = self.text_export_format or 'pdf'
             
-            # Pass the current setting to the dialog
             dialog = MoreOptionsDialog(self, current_scope=current_scope, current_format=current_format, single_pdf_checked=self.single_pdf_setting)
 
             if dialog.exec_() == QDialog.Accepted:
                 self.more_filter_scope = dialog.get_selected_scope()
                 self.text_export_format = dialog.get_selected_format()
-                self.single_pdf_setting = dialog.get_single_pdf_state() # Get the new setting
+                self.single_pdf_setting = dialog.get_single_pdf_state()
 
                 scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
                 
-                # Update button text to show the selected format
                 format_display = f" ({self.text_export_format.upper()})"
                 if self.single_pdf_setting:
                     format_display = " (Single PDF)"
+                    # --- NEW: Disable checkboxes if Single PDF is active ---
+                    if hasattr(self, 'use_multithreading_checkbox'):
+                        self.use_multithreading_checkbox.setChecked(False)
+                        self.use_multithreading_checkbox.setEnabled(False)
+                    if hasattr(self, 'use_subfolders_checkbox'):
+                        self.use_subfolders_checkbox.setChecked(False)
+                        self.use_subfolders_checkbox.setEnabled(False)
+                else:
+                    # --- NEW: Re-enable checkboxes if Single PDF is not active ---
+                    if hasattr(self, 'use_multithreading_checkbox'): self.use_multithreading_checkbox.setEnabled(True)
+                    if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setEnabled(True)
+
 
                 self.radio_more.setText(f"{scope_text}{format_display}")
                 
