@@ -1320,7 +1320,9 @@ class PostProcessorWorker:
                         if FPDF:
                             self.logger(f"   Converting to PDF...")
                             pdf = PDF()
-                            font_path = os.path.join(self.app_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+                            font_path = ""
+                            if self.project_root_dir:
+                                font_path = os.path.join(self.project_root_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
                             try:
                                 if not os.path.exists(font_path): raise RuntimeError(f"Font file not found: {font_path}")
                                 pdf.add_font('DejaVu', '', font_path, uni=True)
