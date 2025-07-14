@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (
     QScrollArea, QListWidgetItem, QSizePolicy, QProgressBar, QAbstractItemView, QFrame,
     QMainWindow, QAction, QGridLayout
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QTimer, QSettings, QStandardPaths, QUrl, QSize, QProcess, QMutex, QMutexLocker
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QTimer, QSettings, QStandardPaths, QUrl, QSize, QProcess, QMutex, QMutexLocker, QCoreApplication
 
 # --- Local Application Imports ---
 from ..services.drive_downloader import download_mega_file as drive_download_mega_file ,download_gdrive_file ,download_dropbox_file 
