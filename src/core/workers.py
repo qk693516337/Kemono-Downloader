@@ -893,6 +893,7 @@ class PostProcessorWorker:
         total_downloaded_this_post =0 
         total_skipped_this_post =0 
         history_data_for_this_post =None 
+        temp_filepath_for_return = None
 
         parsed_api_url =urlparse (self .api_url_input )
         referer_url =f"https://{parsed_api_url .netloc }/"
@@ -1297,10 +1298,12 @@ class PostProcessorWorker:
                     with open(temp_filepath, 'w', encoding='utf-8') as f:
                         json.dump(content_data, f, indent=2)
                     self.logger(f"   Saved temporary text for '{post_title}' for single PDF compilation.")
-                    return 0, 0, [], [], [], None, temp_filepath
+                    self._emit_signal('worker_finished', (0, 0, [], [], [], None, temp_filepath)) # <--- CHANGE THIS
+                    return (0, 0, [], [], [], None, temp_filepath)
                 except Exception as e:
                     self.logger(f"   ❌ Failed to write temporary file for single PDF: {e}")
-                    return 0, 0, [], [], [], None, None
+                    self._emit_signal('worker_finished', (0, 0, [], [], [], [], None))
+                    return (0, 0, [], [], [], [], None)
 
             # --- Logic for Individual File Saving ---
             else:
@@ -1747,12 +1750,8 @@ class PostProcessorWorker:
                         permanent_failures_this_post, history_data_for_this_post,
                         None) # The 7th item is None because we already saved the temp file
 
-        # In Single PDF mode, the 7th item is the temp file path we created.
-        if self.single_pdf_mode and os.path.exists(temp_filepath):
-             result_tuple = (0, 0, [], [], [], None, temp_filepath)
-
         self._emit_signal('worker_finished', result_tuple)
-        return # The method now returns nothing.
+        return result_tuple
 
 class DownloadThread (QThread ):
     progress_signal =pyqtSignal (str )
@@ -1932,11 +1931,13 @@ class DownloadThread (QThread ):
             # Initialize the shared counter to the next number, protected by a thread lock
             self.manga_date_file_counter_ref = [highest_num + 1, threading.Lock()]
             self.logger(f"ℹ️ [Thread] Manga Date Mode: Initialized date-based counter at {self.manga_date_file_counter_ref[0]}.")
+            pass
 
         if self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and not self.extract_links_only and self.manga_global_file_counter_ref is None:
             # Initialize the shared counter at 1, protected by a thread lock
             self.manga_global_file_counter_ref = [1, threading.Lock()]
             self.logger(f"ℹ️ [Thread] Manga Title+GlobalNum Mode: Initialized global counter at {self.manga_global_file_counter_ref[0]}.")
+            pass
 
         worker_signals_obj = PostProcessorSignals()
         try:
@@ -2083,6 +2084,7 @@ class DownloadThread (QThread ):
             
             # Emit the final signal with all collected results
             self.finished_signal.emit(grand_total_downloaded_files, grand_total_skipped_files, self.isInterruptionRequested(), grand_list_of_kept_original_filenames)
+
 
     def receive_add_character_result (self ,result ):
         with QMutexLocker (self .prompt_mutex ):

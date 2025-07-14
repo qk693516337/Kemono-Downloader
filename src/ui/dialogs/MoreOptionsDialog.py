@@ -22,7 +22,7 @@ class MoreOptionsDialog(QDialog):
         layout.addWidget(self.description_label)
         self.radio_button_group = QButtonGroup(self)
         self.radio_content = QRadioButton("Description/Content")
-        self.radio_comments = QRadioButton("Comments (Not Working)")
+        self.radio_comments = QRadioButton("Comments")
         self.radio_button_group.addButton(self.radio_content)
         self.radio_button_group.addButton(self.radio_comments)
         layout.addWidget(self.radio_content)
