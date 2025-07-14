@@ -995,7 +995,6 @@ class DownloaderApp (QWidget ):
             f"Could not automatically restart the application: {e }\n\nPlease restart it manually.")
 
     def init_ui(self):
-        # --- FIX: Import the new FlowLayout class ---
         from .flow_layout import FlowLayout
 
         self.main_splitter = QSplitter(Qt.Horizontal)
@@ -1145,69 +1144,99 @@ class DownloaderApp (QWidget ):
         file_filter_layout.setContentsMargins(0, 10, 0, 0)
         file_filter_layout.addWidget(QLabel("Filter Files:"))
         
-        # --- FIX: Use FlowLayout for responsive radio buttons ---
-        radio_button_layout = FlowLayout()
-        radio_button_layout.setSpacing(15) # Add more horizontal space
+        radio_button_flow_layout = FlowLayout()
+        radio_button_flow_layout.setSpacing(10)
         
         self.radio_group = QButtonGroup(self)
+
+        group1_widget = QWidget()
+        group1_layout = QHBoxLayout(group1_widget)
+        group1_layout.setContentsMargins(0, 0, 0, 0)
+        group1_layout.setSpacing(15)
         self.radio_all = QRadioButton("All")
         self.radio_images = QRadioButton("Images/GIFs")
         self.radio_videos = QRadioButton("Videos")
+        self.radio_group.addButton(self.radio_all)
+        self.radio_group.addButton(self.radio_images)
+        self.radio_group.addButton(self.radio_videos)
+        group1_layout.addWidget(self.radio_all)
+        group1_layout.addWidget(self.radio_images)
+        group1_layout.addWidget(self.radio_videos)
+        radio_button_flow_layout.addWidget(group1_widget)
+
+        group2_widget = QWidget()
+        group2_layout = QHBoxLayout(group2_widget)
+        group2_layout.setContentsMargins(0, 0, 0, 0)
+        group2_layout.setSpacing(15)
         self.radio_only_archives = QRadioButton("📦 Only Archives")
         self.radio_only_audio = QRadioButton("🎧 Only Audio")
         self.radio_only_links = QRadioButton("🔗 Only Links")
-        self.radio_more = QRadioButton("More") 
-        self.favorite_mode_checkbox = QCheckBox("⭐ Favorite Mode")
-        self.radio_all.setChecked(True)
+        self.radio_group.addButton(self.radio_only_archives)
+        self.radio_group.addButton(self.radio_only_audio)
+        self.radio_group.addButton(self.radio_only_links)
+        group2_layout.addWidget(self.radio_only_archives)
+        group2_layout.addWidget(self.radio_only_audio)
+        group2_layout.addWidget(self.radio_only_links)
+        radio_button_flow_layout.addWidget(group2_widget)
 
-        radio_buttons = [
-            self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives,
-            self.radio_only_audio, self.radio_only_links, self.radio_more
-        ]
-        
-        for btn in radio_buttons:
-            self.radio_group.addButton(btn)
-            radio_button_layout.addWidget(btn)
-        
-        radio_button_layout.addWidget(self.favorite_mode_checkbox) # Add checkbox to the flow
-        file_filter_layout.addLayout(radio_button_layout)
-        # --- FIX END ---
-        
+        group3_widget = QWidget()
+        group3_layout = QHBoxLayout(group3_widget)
+        group3_layout.setContentsMargins(0, 0, 0, 0)
+        group3_layout.setSpacing(15)
+        self.radio_more = QRadioButton("More")
+        self.favorite_mode_checkbox = QCheckBox("⭐ Favorite Mode")
+        self.radio_group.addButton(self.radio_more)
+        group3_layout.addWidget(self.radio_more)
+        group3_layout.addWidget(self.favorite_mode_checkbox)
+        radio_button_flow_layout.addWidget(group3_widget)
+
+        self.radio_all.setChecked(True)
+        file_filter_layout.addLayout(radio_button_flow_layout)
         left_layout.addLayout(file_filter_layout)
 
         # --- Checkboxes Group ---
         checkboxes_group_layout = QVBoxLayout()
         checkboxes_group_layout.setSpacing(10)
         
-        # --- FIX: Replace original row1_layout with a FlowLayout ---
         checkboxes_flow_layout = FlowLayout()
-        checkboxes_flow_layout.setSpacing(15)
+        checkboxes_flow_layout.setSpacing(10)
 
+        groupA_widget = QWidget()
+        groupA_layout = QHBoxLayout(groupA_widget)
+        groupA_layout.setContentsMargins(0,0,0,0)
+        groupA_layout.setSpacing(15)
         self.skip_zip_checkbox = QCheckBox("Skip .zip")
         self.skip_zip_checkbox.setChecked(True)
-        checkboxes_flow_layout.addWidget(self.skip_zip_checkbox)
-
         self.skip_rar_checkbox = QCheckBox("Skip .rar")
         self.skip_rar_checkbox.setChecked(True)
-        checkboxes_flow_layout.addWidget(self.skip_rar_checkbox)
+        groupA_layout.addWidget(self.skip_zip_checkbox)
+        groupA_layout.addWidget(self.skip_rar_checkbox)
+        checkboxes_flow_layout.addWidget(groupA_widget)
 
+        groupB_widget = QWidget()
+        groupB_layout = QHBoxLayout(groupB_widget)
+        groupB_layout.setContentsMargins(0,0,0,0)
+        groupB_layout.setSpacing(15)
         self.download_thumbnails_checkbox = QCheckBox("Download Thumbnails Only")
-        checkboxes_flow_layout.addWidget(self.download_thumbnails_checkbox)
-
         self.scan_content_images_checkbox = QCheckBox("Scan Content for Images")
         self.scan_content_images_checkbox.setChecked(self.scan_content_images_setting)
-        checkboxes_flow_layout.addWidget(self.scan_content_images_checkbox)
+        groupB_layout.addWidget(self.download_thumbnails_checkbox)
+        groupB_layout.addWidget(self.scan_content_images_checkbox)
+        checkboxes_flow_layout.addWidget(groupB_widget)
 
+        groupC_widget = QWidget()
+        groupC_layout = QHBoxLayout(groupC_widget)
+        groupC_layout.setContentsMargins(0,0,0,0)
+        groupC_layout.setSpacing(15)
         self.compress_images_checkbox = QCheckBox("Compress to WebP")
         self.compress_images_checkbox.setToolTip("Compress images > 1.5MB to WebP format (requires Pillow).")
-        checkboxes_flow_layout.addWidget(self.compress_images_checkbox)
-
         self.keep_duplicates_checkbox = QCheckBox("Keep Duplicates")
         self.keep_duplicates_checkbox.setToolTip("If checked, downloads all files from a post even if they have the same name.")
-        checkboxes_flow_layout.addWidget(self.keep_duplicates_checkbox)
+        groupC_layout.addWidget(self.compress_images_checkbox)
+        groupC_layout.addWidget(self.keep_duplicates_checkbox)
+        checkboxes_flow_layout.addWidget(groupC_widget)
 
         checkboxes_group_layout.addLayout(checkboxes_flow_layout)
-        # --- FIX END ---
 
         # --- Advanced Settings ---
         advanced_settings_label = QLabel("⚙️ Advanced Settings:")
@@ -1264,33 +1293,47 @@ class DownloaderApp (QWidget ):
         btn_layout = QHBoxLayout(self.standard_action_buttons_widget)
         btn_layout.setContentsMargins(0, 10, 0, 0)
         btn_layout.setSpacing(10)
+        
         self.download_btn = QPushButton("⬇️ Start Download")
         self.download_btn.setStyleSheet("padding: 4px 12px; font-weight: bold;")
         self.download_btn.clicked.connect(self.start_download)
+        self.download_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         self.pause_btn = QPushButton("⏸️ Pause Download")
         self.pause_btn.setEnabled(False)
         self.pause_btn.setStyleSheet("padding: 4px 12px;")
         self.pause_btn.clicked.connect(self._handle_pause_resume_action)
+        self.pause_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         self.cancel_btn = QPushButton("❌ Cancel & Reset UI")
         self.cancel_btn.setEnabled(False)
         self.cancel_btn.setStyleSheet("padding: 4px 12px;")
         self.cancel_btn.clicked.connect(self.cancel_download_button_action)
+        self.cancel_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         self.error_btn = QPushButton("Error")
         self.error_btn.setToolTip("View files skipped due to errors and optionally retry them.")
         self.error_btn.setStyleSheet("padding: 4px 8px;")
         self.error_btn.setEnabled(True)
+        self.error_btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+
         btn_layout.addWidget(self.download_btn)
         btn_layout.addWidget(self.pause_btn)
         btn_layout.addWidget(self.cancel_btn)
         btn_layout.addWidget(self.error_btn)
+        
         self.favorite_action_buttons_widget = QWidget()
         favorite_buttons_layout = QHBoxLayout(self.favorite_action_buttons_widget)
         self.favorite_mode_artists_button = QPushButton("🖼️ Favorite Artists")
         self.favorite_mode_posts_button = QPushButton("📄 Favorite Posts")
         self.favorite_scope_toggle_button = QPushButton()
+        self.favorite_mode_artists_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.favorite_mode_posts_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.favorite_scope_toggle_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         favorite_buttons_layout.addWidget(self.favorite_mode_artists_button)
         favorite_buttons_layout.addWidget(self.favorite_mode_posts_button)
         favorite_buttons_layout.addWidget(self.favorite_scope_toggle_button)
+        
         self.bottom_action_buttons_stack = QStackedWidget()
         self.bottom_action_buttons_stack.addWidget(self.standard_action_buttons_widget)
         self.bottom_action_buttons_stack.addWidget(self.favorite_action_buttons_widget)
@@ -1312,7 +1355,7 @@ class DownloaderApp (QWidget ):
         left_layout.addLayout(known_chars_label_layout)
         self.character_list = QListWidget()
         self.character_list.setSelectionMode(QListWidget.ExtendedSelection)
-        self.character_list.setMaximumHeight(150)
+        self.character_list.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         left_layout.addWidget(self.character_list, 1)
         char_manage_layout = QHBoxLayout()
         char_manage_layout.setSpacing(10)
@@ -1349,6 +1392,7 @@ class DownloaderApp (QWidget ):
         char_manage_layout.addWidget(self.known_names_help_button, 0)
         char_manage_layout.addWidget(self.history_button, 0)
         char_manage_layout.addWidget(self.future_settings_button, 0)
+        char_manage_layout.addStretch()
         left_layout.addLayout(char_manage_layout)
         left_layout.addStretch(0)
 
@@ -1361,7 +1405,7 @@ class DownloaderApp (QWidget ):
         self.link_search_input.setPlaceholderText("Search Links...")
         self.link_search_input.setVisible(False)
         log_title_layout.addWidget(self.link_search_input)
-        self.link_search_button = QPushButton("🔍")
+        self.link_search_button = QPushButton("?")
         self.link_search_button.setVisible(False)
         self.link_search_button.setFixedWidth(30)
         self.link_search_button.setStyleSheet("padding: 4px 4px;")
@@ -1443,8 +1487,7 @@ class DownloaderApp (QWidget ):
         # --- Final Assembly ---
         self.main_splitter.addWidget(left_scroll_area)
         self.main_splitter.addWidget(right_panel_widget)
-        self.main_splitter.setStretchFactor(0, 7)
-        self.main_splitter.setStretchFactor(1, 3)
+        self.main_splitter.setSizes([800, 400])
         top_level_layout = QHBoxLayout(self)
         top_level_layout.setContentsMargins(0, 0, 0, 0)
         top_level_layout.addWidget(self.main_splitter)
