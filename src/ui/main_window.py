@@ -2683,17 +2683,26 @@ class DownloaderApp (QWidget ):
                 format_display = f" ({self.text_export_format.upper()})"
                 if self.single_pdf_setting:
                     format_display = " (Single PDF)"
-                    # --- NEW: Disable checkboxes if Single PDF is active ---
+                    # Store original multithreading state before unchecking
+                    self._original_multithreading_state = self.use_multithreading_checkbox.isChecked() if hasattr(self, 'use_multithreading_checkbox') else False
+
                     if hasattr(self, 'use_multithreading_checkbox'):
-                        self.use_multithreading_checkbox.setChecked(False)
-                        self.use_multithreading_checkbox.setEnabled(False)
+                        self.use_multithreading_checkbox.setChecked(False)  # Explicitly UNCHECK IT
+                        self.use_multithreading_checkbox.setEnabled(False)   # Disable the checkbox
+                        self.thread_count_input.setEnabled(False)           # Disable thread count input
+                        self.thread_count_label.setEnabled(False)           # Disable thread count label
+                        self.log_signal.emit("ℹ️ Multithreading disabled for text-only mode to ensure sequential processing and proper PDF compilation.")
                     if hasattr(self, 'use_subfolders_checkbox'):
                         self.use_subfolders_checkbox.setChecked(False)
                         self.use_subfolders_checkbox.setEnabled(False)
                 else:
-                    # --- NEW: Re-enable checkboxes if Single PDF is not active ---
-                    if hasattr(self, 'use_multithreading_checkbox'): self.use_multithreading_checkbox.setEnabled(True)
-                    if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setEnabled(True)
+                    # Re-enable based on its original state if it wasn't a single PDF request
+                    if hasattr(self, 'use_multithreading_checkbox'):
+                        self.use_multithreading_checkbox.setEnabled(True)
+                        # Call the handler to update its text and thread count input state
+                        self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+                    if hasattr(self, 'use_subfolders_checkbox'):
+                        self.use_subfolders_checkbox.setEnabled(True)
 
 
                 self.radio_more.setText(f"{scope_text}{format_display}")
@@ -2703,6 +2712,33 @@ class DownloaderApp (QWidget ):
             else:
                 self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
                 self.radio_all.setChecked(True)
+                # Restore original multithreading state if the dialog was cancelled and we revert to 'All'
+                if hasattr(self, 'use_multithreading_checkbox'):
+                    self.use_multithreading_checkbox.setEnabled(True)
+                    # Restore previous checked state of multithreading checkbox
+                    if hasattr(self, '_original_multithreading_state'):
+                        self.use_multithreading_checkbox.setChecked(self._original_multithreading_state)
+                        del self._original_multithreading_state # Clean up the stored state
+                    self.thread_count_input.setEnabled(True)
+                    self.thread_count_label.setEnabled(True)
+                    self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+                if hasattr(self, 'use_subfolders_checkbox'):
+                    self.use_subfolders_checkbox.setEnabled(True)
+        # If a button other than "More" is selected, reset the UI or ensure multithreading is re-enabled.
+        elif button != self.radio_more and checked:
+            self.radio_more.setText("More")
+            self.more_filter_scope = None
+            self.single_pdf_setting = False # Reset the setting
+            # Re-enable the checkboxes
+            if hasattr(self, 'use_multithreading_checkbox'): 
+                self.use_multithreading_checkbox.setEnabled(True)
+                # Restore previous checked state if it exists
+                if hasattr(self, '_original_multithreading_state'):
+                    self.use_multithreading_checkbox.setChecked(self._original_multithreading_state)
+                    del self._original_multithreading_state # Clean up
+                self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
+            if hasattr(self, 'use_subfolders_checkbox'): 
+                self.use_subfolders_checkbox.setEnabled(True)
 
     def delete_selected_character (self ):
         global KNOWN_NAMES 
@@ -3792,7 +3828,7 @@ class DownloaderApp (QWidget ):
                 'manga_global_file_counter_ref','manga_date_prefix',
                 'manga_mode_active','unwanted_keywords','manga_filename_style','scan_content_for_images',
                 'allow_multipart_download','use_cookie','cookie_text','app_base_dir','selected_cookie_file','override_output_dir','project_root_dir',
-                'text_only_scope',
+                'text_only_scope', 'text_export_format',
                 'single_pdf_mode'
                 ]
                 args_template ['skip_current_file_flag']=None 

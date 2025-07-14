@@ -1889,27 +1889,57 @@ class DownloadThread (QThread ):
              self .skip_current_file_flag .set ()
         else :self .logger ("ℹ️ Skip file: No download active or skip flag not available for current context.")
 
-    def run (self ):
+    def run(self):
         """
         The main execution method for the single-threaded download process.
         This version is corrected to handle 7 return values from the worker and
         to pass the 'single_pdf_mode' setting correctly.
         """
-        grand_total_downloaded_files =0 
-        grand_total_skipped_files =0 
-        grand_list_of_kept_original_filenames =[]
-        was_process_cancelled =False 
+        grand_total_downloaded_files = 0
+        grand_total_skipped_files = 0
+        grand_list_of_kept_original_filenames = []
+        was_process_cancelled = False
 
         # This block for initializing manga mode counters remains unchanged
-        if self .manga_mode_active and self .manga_filename_style ==STYLE_DATE_BASED and not self .extract_links_only and self .manga_date_file_counter_ref is None :
-            # ... (existing manga counter initialization logic) ...
-            pass
-        if self .manga_mode_active and self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING and not self .extract_links_only and self .manga_global_file_counter_ref is None :
-            # ... (existing manga counter initialization logic) ...
-            pass
+        if self.manga_mode_active and self.manga_filename_style == STYLE_DATE_BASED and not self.extract_links_only and self.manga_date_file_counter_ref is None:
+            # Determine the directory to scan for existing numbered files
+            series_scan_dir = self.output_dir 
+            if self.use_subfolders :
+                if self.filter_character_list_objects_initial and self.filter_character_list_objects_initial [0] and self.filter_character_list_objects_initial[0].get("name"):
+                    series_folder_name = clean_folder_name(self.filter_character_list_objects_initial[0]["name"])
+                    series_scan_dir = os.path.join(series_scan_dir, series_folder_name)
+                elif self.service and self.user_id :
+                    creator_based_folder_name = clean_folder_name(str(self.user_id))
+                    series_scan_dir = os.path.join(series_scan_dir, creator_based_folder_name)
+            
+            highest_num = 0 
+            if os.path.isdir(series_scan_dir):
+                self.logger(f"ℹ️ [Thread] Manga Date Mode: Scanning for existing files in '{series_scan_dir}'...")
+                for dirpath, _, filenames_in_dir in os.walk(series_scan_dir):
+                    for filename_to_check in filenames_in_dir:
+                        # Check for an optional prefix defined by the user
+                        prefix_to_check = clean_filename(self.manga_date_prefix.strip()) if self.manga_date_prefix and self.manga_date_prefix.strip() else ""
+                        name_part_to_match = filename_to_check 
+                        if prefix_to_check and name_part_to_match.startswith(prefix_to_check):
+                            name_part_to_match = name_part_to_match[len(prefix_to_check):].lstrip()
+                        
+                        # Use regex to find the number at the start of the filename
+                        base_name_no_ext = os.path.splitext(name_part_to_match)[0]
+                        match = re.match(r"(\d+)", base_name_no_ext)
+                        if match: 
+                            highest_num = max(highest_num, int(match.group(1)))
+            
+            # Initialize the shared counter to the next number, protected by a thread lock
+            self.manga_date_file_counter_ref = [highest_num + 1, threading.Lock()]
+            self.logger(f"ℹ️ [Thread] Manga Date Mode: Initialized date-based counter at {self.manga_date_file_counter_ref[0]}.")
+
+        if self.manga_mode_active and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and not self.extract_links_only and self.manga_global_file_counter_ref is None:
+            # Initialize the shared counter at 1, protected by a thread lock
+            self.manga_global_file_counter_ref = [1, threading.Lock()]
+            self.logger(f"ℹ️ [Thread] Manga Title+GlobalNum Mode: Initialized global counter at {self.manga_global_file_counter_ref[0]}.")
 
         worker_signals_obj = PostProcessorSignals()
-        try :
+        try:
             # Connect signals
             worker_signals_obj.progress_signal.connect(self.progress_signal)
             worker_signals_obj.file_download_status_signal.connect(self.file_download_status_signal)
