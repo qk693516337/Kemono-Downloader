@@ -10,7 +10,7 @@ from ...i18n.translator import get_translation
 from ..assets import get_app_icon_object
 # Corrected Import: The filename uses PascalCase.
 from .ExportOptionsDialog import ExportOptionsDialog
-
+from ...utils.resolution import get_dark_theme
 
 class ErrorFilesDialog(QDialog):
     """
@@ -132,9 +132,14 @@ class ErrorFilesDialog(QDialog):
 
     def _apply_theme(self):
         """Applies the current theme from the parent application."""
-        if self.parent_app and hasattr(self.parent_app, 'current_theme') and self.parent_app.current_theme == "dark":
-            if hasattr(self.parent_app, 'get_dark_theme'):
-                self.setStyleSheet(self.parent_app.get_dark_theme())
+        if self.parent_app and self.parent_app.current_theme == "dark":
+            # Get the scale factor from the parent app
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            # Call the imported function with the correct scale
+            self.setStyleSheet(get_dark_theme(scale))
+        else:
+            # Explicitly set a blank stylesheet for light mode
+            self.setStyleSheet("")
 
     def _select_all_items(self):
         """Checks all items in the list."""

@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 # --- Local Application Imports ---
 # This assumes the new project structure is in place.
 from ...i18n.translator import get_translation
+from ...utils.resolution import get_dark_theme
 from ..main_window import get_app_icon_object
 from ...config.constants import (
     THEME_KEY, LANGUAGE_KEY, DOWNLOAD_LOCATION_KEY
@@ -113,8 +114,9 @@ class FutureSettingsDialog(QDialog):
 
     def _apply_theme(self):
         """Applies the current theme from the parent application."""
-        if self.parent_app.current_theme == "dark":
-            self.setStyleSheet(self.parent_app.get_dark_theme())
+        if self.parent_app and self.parent_app.current_theme == "dark":
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            self.setStyleSheet(get_dark_theme(scale))
         else:
             self.setStyleSheet("")
 

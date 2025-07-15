@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 from ...i18n.translator import get_translation
 # get_app_icon_object is defined in the main window module in this refactoring plan.
 from ..main_window import get_app_icon_object
-
+from ...utils.resolution import get_dark_theme
 
 class DownloadExtractedLinksDialog(QDialog):
     """
@@ -141,19 +141,25 @@ class DownloadExtractedLinksDialog(QDialog):
         self.deselect_all_button.setText(self._tr("deselect_all_button_text", "Deselect All"))
         self.download_button.setText(self._tr("download_selected_button_text", "Download Selected"))
         self.cancel_button.setText(self._tr("fav_posts_cancel_button", "Cancel"))
-
+    
     def _apply_theme(self):
         """Applies the current theme from the parent application."""
-        is_dark_theme = self.parent() and hasattr(self.parent_app, 'current_theme') and self.parent_app.current_theme == "dark"
+        is_dark_theme = self.parent_app and self.parent_app.current_theme == "dark"
 
-        if is_dark_theme and hasattr(self.parent_app, 'get_dark_theme'):
-            self.setStyleSheet(self.parent_app.get_dark_theme())
-        
+        if is_dark_theme:
+            # Get the scale factor from the parent app
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            # Call the imported function with the correct scale
+            self.setStyleSheet(get_dark_theme(scale))
+        else:
+            # Explicitly set a blank stylesheet for light mode
+            self.setStyleSheet("")
+
         # Set header text color based on theme
         header_color = Qt.cyan if is_dark_theme else Qt.blue
         for i in range(self.links_list_widget.count()):
             item = self.links_list_widget.item(i)
-            # Headers are not checkable
+            # Headers are not checkable (they have no checkable flag)
             if not item.flags() & Qt.ItemIsUserCheckable:
                 item.setForeground(header_color)
 

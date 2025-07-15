@@ -39,6 +39,8 @@ from .assets import get_app_icon_object
 from ..config.constants import *
 from ..utils.file_utils import KNOWN_NAMES, clean_folder_name
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
+from ..utils.resolution import setup_ui
+from ..utils.resolution import get_dark_theme
 from ..i18n.translator import get_translation
 from .dialogs.EmptyPopupDialog import EmptyPopupDialog
 from .dialogs.CookieHelpDialog import CookieHelpDialog
@@ -249,7 +251,7 @@ class DownloaderApp (QWidget ):
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
         self.setWindowTitle("Kemono Downloader v6.0.0")
-        self.init_ui()
+        setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
         self.log_signal.emit("ℹ️ 'Skip Current File' button has been removed.")
@@ -269,6 +271,29 @@ class DownloaderApp (QWidget ):
         self._update_button_states_and_connections()
         self._check_for_interrupted_session()
 
+    def _create_initial_session_file(self, api_url_for_session, override_output_dir_for_session): # ADD override_output_dir_for_session
+        """Creates the initial session file at the start of a new download."""
+        if self.is_restore_pending:
+            return
+
+        self.log_signal.emit("📝 Creating initial session file for this download...")
+        initial_ui_settings = self._get_current_ui_settings_as_dict(
+            api_url_override=api_url_for_session,
+            output_dir_override=override_output_dir_for_session
+        )
+
+        session_data = {
+            "ui_settings": initial_ui_settings,
+            "download_state": {
+                "processed_post_ids": [],
+                "permanently_failed_files": [],
+                "manga_counters": {
+                    "date_based": 1,
+                    "global_numbering": 1
+                }
+            }
+        }
+        self._save_session_file(session_data)
 
     def get_checkbox_map(self):
         """Returns a mapping of checkbox attribute names to their corresponding settings key."""
@@ -617,22 +642,7 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'known_names_help_button'):self .known_names_help_button .setToolTip (self ._tr ("known_names_help_button_tooltip_text","Open the application feature guide."))
         if hasattr (self ,'future_settings_button'):self .future_settings_button .setToolTip (self ._tr ("future_settings_button_tooltip_text","Open application settings..."))
         if hasattr (self ,'link_search_button'):self .link_search_button .setToolTip (self ._tr ("link_search_button_tooltip_text","Filter displayed links"))
-    def apply_theme (self ,theme_name ,initial_load =False ):
-        self .current_theme =theme_name 
-        if not initial_load :
-            self .settings .setValue (THEME_KEY ,theme_name )
-            self .settings .sync ()
-
-        if theme_name =="dark":
-            self .setStyleSheet (self .get_dark_theme ())
-            if not initial_load :
-                self .log_signal .emit ("🎨 Switched to Dark Mode.")
-        else :
-            self .setStyleSheet ("")
-            if not initial_load :
-                self .log_signal .emit ("🎨 Switched to Light Mode.")
-        self .update ()
-
+ 
     def _get_tooltip_for_character_input (self ):
         return (
         self ._tr ("character_input_tooltip","Default tooltip if translation fails.")
@@ -993,469 +1003,6 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit (f"❌ CRITICAL: Failed to start new application instance: {e }")
             QMessageBox .critical (self ,"Restart Failed",
             f"Could not automatically restart the application: {e }\n\nPlease restart it manually.")
-
-    def init_ui(self):
-        self.main_splitter = QSplitter(Qt.Horizontal)
-        
-        # --- Use a scroll area for the left panel for consistency ---
-        left_scroll_area = QScrollArea()
-        left_scroll_area.setWidgetResizable(True)
-        left_scroll_area.setFrameShape(QFrame.NoFrame)
-
-        left_panel_widget = QWidget()
-        left_layout = QVBoxLayout(left_panel_widget)
-        left_scroll_area.setWidget(left_panel_widget)
-
-        right_panel_widget = QWidget()
-        right_layout = QVBoxLayout(right_panel_widget)
-        
-        left_layout.setContentsMargins(10, 10, 10, 10)
-        right_layout.setContentsMargins(10, 10, 10, 10)
-        self.apply_theme(self.current_theme, initial_load=True)
-
-        # --- URL and Page Range ---
-        self.url_input_widget = QWidget()
-        url_input_layout = QHBoxLayout(self.url_input_widget)
-        url_input_layout.setContentsMargins(0, 0, 0, 0)
-        self.url_label_widget = QLabel()
-        url_input_layout.addWidget(self.url_label_widget)
-        self.link_input = QLineEdit()
-        self.link_input.setPlaceholderText("e.g., https://kemono.su/patreon/user/12345 or .../post/98765")
-        self.link_input.textChanged.connect(self.update_custom_folder_visibility) # Connects the custom folder logic
-        url_input_layout.addWidget(self.link_input, 1)
-        self.empty_popup_button = QPushButton("🎨")
-        self.empty_popup_button.setStyleSheet("padding: 4px 6px;")
-        self.empty_popup_button.clicked.connect(self._show_empty_popup)
-        url_input_layout.addWidget(self.empty_popup_button)
-        self.page_range_label = QLabel(self._tr("page_range_label_text", "Page Range:"))
-        self.page_range_label.setStyleSheet("font-weight: bold; padding-left: 10px;")
-        url_input_layout.addWidget(self.page_range_label)
-        self.start_page_input = QLineEdit()
-        self.start_page_input.setPlaceholderText(self._tr("start_page_input_placeholder", "Start"))
-        self.start_page_input.setFixedWidth(50)
-        self.start_page_input.setValidator(QIntValidator(1, 99999))
-        url_input_layout.addWidget(self.start_page_input)
-        self.to_label = QLabel(self._tr("page_range_to_label_text", "to"))
-        url_input_layout.addWidget(self.to_label)
-        self.end_page_input = QLineEdit()
-        self.end_page_input.setPlaceholderText(self._tr("end_page_input_placeholder", "End"))
-        self.end_page_input.setFixedWidth(50)
-        self.end_page_input.setToolTip(self._tr("end_page_input_tooltip", "For creator URLs: Specify the ending page number..."))
-        self.end_page_input.setValidator(QIntValidator(1, 99999))
-        url_input_layout.addWidget(self.end_page_input)
-        self.url_placeholder_widget = QWidget()
-        placeholder_layout = QHBoxLayout(self.url_placeholder_widget)
-        placeholder_layout.setContentsMargins(0, 0, 0, 0)
-        self.fav_mode_active_label = QLabel(self._tr("fav_mode_active_label_text", "⭐ Favorite Mode is active..."))
-        self.fav_mode_active_label.setAlignment(Qt.AlignCenter)
-        placeholder_layout.addWidget(self.fav_mode_active_label)
-        self.url_or_placeholder_stack = QStackedWidget()
-        self.url_or_placeholder_stack.addWidget(self.url_input_widget)
-        self.url_or_placeholder_stack.addWidget(self.url_placeholder_widget)
-        left_layout.addWidget(self.url_or_placeholder_stack)
-
-        # --- Download Location ---
-        self.download_location_label_widget = QLabel()
-        left_layout.addWidget(self.download_location_label_widget)
-        dir_layout = QHBoxLayout()
-        self.dir_input = QLineEdit()
-        self.dir_input.setPlaceholderText("Select folder where downloads will be saved")
-        self.dir_button = QPushButton("Browse...")
-        self.dir_button.setStyleSheet("padding: 4px 10px;")
-        self.dir_button.clicked.connect(self.browse_directory)
-        dir_layout.addWidget(self.dir_input, 1)
-        dir_layout.addWidget(self.dir_button)
-        left_layout.addLayout(dir_layout)
-
-        # --- Filters and Custom Folder Container (from old layout) ---
-        self.filters_and_custom_folder_container_widget = QWidget()
-        filters_and_custom_folder_layout = QHBoxLayout(self.filters_and_custom_folder_container_widget)
-        filters_and_custom_folder_layout.setContentsMargins(0, 5, 0, 0)
-        filters_and_custom_folder_layout.setSpacing(10)
-        self.character_filter_widget = QWidget()
-        character_filter_v_layout = QVBoxLayout(self.character_filter_widget)
-        character_filter_v_layout.setContentsMargins(0, 0, 0, 0)
-        character_filter_v_layout.setSpacing(2)
-        self.character_label = QLabel("🎯 Filter by Character(s) (comma-separated):")
-        character_filter_v_layout.addWidget(self.character_label)
-        char_input_and_button_layout = QHBoxLayout()
-        char_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
-        char_input_and_button_layout.setSpacing(10)
-        self.character_input = QLineEdit()
-        self.character_input.setPlaceholderText("e.g., Tifa, Aerith, (Cloud, Zack)")
-        char_input_and_button_layout.addWidget(self.character_input, 3)
-        self.char_filter_scope_toggle_button = QPushButton()
-        self._update_char_filter_scope_button_text()
-        char_input_and_button_layout.addWidget(self.char_filter_scope_toggle_button, 1)
-        character_filter_v_layout.addLayout(char_input_and_button_layout)
-        
-        # --- Custom Folder Widget Definition ---
-        self.custom_folder_widget = QWidget()
-        custom_folder_v_layout = QVBoxLayout(self.custom_folder_widget)
-        custom_folder_v_layout.setContentsMargins(0, 0, 0, 0)
-        custom_folder_v_layout.setSpacing(2)
-        self.custom_folder_label = QLabel("🗄️ Custom Folder Name (Single Post Only):")
-        self.custom_folder_input = QLineEdit()
-        self.custom_folder_input.setPlaceholderText("Optional: Save this post to specific folder")
-        custom_folder_v_layout.addWidget(self.custom_folder_label)
-        custom_folder_v_layout.addWidget(self.custom_folder_input)
-        self.custom_folder_widget.setVisible(False)
-        
-        filters_and_custom_folder_layout.addWidget(self.character_filter_widget, 1)
-        filters_and_custom_folder_layout.addWidget(self.custom_folder_widget, 1)
-        left_layout.addWidget(self.filters_and_custom_folder_container_widget)
-
-        # --- Word Manipulation Container ---
-        word_manipulation_container_widget = QWidget()
-        word_manipulation_outer_layout = QHBoxLayout(word_manipulation_container_widget)
-        word_manipulation_outer_layout.setContentsMargins(0, 0, 0, 0)
-        word_manipulation_outer_layout.setSpacing(15)
-        skip_words_widget = QWidget()
-        skip_words_vertical_layout = QVBoxLayout(skip_words_widget)
-        skip_words_vertical_layout.setContentsMargins(0, 0, 0, 0)
-        skip_words_vertical_layout.setSpacing(2)
-        self.skip_words_label_widget = QLabel()
-        skip_words_vertical_layout.addWidget(self.skip_words_label_widget)
-        skip_input_and_button_layout = QHBoxLayout()
-        skip_input_and_button_layout.setContentsMargins(0, 0, 0, 0)
-        skip_input_and_button_layout.setSpacing(10)
-        self.skip_words_input = QLineEdit()
-        self.skip_words_input.setPlaceholderText("e.g., WM, WIP, sketch, preview")
-        skip_input_and_button_layout.addWidget(self.skip_words_input, 1)
-        self.skip_scope_toggle_button = QPushButton()
-        self._update_skip_scope_button_text()
-        skip_input_and_button_layout.addWidget(self.skip_scope_toggle_button, 0)
-        skip_words_vertical_layout.addLayout(skip_input_and_button_layout)
-        word_manipulation_outer_layout.addWidget(skip_words_widget, 7)
-        remove_words_widget = QWidget()
-        remove_words_vertical_layout = QVBoxLayout(remove_words_widget)
-        remove_words_vertical_layout.setContentsMargins(0, 0, 0, 0)
-        remove_words_vertical_layout.setSpacing(2)
-        self.remove_from_filename_label_widget = QLabel()
-        remove_words_vertical_layout.addWidget(self.remove_from_filename_label_widget)
-        self.remove_from_filename_input = QLineEdit()
-        self.remove_from_filename_input.setPlaceholderText("e.g., patreon, HD")
-        remove_words_vertical_layout.addWidget(self.remove_from_filename_input)
-        word_manipulation_outer_layout.addWidget(remove_words_widget, 3)
-        left_layout.addWidget(word_manipulation_container_widget)
-
-        # --- File Filter Layout ---
-        file_filter_layout = QVBoxLayout()
-        file_filter_layout.setContentsMargins(0, 10, 0, 0)
-        file_filter_layout.addWidget(QLabel("Filter Files:"))
-        radio_button_layout = QHBoxLayout()
-        radio_button_layout.setSpacing(10)
-        self.radio_group = QButtonGroup(self)
-        self.radio_all = QRadioButton("All")
-        self.radio_images = QRadioButton("Images/GIFs")
-        self.radio_videos = QRadioButton("Videos")
-        self.radio_only_archives = QRadioButton("📦 Only Archives")
-        self.radio_only_audio = QRadioButton("🎧 Only Audio")
-        self.radio_only_links = QRadioButton("🔗 Only Links")
-        self.radio_more = QRadioButton("More") 
-
-        self.radio_all.setChecked(True)
-        for btn in [self.radio_all, self.radio_images, self.radio_videos, self.radio_only_archives, self.radio_only_audio, self.radio_only_links, self.radio_more]:
-            self.radio_group.addButton(btn)
-            radio_button_layout.addWidget(btn)
-        self.favorite_mode_checkbox = QCheckBox()
-        self.favorite_mode_checkbox.setChecked(False)
-        radio_button_layout.addWidget(self.favorite_mode_checkbox)
-        radio_button_layout.addStretch(1)
-        file_filter_layout.addLayout(radio_button_layout)
-        left_layout.addLayout(file_filter_layout)
-
-        # --- Checkboxes Group ---
-        checkboxes_group_layout = QVBoxLayout()
-        checkboxes_group_layout.setSpacing(10)
-        row1_layout = QHBoxLayout()
-        row1_layout.setSpacing(10)
-        self.skip_zip_checkbox = QCheckBox("Skip .zip")
-        self.skip_zip_checkbox.setChecked(True)
-        row1_layout.addWidget(self.skip_zip_checkbox)
-        self.skip_rar_checkbox = QCheckBox("Skip .rar")
-        self.skip_rar_checkbox.setChecked(True)
-        row1_layout.addWidget(self.skip_rar_checkbox)
-        self.download_thumbnails_checkbox = QCheckBox("Download Thumbnails Only")
-        row1_layout.addWidget(self.download_thumbnails_checkbox)
-        self.scan_content_images_checkbox = QCheckBox("Scan Content for Images")
-        self.scan_content_images_checkbox.setChecked(self.scan_content_images_setting)
-        row1_layout.addWidget(self.scan_content_images_checkbox)
-        self.compress_images_checkbox = QCheckBox("Compress to WebP")
-        self.compress_images_checkbox.setToolTip("Compress images > 1.5MB to WebP format (requires Pillow).")
-        row1_layout.addWidget(self.compress_images_checkbox)
-        self.keep_duplicates_checkbox = QCheckBox("Keep Duplicates")
-        self.keep_duplicates_checkbox.setToolTip("If checked, downloads all files from a post even if they have the same name.")
-        row1_layout.addWidget(self.keep_duplicates_checkbox)
-        row1_layout.addStretch(1)
-        checkboxes_group_layout.addLayout(row1_layout)
-
-        # --- Advanced Settings ---
-        advanced_settings_label = QLabel("⚙️ Advanced Settings:")
-        checkboxes_group_layout.addWidget(advanced_settings_label)
-        advanced_row1_layout = QHBoxLayout()
-        advanced_row1_layout.setSpacing(10)
-        self.use_subfolders_checkbox = QCheckBox("Separate Folders by Name/Title")
-        self.use_subfolders_checkbox.setChecked(True)
-        self.use_subfolders_checkbox.toggled.connect(self.update_ui_for_subfolders)
-        advanced_row1_layout.addWidget(self.use_subfolders_checkbox)
-        self.use_subfolder_per_post_checkbox = QCheckBox("Subfolder per Post")
-        self.use_subfolder_per_post_checkbox.toggled.connect(self.update_ui_for_subfolders)
-        advanced_row1_layout.addWidget(self.use_subfolder_per_post_checkbox)
-        self.date_prefix_checkbox = QCheckBox("Date Prefix")
-        self.date_prefix_checkbox.setToolTip("When 'Subfolder per Post' is active, prefix the folder name with the post's upload date.")
-        advanced_row1_layout.addWidget(self.date_prefix_checkbox)
-        self.use_cookie_checkbox = QCheckBox("Use Cookie")
-        self.use_cookie_checkbox.setChecked(self.use_cookie_setting)
-        self.cookie_text_input = QLineEdit()
-        self.cookie_text_input.setPlaceholderText("if no Select cookies.txt)")
-        self.cookie_text_input.setText(self.cookie_text_setting)
-        advanced_row1_layout.addWidget(self.use_cookie_checkbox)
-        advanced_row1_layout.addWidget(self.cookie_text_input, 2)
-        self.cookie_browse_button = QPushButton("Browse...")
-        self.cookie_browse_button.setFixedWidth(80)
-        self.cookie_browse_button.setStyleSheet("padding: 4px 8px;")
-        advanced_row1_layout.addWidget(self.cookie_browse_button)
-        advanced_row1_layout.addStretch(1)
-        checkboxes_group_layout.addLayout(advanced_row1_layout)
-        advanced_row2_layout = QHBoxLayout()
-        advanced_row2_layout.setSpacing(10)
-        multithreading_layout = QHBoxLayout()
-        multithreading_layout.setContentsMargins(0, 0, 0, 0)
-        self.use_multithreading_checkbox = QCheckBox("Use Multithreading")
-        self.use_multithreading_checkbox.setChecked(True)
-        multithreading_layout.addWidget(self.use_multithreading_checkbox)
-        self.thread_count_label = QLabel("Threads:")
-        multithreading_layout.addWidget(self.thread_count_label)
-        self.thread_count_input = QLineEdit("4")
-        self.thread_count_input.setFixedWidth(40)
-        self.thread_count_input.setValidator(QIntValidator(1, MAX_THREADS))
-        multithreading_layout.addWidget(self.thread_count_input)
-        advanced_row2_layout.addLayout(multithreading_layout)
-        self.external_links_checkbox = QCheckBox("Show External Links in Log")
-        advanced_row2_layout.addWidget(self.external_links_checkbox)
-        self.manga_mode_checkbox = QCheckBox("Manga/Comic Mode")
-        advanced_row2_layout.addWidget(self.manga_mode_checkbox)
-        advanced_row2_layout.addStretch(1)
-        checkboxes_group_layout.addLayout(advanced_row2_layout)
-        left_layout.addLayout(checkboxes_group_layout)
-
-        # --- Action Buttons ---
-        self.standard_action_buttons_widget = QWidget()
-        btn_layout = QHBoxLayout(self.standard_action_buttons_widget)
-        btn_layout.setContentsMargins(0, 10, 0, 0)
-        btn_layout.setSpacing(10)
-        self.download_btn = QPushButton("⬇️ Start Download")
-        self.download_btn.setStyleSheet("padding: 4px 12px; font-weight: bold;")
-        self.download_btn.clicked.connect(self.start_download)
-        self.pause_btn = QPushButton("⏸️ Pause Download")
-        self.pause_btn.setEnabled(False)
-        self.pause_btn.setStyleSheet("padding: 4px 12px;")
-        self.pause_btn.clicked.connect(self._handle_pause_resume_action)
-        self.cancel_btn = QPushButton("❌ Cancel & Reset UI")
-        self.cancel_btn.setEnabled(False)
-        self.cancel_btn.setStyleSheet("padding: 4px 12px;")
-        self.cancel_btn.clicked.connect(self.cancel_download_button_action)
-        self.error_btn = QPushButton("Error")
-        self.error_btn.setToolTip("View files skipped due to errors and optionally retry them.")
-        self.error_btn.setStyleSheet("padding: 4px 8px;")
-        self.error_btn.setEnabled(True)
-        btn_layout.addWidget(self.download_btn)
-        btn_layout.addWidget(self.pause_btn)
-        btn_layout.addWidget(self.cancel_btn)
-        btn_layout.addWidget(self.error_btn)
-        self.favorite_action_buttons_widget = QWidget()
-        favorite_buttons_layout = QHBoxLayout(self.favorite_action_buttons_widget)
-        self.favorite_mode_artists_button = QPushButton("🖼️ Favorite Artists")
-        self.favorite_mode_posts_button = QPushButton("📄 Favorite Posts")
-        self.favorite_scope_toggle_button = QPushButton()
-        favorite_buttons_layout.addWidget(self.favorite_mode_artists_button)
-        favorite_buttons_layout.addWidget(self.favorite_mode_posts_button)
-        favorite_buttons_layout.addWidget(self.favorite_scope_toggle_button)
-        self.bottom_action_buttons_stack = QStackedWidget()
-        self.bottom_action_buttons_stack.addWidget(self.standard_action_buttons_widget)
-        self.bottom_action_buttons_stack.addWidget(self.favorite_action_buttons_widget)
-        left_layout.addWidget(self.bottom_action_buttons_stack)
-        left_layout.addSpacing(10)
-
-        # --- Known Names Layout ---
-        known_chars_label_layout = QHBoxLayout()
-        known_chars_label_layout.setSpacing(10)
-        self.known_chars_label = QLabel("🎭 Known Shows/Characters (for Folder Names):")
-        known_chars_label_layout.addWidget(self.known_chars_label)
-        self.open_known_txt_button = QPushButton("Open Known.txt")
-        self.open_known_txt_button.setStyleSheet("padding: 4px 8px;")
-        self.open_known_txt_button.setFixedWidth(120)
-        known_chars_label_layout.addWidget(self.open_known_txt_button)
-        self.character_search_input = QLineEdit()
-        self.character_search_input.setPlaceholderText("Search characters...")
-        known_chars_label_layout.addWidget(self.character_search_input, 1)
-        left_layout.addLayout(known_chars_label_layout)
-        self.character_list = QListWidget()
-        self.character_list.setSelectionMode(QListWidget.ExtendedSelection)
-        self.character_list.setMaximumHeight(150) # Set smaller height
-        left_layout.addWidget(self.character_list, 1)
-        char_manage_layout = QHBoxLayout()
-        char_manage_layout.setSpacing(10)
-        self.new_char_input = QLineEdit()
-        self.new_char_input.setPlaceholderText("Add new show/character name")
-        self.new_char_input.setStyleSheet("padding: 3px 5px;")
-        self.add_char_button = QPushButton("➕ Add")
-        self.add_char_button.setStyleSheet("padding: 4px 10px;")
-        self.add_to_filter_button = QPushButton("⤵️ Add to Filter")
-        self.add_to_filter_button.setToolTip("Select names... to add to the 'Filter by Character(s)' field.")
-        self.add_to_filter_button.setStyleSheet("padding: 4px 10px;")
-        self.delete_char_button = QPushButton("🗑️ Delete Selected")
-        self.delete_char_button.setToolTip("Delete the selected name(s)...")
-        self.delete_char_button.setStyleSheet("padding: 4px 10px;")
-        self.add_char_button.clicked.connect(self._handle_ui_add_new_character)
-        self.new_char_input.returnPressed.connect(self.add_char_button.click)
-        self.delete_char_button.clicked.connect(self.delete_selected_character)
-        char_manage_layout.addWidget(self.new_char_input, 2)
-        char_manage_layout.addWidget(self.add_char_button, 0)
-        self.known_names_help_button = QPushButton("?")
-        self.known_names_help_button.setFixedWidth(35)
-        self.known_names_help_button.setStyleSheet("padding: 4px 6px;")
-        self.known_names_help_button.clicked.connect(self._show_feature_guide)
-        self.history_button = QPushButton("📜")
-        self.history_button.setFixedWidth(35)
-        self.history_button.setStyleSheet("padding: 4px 6px;")
-        self.history_button.setToolTip(self._tr("history_button_tooltip_text", "View download history"))
-        self.future_settings_button = QPushButton("⚙️")
-        self.future_settings_button.setFixedWidth(35)
-        self.future_settings_button.setStyleSheet("padding: 4px 6px;")
-        self.future_settings_button.clicked.connect(self._show_future_settings_dialog)
-        char_manage_layout.addWidget(self.add_to_filter_button, 1)
-        char_manage_layout.addWidget(self.delete_char_button, 1)
-        char_manage_layout.addWidget(self.known_names_help_button, 0)
-        char_manage_layout.addWidget(self.history_button, 0)
-        char_manage_layout.addWidget(self.future_settings_button, 0)
-        left_layout.addLayout(char_manage_layout)
-        left_layout.addStretch(0)
-
-        # --- Right Panel (Logs) ---
-        # (This part of the layout is unchanged and remains correct)
-        log_title_layout = QHBoxLayout()
-        self.progress_log_label = QLabel("📜 Progress Log:")
-        log_title_layout.addWidget(self.progress_log_label)
-        log_title_layout.addStretch(1)
-        self.link_search_input = QLineEdit()
-        self.link_search_input.setPlaceholderText("Search Links...")
-        self.link_search_input.setVisible(False)
-        log_title_layout.addWidget(self.link_search_input)
-        self.link_search_button = QPushButton("🔍")
-        self.link_search_button.setVisible(False)
-        self.link_search_button.setFixedWidth(30)
-        self.link_search_button.setStyleSheet("padding: 4px 4px;")
-        log_title_layout.addWidget(self.link_search_button)
-        self.manga_rename_toggle_button = QPushButton()
-        self.manga_rename_toggle_button.setVisible(False)
-        self.manga_rename_toggle_button.setFixedWidth(140)
-        self.manga_rename_toggle_button.setStyleSheet("padding: 4px 8px;")
-        self._update_manga_filename_style_button_text()
-        log_title_layout.addWidget(self.manga_rename_toggle_button)
-        self.manga_date_prefix_input = QLineEdit()
-        self.manga_date_prefix_input.setPlaceholderText("Prefix for Manga Filenames")
-        self.manga_date_prefix_input.setVisible(False)
-        log_title_layout.addWidget(self.manga_date_prefix_input)
-        self.multipart_toggle_button = QPushButton()
-        self.multipart_toggle_button.setToolTip("Toggle between Multi-part and Single-stream downloads for large files.")
-        self.multipart_toggle_button.setFixedWidth(130)
-        self.multipart_toggle_button.setStyleSheet("padding: 4px 8px;")
-        self._update_multipart_toggle_button_text()
-        log_title_layout.addWidget(self.multipart_toggle_button)
-        self.EYE_ICON = "\U0001F441"
-        self.CLOSED_EYE_ICON = "\U0001F648"
-        self.log_verbosity_toggle_button = QPushButton(self.EYE_ICON)
-        self.log_verbosity_toggle_button.setFixedWidth(45)
-        self.log_verbosity_toggle_button.setStyleSheet("font-size: 11pt; padding: 4px 2px;")
-        log_title_layout.addWidget(self.log_verbosity_toggle_button)
-        self.reset_button = QPushButton("🔄 Reset")
-        self.reset_button.setFixedWidth(80)
-        self.reset_button.setStyleSheet("padding: 4px 8px;")
-        log_title_layout.addWidget(self.reset_button)
-        right_layout.addLayout(log_title_layout)
-        self.log_splitter = QSplitter(Qt.Vertical)
-        self.log_view_stack = QStackedWidget()
-        self.main_log_output = QTextEdit()
-        self.main_log_output.setReadOnly(True)
-        self.main_log_output.setLineWrapMode(QTextEdit.NoWrap)
-        self.log_view_stack.addWidget(self.main_log_output)
-        self.missed_character_log_output = QTextEdit()
-        self.missed_character_log_output.setReadOnly(True)
-        self.missed_character_log_output.setLineWrapMode(QTextEdit.NoWrap)
-        self.log_view_stack.addWidget(self.missed_character_log_output)
-        self.external_log_output = QTextEdit()
-        self.external_log_output.setReadOnly(True)
-        self.external_log_output.setLineWrapMode(QTextEdit.NoWrap)
-        self.external_log_output.hide()
-        self.log_splitter.addWidget(self.log_view_stack)
-        self.log_splitter.addWidget(self.external_log_output)
-        self.log_splitter.setSizes([self.height(), 0])
-        right_layout.addWidget(self.log_splitter, 1)
-        export_button_layout = QHBoxLayout()
-        export_button_layout.addStretch(1)
-        self.export_links_button = QPushButton(self._tr("export_links_button_text", "Export Links"))
-        self.export_links_button.setFixedWidth(100)
-        self.export_links_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
-        self.export_links_button.setEnabled(False)
-        self.export_links_button.setVisible(False)
-        export_button_layout.addWidget(self.export_links_button)
-        self.download_extracted_links_button = QPushButton(self._tr("download_extracted_links_button_text", "Download"))
-        self.download_extracted_links_button.setFixedWidth(100)
-        self.download_extracted_links_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
-        self.download_extracted_links_button.setEnabled(False)
-        self.download_extracted_links_button.setVisible(False)
-        export_button_layout.addWidget(self.download_extracted_links_button)
-        self.log_display_mode_toggle_button = QPushButton()
-        self.log_display_mode_toggle_button.setFixedWidth(120)
-        self.log_display_mode_toggle_button.setStyleSheet("padding: 4px 8px; margin-top: 5px;")
-        self.log_display_mode_toggle_button.setVisible(False)
-        export_button_layout.addWidget(self.log_display_mode_toggle_button)
-        right_layout.addLayout(export_button_layout)
-        self.progress_label = QLabel("Progress: Idle")
-        self.progress_label.setStyleSheet("padding-top: 5px; font-style: italic;")
-        right_layout.addWidget(self.progress_label)
-        self.file_progress_label = QLabel("")
-        self.file_progress_label.setToolTip("Shows the progress of individual file downloads, including speed and size.")
-        self.file_progress_label.setWordWrap(True)
-        self.file_progress_label.setStyleSheet("padding-top: 2px; font-style: italic; color: #A0A0A0;")
-        right_layout.addWidget(self.file_progress_label)
-
-        # --- Final Assembly ---
-        self.main_splitter.addWidget(left_scroll_area) # Use the scroll area
-        self.main_splitter.addWidget(right_panel_widget)
-        self.main_splitter.setStretchFactor(0, 7)
-        self.main_splitter.setStretchFactor(1, 3)
-        top_level_layout = QHBoxLayout(self)
-        top_level_layout.setContentsMargins(0, 0, 0, 0)
-        top_level_layout.addWidget(self.main_splitter)
-
-        # --- Initial UI State Updates ---
-        self.update_ui_for_subfolders(self.use_subfolders_checkbox.isChecked())
-        self.update_external_links_setting(self.external_links_checkbox.isChecked())
-        self.update_multithreading_label(self.thread_count_input.text())
-        self.update_page_range_enabled_state()
-        if self.manga_mode_checkbox:
-            self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked())
-        if hasattr(self, 'link_input'):
-            self.link_input.textChanged.connect(lambda: self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False))
-        self._load_creator_name_cache_from_json()
-        self.load_known_names_from_util()
-        self._update_cookie_input_visibility(self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False)
-        self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
-        if hasattr(self, 'radio_group') and self.radio_group.checkedButton():
-            self._handle_filter_mode_change(self.radio_group.checkedButton(), True)
-            self.radio_group.buttonToggled.connect(self._handle_more_options_toggled) # Add this line
-            
-        self._update_manga_filename_style_button_text()
-        self._update_skip_scope_button_text()
-        self._update_char_filter_scope_button_text()
-        self._update_multithreading_for_date_mode()
-        if hasattr(self, 'download_thumbnails_checkbox'):
-            self._handle_thumbnail_mode_change(self.download_thumbnails_checkbox.isChecked())
-        if hasattr(self, 'favorite_mode_checkbox'):
-            self._handle_favorite_mode_toggle(False)
 
     def _load_persistent_history (self ):
         """Loads download history from a persistent file."""
@@ -1864,33 +1411,6 @@ class DownloaderApp (QWidget ):
             self ._update_cookie_input_placeholders_and_tooltips ()
             self .log_signal .emit ("ℹ️ Browsed cookie file path cleared from input. Switched to manual cookie string mode.")
 
-
-    def get_dark_theme (self ):
-        return """
-        QWidget { background-color: #2E2E2E; color: #E0E0E0; font-family: Segoe UI, Arial, sans-serif; font-size: 10pt; }
-        QLineEdit, QListWidget { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px; color: #F0F0F0; border-radius: 4px; }
-        QTextEdit { background-color: #3C3F41; border: 1px solid #5A5A5A; padding: 5px;
-                          color: #F0F0F0; border-radius: 4px; 
-                          font-family: Consolas, Courier New, monospace; font-size: 9.5pt; }
-        /* --- FIX: Adjusted padding to match QLineEdit and removed min-height --- */
-        QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 5px 12px; border-radius: 4px; }
-        QPushButton:hover { background-color: #656565; border: 1px solid #7A7A7A; }
-        QPushButton:pressed { background-color: #4A4A4A; }
-        QPushButton:disabled { background-color: #404040; color: #888; border-color: #555; }
-        QLabel { font-weight: bold; padding-top: 4px; padding-bottom: 2px; color: #C0C0C0; }
-        QRadioButton, QCheckBox { spacing: 5px; color: #E0E0E0; padding-top: 4px; padding-bottom: 4px; }
-        QRadioButton::indicator, QCheckBox::indicator { width: 14px; height: 14px; }
-        QListWidget { alternate-background-color: #353535; border: 1px solid #5A5A5A; }
-        QListWidget::item:selected { background-color: #007ACC; color: #FFFFFF; }
-        QToolTip { background-color: #4A4A4A; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 4px; border-radius: 3px; }
-        QSplitter::handle { background-color: #5A5A5A; }
-        QSplitter::handle:horizontal { width: 5px; }
-        QSplitter::handle:vertical { height: 5px; }
-        QFrame[frameShape="4"], QFrame[frameShape="5"] { 
-            border: 1px solid #4A4A4A; 
-            border-radius: 3px;
-        }
-        """
 
     def browse_directory (self ):
         initial_dir_text =self .dir_input .text ()
@@ -2871,9 +2391,6 @@ class DownloaderApp (QWidget ):
 
             self .manga_rename_toggle_button .setToolTip ("Click to cycle Manga Filename Style (when Manga Mode is active for a creator feed).")
 
-
-# In main_window.py
-
     def _toggle_manga_filename_style (self ):
         current_style =self .manga_filename_style 
         new_style =""
@@ -3077,761 +2594,613 @@ class DownloaderApp (QWidget ):
         if total_posts >0 or processed_posts >0 :
             self .file_progress_label .setText ("")
 
+    def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False):
+        global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
 
-    def start_download (self ,direct_api_url =None ,override_output_dir =None, is_restore=False ):
-        global KNOWN_NAMES ,BackendDownloadThread ,PostProcessorWorker ,extract_post_info ,clean_folder_name ,MAX_FILE_THREADS_PER_POST_OR_WORKER 
+        self._clear_stale_temp_files()
+        self.session_temp_files = []
 
-        self._clear_stale_temp_files() 
-        self.session_temp_files = []  
+        processed_post_ids_for_restore = []
+        manga_counters_for_restore = None
 
-        if self ._is_download_active ():
+        if is_restore and self.interrupted_session_data:
+            self.log_signal.emit("   Restoring session state...")
+            download_state = self.interrupted_session_data.get("download_state", {})
+            processed_post_ids_for_restore = download_state.get("processed_post_ids", [])
+            manga_counters_for_restore = download_state.get("manga_counters")
+            if processed_post_ids_for_restore:
+                self.log_signal.emit(f"   Will skip {len(processed_post_ids_for_restore)} already processed posts.")
+            if manga_counters_for_restore:
+                self.log_signal.emit(f"   Restoring manga counters: {manga_counters_for_restore}")
+
+        if self._is_download_active():
             QMessageBox.warning(self, "Busy", "A download is already in progress.")
-            return False 
+            return False
 
-
-
-        if not direct_api_url and self .favorite_download_queue and not self .is_processing_favorites_queue :
-            self .log_signal .emit (f"ℹ️ Detected {len (self .favorite_download_queue )} item(s) in the queue. Starting processing...")
-            self .cancellation_message_logged_this_session =False 
-            self ._process_next_favorite_download ()
-            return True 
+        if not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
+            self.log_signal.emit(f"ℹ️ Detected {len(self.favorite_download_queue)} item(s) in the queue. Starting processing...")
+            self.cancellation_message_logged_this_session = False
+            self._process_next_favorite_download()
+            return True
 
         if not is_restore and self.interrupted_session_data:
             self.log_signal.emit("ℹ️ New download started. Discarding previous interrupted session.")
             self._clear_session_file()
             self.interrupted_session_data = None
             self.is_restore_pending = False
-        api_url =direct_api_url if direct_api_url else self .link_input .text ().strip ()
-        self .download_history_candidates .clear ()
-        self._update_button_states_and_connections() # Ensure buttons are updated to active state
+        
+        api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
+        
+        main_ui_download_dir = self.dir_input.text().strip()
+        extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
+        effective_output_dir_for_run = ""
 
+        if override_output_dir:
+            if not main_ui_download_dir:
+                QMessageBox.critical(self, "Configuration Error",
+                                     "The main 'Download Location' must be set in the UI "
+                                     "before downloading favorites with 'Artist Folders' scope.")
+                if self.is_processing_favorites_queue:
+                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory not set.")
+                return False
 
-        if self .favorite_mode_checkbox and self .favorite_mode_checkbox .isChecked ()and not direct_api_url and not api_url :
-            QMessageBox .information (self ,"Favorite Mode Active",
-            "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
-            self .set_ui_enabled (True )
-            return False 
+            if not os.path.isdir(main_ui_download_dir):
+                QMessageBox.critical(self, "Directory Error",
+                                     f"The main 'Download Location' ('{main_ui_download_dir}') "
+                                     "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
+                if self.is_processing_favorites_queue:
+                    self.log_signal.emit(f"❌ Favorite download for '{api_url}' skipped: Main download directory invalid.")
+                return False
+            effective_output_dir_for_run = os.path.normpath(override_output_dir)
+        else:
+            if not extract_links_only and not main_ui_download_dir:
+                QMessageBox.critical(self, "Input Error", "Download Directory is required when not in 'Only Links' mode.")
+                return False
 
-        main_ui_download_dir =self .dir_input .text ().strip ()
+            if not extract_links_only and main_ui_download_dir and not os.path.isdir(main_ui_download_dir):
+                reply = QMessageBox.question(self, "Create Directory?",
+                                             f"The directory '{main_ui_download_dir}' does not exist.\nCreate it now?",
+                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if reply == QMessageBox.Yes:
+                    try:
+                        os.makedirs(main_ui_download_dir, exist_ok=True)
+                        self.log_signal.emit(f"ℹ️ Created directory: {main_ui_download_dir}")
+                    except Exception as e:
+                        QMessageBox.critical(self, "Directory Error", f"Could not create directory: {e}")
+                        return False
+                else:
+                    self.log_signal.emit("❌ Download cancelled: Output directory does not exist and was not created.")
+                    return False
+            effective_output_dir_for_run = os.path.normpath(main_ui_download_dir)
 
-        if not api_url and not self .favorite_download_queue :
-            QMessageBox .critical (self ,"Input Error","URL is required.")
-            return False 
-        elif not api_url and self .favorite_download_queue :
-            self .log_signal .emit ("ℹ️ URL input is empty, but queue has items. Processing queue...")
-            self .cancellation_message_logged_this_session =False 
-            self ._process_next_favorite_download ()
-            return True 
+        if not is_restore:
+            self._create_initial_session_file(api_url, effective_output_dir_for_run)
 
-        self .cancellation_message_logged_this_session =False 
-        use_subfolders =self .use_subfolders_checkbox .isChecked ()
-        use_post_subfolders =self .use_subfolder_per_post_checkbox .isChecked ()
-        compress_images =self .compress_images_checkbox .isChecked ()
-        download_thumbnails =self .download_thumbnails_checkbox .isChecked ()
+        self.download_history_candidates.clear()
+        self._update_button_states_and_connections()
 
-        use_multithreading_enabled_by_checkbox =self .use_multithreading_checkbox .isChecked ()
-        try :
-            num_threads_from_gui =int (self .thread_count_input .text ().strip ())
-            if num_threads_from_gui <1 :num_threads_from_gui =1 
-        except ValueError :
-            QMessageBox .critical (self ,"Thread Count Error","Invalid number of threads. Please enter a positive number.")
-            return False 
+        if self.favorite_mode_checkbox and self.favorite_mode_checkbox.isChecked() and not direct_api_url and not api_url:
+            QMessageBox.information(self, "Favorite Mode Active",
+                                    "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
+            self.set_ui_enabled(True)
+            return False
 
-        if use_multithreading_enabled_by_checkbox :
-            if num_threads_from_gui >MAX_THREADS :
-                hard_warning_msg =(
-                f"You've entered a thread count ({num_threads_from_gui }) exceeding the maximum of {MAX_THREADS }.\n\n"
-                "Using an extremely high number of threads can lead to:\n"
-                "  - Diminishing returns (no significant speed increase).\n"
-                "  - Increased system instability or application crashes.\n"
-                "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
-                f"The thread count has been automatically capped to {MAX_THREADS } for stability."
+        if not api_url and not self.favorite_download_queue:
+            QMessageBox.critical(self, "Input Error", "URL is required.")
+            return False
+        elif not api_url and self.favorite_download_queue:
+            self.log_signal.emit("ℹ️ URL input is empty, but queue has items. Processing queue...")
+            self.cancellation_message_logged_this_session = False
+            self._process_next_favorite_download()
+            return True
+
+        self.cancellation_message_logged_this_session = False
+        use_subfolders = self.use_subfolders_checkbox.isChecked()
+        use_post_subfolders = self.use_subfolder_per_post_checkbox.isChecked()
+        compress_images = self.compress_images_checkbox.isChecked()
+        download_thumbnails = self.download_thumbnails_checkbox.isChecked()
+
+        use_multithreading_enabled_by_checkbox = self.use_multithreading_checkbox.isChecked()
+        try:
+            num_threads_from_gui = int(self.thread_count_input.text().strip())
+            if num_threads_from_gui < 1: num_threads_from_gui = 1
+        except ValueError:
+            QMessageBox.critical(self, "Thread Count Error", "Invalid number of threads. Please enter a positive number.")
+            return False
+
+        if use_multithreading_enabled_by_checkbox:
+            if num_threads_from_gui > MAX_THREADS:
+                hard_warning_msg = (
+                    f"You've entered a thread count ({num_threads_from_gui}) exceeding the maximum of {MAX_THREADS}.\n\n"
+                    "Using an extremely high number of threads can lead to:\n"
+                    "  - Diminishing returns (no significant speed increase).\n"
+                    "  - Increased system instability or application crashes.\n"
+                    "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
+                    f"The thread count has been automatically capped to {MAX_THREADS} for stability."
                 )
-                QMessageBox .warning (self ,"High Thread Count Warning",hard_warning_msg )
-                num_threads_from_gui =MAX_THREADS 
-                self .thread_count_input .setText (str (MAX_THREADS ))
-                self .log_signal .emit (f"⚠️ User attempted {num_threads_from_gui } threads, capped to {MAX_THREADS }.")
-            if SOFT_WARNING_THREAD_THRESHOLD <num_threads_from_gui <=MAX_THREADS :
-                soft_warning_msg_box =QMessageBox (self )
-                soft_warning_msg_box .setIcon (QMessageBox .Question )
-                soft_warning_msg_box .setWindowTitle ("Thread Count Advisory")
-                soft_warning_msg_box .setText (
-                f"You've set the thread count to {num_threads_from_gui }.\n\n"
-                "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
-                "  - Increased errors or failed file downloads.\n"
-                "  - Connection issues with the server.\n"
-                "  - Higher system resource usage.\n\n"
-                "For most users and connections, 10-30 threads provide a good balance.\n\n"
-                f"Do you want to proceed with {num_threads_from_gui } threads, or would you like to change the value?"
+                QMessageBox.warning(self, "High Thread Count Warning", hard_warning_msg)
+                num_threads_from_gui = MAX_THREADS
+                self.thread_count_input.setText(str(MAX_THREADS))
+                self.log_signal.emit(f"⚠️ User attempted {num_threads_from_gui} threads, capped to {MAX_THREADS}.")
+            if SOFT_WARNING_THREAD_THRESHOLD < num_threads_from_gui <= MAX_THREADS:
+                soft_warning_msg_box = QMessageBox(self)
+                soft_warning_msg_box.setIcon(QMessageBox.Question)
+                soft_warning_msg_box.setWindowTitle("Thread Count Advisory")
+                soft_warning_msg_box.setText(
+                    f"You've set the thread count to {num_threads_from_gui}.\n\n"
+                    "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
+                    "  - Increased errors or failed file downloads.\n"
+                    "  - Connection issues with the server.\n"
+                    "  - Higher system resource usage.\n\n"
+                    "For most users and connections, 10-30 threads provide a good balance.\n\n"
+                    f"Do you want to proceed with {num_threads_from_gui} threads, or would you like to change the value?"
                 )
-                proceed_button =soft_warning_msg_box .addButton ("Proceed Anyway",QMessageBox .AcceptRole )
-                change_button =soft_warning_msg_box .addButton ("Change Thread Value",QMessageBox .RejectRole )
-                soft_warning_msg_box .setDefaultButton (proceed_button )
-                soft_warning_msg_box .setEscapeButton (change_button )
-                soft_warning_msg_box .exec_ ()
+                proceed_button = soft_warning_msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+                change_button = soft_warning_msg_box.addButton("Change Thread Value", QMessageBox.RejectRole)
+                soft_warning_msg_box.setDefaultButton(proceed_button)
+                soft_warning_msg_box.setEscapeButton(change_button)
+                soft_warning_msg_box.exec_()
 
-                if soft_warning_msg_box .clickedButton ()==change_button :
-                    self .log_signal .emit (f"ℹ️ User opted to change thread count from {num_threads_from_gui } after advisory.")
-                    self .thread_count_input .setFocus ()
-                    self .thread_count_input .selectAll ()
-                    return False 
+                if soft_warning_msg_box.clickedButton() == change_button:
+                    self.log_signal.emit(f"ℹ️ User opted to change thread count from {num_threads_from_gui} after advisory.")
+                    self.thread_count_input.setFocus()
+                    self.thread_count_input.selectAll()
+                    return False
 
-        raw_skip_words =self .skip_words_input .text ().strip ()
-        skip_words_list =[word .strip ().lower ()for word in raw_skip_words .split (',')if word .strip ()]
+        raw_skip_words = self.skip_words_input.text().strip()
+        skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
 
-        raw_remove_filename_words =self .remove_from_filename_input .text ().strip ()if hasattr (self ,'remove_from_filename_input')else ""
-        allow_multipart =self .allow_multipart_download_setting 
-        remove_from_filename_words_list =[word .strip ()for word in raw_remove_filename_words .split (',')if word .strip ()]
-        scan_content_for_images =self .scan_content_images_checkbox .isChecked ()if hasattr (self ,'scan_content_images_checkbox')else False 
-        use_cookie_from_checkbox =self .use_cookie_checkbox .isChecked ()if hasattr (self ,'use_cookie_checkbox')else False 
-        app_base_dir_for_cookies =os .path .dirname (self .config_file )
-        cookie_text_from_input =self .cookie_text_input .text ().strip ()if hasattr (self ,'cookie_text_input')and use_cookie_from_checkbox else ""
+        raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
+        allow_multipart = self.allow_multipart_download_setting
+        remove_from_filename_words_list = [word.strip() for word in raw_remove_filename_words.split(',') if word.strip()]
+        scan_content_for_images = self.scan_content_images_checkbox.isChecked() if hasattr(self, 'scan_content_images_checkbox') else False
+        use_cookie_from_checkbox = self.use_cookie_checkbox.isChecked() if hasattr(self, 'use_cookie_checkbox') else False
+        app_base_dir_for_cookies = os.path.dirname(self.config_file)
+        cookie_text_from_input = self.cookie_text_input.text().strip() if hasattr(self, 'cookie_text_input') and use_cookie_from_checkbox else ""
 
-        use_cookie_for_this_run =use_cookie_from_checkbox 
-        selected_cookie_file_path_for_backend =self .selected_cookie_filepath if use_cookie_from_checkbox and self .selected_cookie_filepath else None 
+        use_cookie_for_this_run = use_cookie_from_checkbox
+        selected_cookie_file_path_for_backend = self.selected_cookie_filepath if use_cookie_from_checkbox and self.selected_cookie_filepath else None
 
-        if use_cookie_from_checkbox and not direct_api_url :
-            temp_cookies_for_check =prepare_cookies_for_request (
-            use_cookie_for_this_run ,
-            cookie_text_from_input ,
-            selected_cookie_file_path_for_backend ,
-            app_base_dir_for_cookies ,
-            lambda msg :self .log_signal .emit (f"[UI Cookie Check] {msg }")
+        if use_cookie_from_checkbox and not direct_api_url:
+            temp_cookies_for_check = prepare_cookies_for_request(
+                use_cookie_for_this_run,
+                cookie_text_from_input,
+                selected_cookie_file_path_for_backend,
+                app_base_dir_for_cookies,
+                lambda msg: self.log_signal.emit(f"[UI Cookie Check] {msg}")
             )
-            if temp_cookies_for_check is None :
+            if temp_cookies_for_check is None:
                 cookie_dialog = CookieHelpDialog(self, offer_download_without_option=True)
-                dialog_exec_result =cookie_dialog .exec_ ()
+                dialog_exec_result = cookie_dialog.exec_()
 
-                if cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result ==QDialog .Accepted :
-                    self .log_signal .emit ("ℹ️ User chose to download without cookies for this session.")
-                    use_cookie_for_this_run =False 
-                elif cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_CANCEL_DOWNLOAD or dialog_exec_result ==QDialog .Rejected :
-                    self .log_signal .emit ("❌ Download cancelled by user at cookie prompt.")
-                    return False 
-                else :
-                    self .log_signal .emit ("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
-                    return False 
+                if cookie_dialog.user_choice == CookieHelpDialog.CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result == QDialog.Accepted:
+                    self.log_signal.emit("ℹ️ User chose to download without cookies for this session.")
+                    use_cookie_for_this_run = False
+                elif cookie_dialog.user_choice == CookieHelpDialog.CHOICE_CANCEL_DOWNLOAD or dialog_exec_result == QDialog.Rejected:
+                    self.log_signal.emit("❌ Download cancelled by user at cookie prompt.")
+                    return False
+                else:
+                    self.log_signal.emit("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
+                    return False
 
-        current_skip_words_scope =self .get_skip_words_scope ()
-        manga_mode_is_checked =self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False 
+        current_skip_words_scope = self.get_skip_words_scope()
+        manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
 
-        extract_links_only =(self .radio_only_links and self .radio_only_links .isChecked ())
-        backend_filter_mode =self .get_filter_mode ()
-        text_only_scope_for_run = self.more_filter_scope if backend_filter_mode == 'text_only' else None 
-        export_format_for_run = self.text_export_format if backend_filter_mode == 'text_only' else 'txt'        
-        checked_radio_button =self .radio_group .checkedButton ()
-        user_selected_filter_text =checked_radio_button .text ()if checked_radio_button else "All"
+        backend_filter_mode = self.get_filter_mode()
+        text_only_scope_for_run = self.more_filter_scope if backend_filter_mode == 'text_only' else None
+        export_format_for_run = self.text_export_format if backend_filter_mode == 'text_only' else 'txt'
+        checked_radio_button = self.radio_group.checkedButton()
+        user_selected_filter_text = checked_radio_button.text() if checked_radio_button else "All"
 
-        effective_output_dir_for_run =""
+        if selected_cookie_file_path_for_backend:
+            cookie_text_from_input = ""
 
-        if selected_cookie_file_path_for_backend :
-            cookie_text_from_input =""
+        if backend_filter_mode == 'archive':
+            effective_skip_zip = False
+            effective_skip_rar = False
+        else:
+            effective_skip_zip = self.skip_zip_checkbox.isChecked()
+            effective_skip_rar = self.skip_rar_checkbox.isChecked()
+            if backend_filter_mode == 'audio':
+                effective_skip_zip = self.skip_zip_checkbox.isChecked()
+                effective_skip_rar = self.skip_rar_checkbox.isChecked()
 
-        if backend_filter_mode =='archive':
-            effective_skip_zip =False 
-            effective_skip_rar =False 
-        else :
-            effective_skip_zip =self .skip_zip_checkbox .isChecked ()
-            effective_skip_rar =self .skip_rar_checkbox .isChecked ()
-            if backend_filter_mode =='audio':
-                effective_skip_zip =self .skip_zip_checkbox .isChecked ()
-                effective_skip_rar =self .skip_rar_checkbox .isChecked ()
+        if not api_url:
+            QMessageBox.critical(self, "Input Error", "URL is required.")
+            return False
 
-        if not api_url :
-            QMessageBox .critical (self ,"Input Error","URL is required.")
-            return False 
+        service, user_id, post_id_from_url = extract_post_info(api_url)
+        if not service or not user_id:
+            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
+            return False
 
-        if override_output_dir :
-            if not main_ui_download_dir :
-                QMessageBox .critical (self ,"Configuration Error",
-                "The main 'Download Location' must be set in the UI "
-                "before downloading favorites with 'Artist Folders' scope.")
-                if self .is_processing_favorites_queue :
-                    self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory not set.")
-                return False 
+        creator_folder_ignore_words_for_run = None
+        is_full_creator_download = not post_id_from_url
 
-            if not os .path .isdir (main_ui_download_dir ):
-                QMessageBox .critical (self ,"Directory Error",
-                f"The main 'Download Location' ('{main_ui_download_dir }') "
-                "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
-                if self .is_processing_favorites_queue :
-                    self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory invalid.")
-                return False 
-            effective_output_dir_for_run =os .path .normpath (override_output_dir )
-        else :
-            if not extract_links_only and not main_ui_download_dir :
-                QMessageBox .critical (self ,"Input Error","Download Directory is required when not in 'Only Links' mode.")
-                return False 
+        if compress_images and Image is None:
+            QMessageBox.warning(self, "Missing Dependency", "Pillow library (for image compression) not found. Compression will be disabled.")
+            compress_images = False;
+            self.compress_images_checkbox.setChecked(False)
 
-            if not extract_links_only and main_ui_download_dir and not os .path .isdir (main_ui_download_dir ):
-                reply =QMessageBox .question (self ,"Create Directory?",
-                f"The directory '{main_ui_download_dir }' does not exist.\nCreate it now?",
-                QMessageBox .Yes |QMessageBox .No ,QMessageBox .Yes )
-                if reply ==QMessageBox .Yes :
-                    try :
-                        os .makedirs (main_ui_download_dir ,exist_ok =True )
-                        self .log_signal .emit (f"ℹ️ Created directory: {main_ui_download_dir }")
-                    except Exception as e :
-                        QMessageBox .critical (self ,"Directory Error",f"Could not create directory: {e }")
-                        return False 
-                else :
-                    self .log_signal .emit ("❌ Download cancelled: Output directory does not exist and was not created.")
-                    return False 
-            effective_output_dir_for_run =os .path .normpath (main_ui_download_dir )
+        log_messages = ["=" * 40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"    URL: {api_url}"]
 
-        service ,user_id ,post_id_from_url =extract_post_info (api_url )
-        if not service or not user_id :
-            QMessageBox .critical (self ,"Input Error","Invalid or unsupported URL format.")
-            return False 
+        current_mode_log_text = "Download"
+        if extract_links_only: current_mode_log_text = "Link Extraction"
+        elif backend_filter_mode == 'archive': current_mode_log_text = "Archive Download"
+        elif backend_filter_mode == 'audio': current_mode_log_text = "Audio Download"
 
+        current_char_filter_scope = self.get_char_filter_scope()
+        manga_mode = manga_mode_is_checked and not post_id_from_url
 
-            self ._process_next_favorite_download ()
-            return True 
+        manga_date_prefix_text = ""
+        if manga_mode and (self.manga_filename_style == STYLE_DATE_BASED or self.manga_filename_style == STYLE_ORIGINAL_NAME) and hasattr(self, 'manga_date_prefix_input'):
+            manga_date_prefix_text = self.manga_date_prefix_input.text().strip()
+            if manga_date_prefix_text:
+                log_messages.append(f"      ↳ Manga Date Prefix: '{manga_date_prefix_text}'")
 
+        start_page_str, end_page_str = self.start_page_input.text().strip(), self.end_page_input.text().strip()
+        start_page, end_page = None, None
+        is_creator_feed = bool(not post_id_from_url)
 
-        if self .favorite_mode_checkbox and self .favorite_mode_checkbox .isChecked ()and not direct_api_url :
-            QMessageBox .information (self ,"Favorite Mode Active",
+        if is_creator_feed:
+            try:
+                if start_page_str: start_page = int(start_page_str)
+                if end_page_str: end_page = int(end_page_str)
 
-            "Favorite Mode is active. Please use the 'Favorite Artists' or 'Favorite Posts' buttons to start downloads in this mode, or uncheck 'Favorite Mode' to use the URL input.")
-            self .set_ui_enabled (True )
-            return 
-            return False 
-        api_url =direct_api_url if direct_api_url else self .link_input .text ().strip ()
-        main_ui_download_dir =self .dir_input .text ().strip ()
+                if start_page is not None and start_page <= 0: raise ValueError("Start page must be positive.")
+                if end_page is not None and end_page <= 0: raise ValueError("End page must be positive.")
+                if start_page and end_page and start_page > end_page: raise ValueError("Start page cannot be greater than end page.")
 
-        self .cancellation_message_logged_this_session =False 
-        use_subfolders =self .use_subfolders_checkbox .isChecked ()
-        use_post_subfolders =self .use_subfolder_per_post_checkbox .isChecked ()
-        compress_images =self .compress_images_checkbox .isChecked ()
-        download_thumbnails =self .download_thumbnails_checkbox .isChecked ()
-
-        use_multithreading_enabled_by_checkbox =self .use_multithreading_checkbox .isChecked ()
-        try :
-            num_threads_from_gui =int (self .thread_count_input .text ().strip ())
-            if num_threads_from_gui <1 :num_threads_from_gui =1 
-        except ValueError :
-            QMessageBox .critical (self ,"Thread Count Error","Invalid number of threads. Please enter a positive number.")
-            return False 
-
-        if use_multithreading_enabled_by_checkbox :
-            if num_threads_from_gui >MAX_THREADS :
-                hard_warning_msg =(
-                f"You've entered a thread count ({num_threads_from_gui }) exceeding the maximum of {MAX_THREADS }.\n\n"
-                "Using an extremely high number of threads can lead to:\n"
-                "  - Diminishing returns (no significant speed increase).\n"
-                "  - Increased system instability or application crashes.\n"
-                "  - Higher chance of being rate-limited or temporarily IP-banned by the server.\n\n"
-                f"The thread count has been automatically capped to {MAX_THREADS } for stability."
-                )
-                QMessageBox .warning (self ,"High Thread Count Warning",hard_warning_msg )
-                num_threads_from_gui =MAX_THREADS 
-                self .thread_count_input .setText (str (MAX_THREADS ))
-                self .log_signal .emit (f"⚠️ User attempted {num_threads_from_gui } threads, capped to {MAX_THREADS }.")
-            if SOFT_WARNING_THREAD_THRESHOLD <num_threads_from_gui <=MAX_THREADS :
-                soft_warning_msg_box =QMessageBox (self )
-                soft_warning_msg_box .setIcon (QMessageBox .Question )
-                soft_warning_msg_box .setWindowTitle ("Thread Count Advisory")
-                soft_warning_msg_box .setText (
-                f"You've set the thread count to {num_threads_from_gui }.\n\n"
-                "While this is within the allowed limit, using a high number of threads (typically above 40-50) can sometimes lead to:\n"
-                "  - Increased errors or failed file downloads.\n"
-                "  - Connection issues with the server.\n"
-                "  - Higher system resource usage.\n\n"
-                "For most users and connections, 10-30 threads provide a good balance.\n\n"
-                f"Do you want to proceed with {num_threads_from_gui } threads, or would you like to change the value?"
-                )
-                proceed_button =soft_warning_msg_box .addButton ("Proceed Anyway",QMessageBox .AcceptRole )
-                change_button =soft_warning_msg_box .addButton ("Change Thread Value",QMessageBox .RejectRole )
-                soft_warning_msg_box .setDefaultButton (proceed_button )
-                soft_warning_msg_box .setEscapeButton (change_button )
-                soft_warning_msg_box .exec_ ()
-
-                if soft_warning_msg_box .clickedButton ()==change_button :
-                    self .log_signal .emit (f"ℹ️ User opted to change thread count from {num_threads_from_gui } after advisory.")
-                    self .thread_count_input .setFocus ()
-                    self .thread_count_input .selectAll ()
-                    return False 
-
-        raw_skip_words =self .skip_words_input .text ().strip ()
-        skip_words_list =[word .strip ().lower ()for word in raw_skip_words .split (',')if word .strip ()]
-
-        raw_remove_filename_words =self .remove_from_filename_input .text ().strip ()if hasattr (self ,'remove_from_filename_input')else ""
-        allow_multipart =self .allow_multipart_download_setting 
-        remove_from_filename_words_list =[word .strip ()for word in raw_remove_filename_words .split (',')if word .strip ()]
-        scan_content_for_images =self .scan_content_images_checkbox .isChecked ()if hasattr (self ,'scan_content_images_checkbox')else False 
-        use_cookie_from_checkbox =self .use_cookie_checkbox .isChecked ()if hasattr (self ,'use_cookie_checkbox')else False 
-        app_base_dir_for_cookies =os .path .dirname (self .config_file )
-        cookie_text_from_input =self .cookie_text_input .text ().strip ()if hasattr (self ,'cookie_text_input')and use_cookie_from_checkbox else ""
-
-        use_cookie_for_this_run =use_cookie_from_checkbox 
-        selected_cookie_file_path_for_backend =self .selected_cookie_filepath if use_cookie_from_checkbox and self .selected_cookie_filepath else None 
-
-        if use_cookie_from_checkbox and not direct_api_url :
-            temp_cookies_for_check =prepare_cookies_for_request (
-            use_cookie_for_this_run ,
-            cookie_text_from_input ,
-            selected_cookie_file_path_for_backend ,
-            app_base_dir_for_cookies ,
-            lambda msg :self .log_signal .emit (f"[UI Cookie Check] {msg }")
-            )
-            if temp_cookies_for_check is None :
-                cookie_dialog =CookieHelpDialog (self ,self ,offer_download_without_option =True )
-                dialog_exec_result =cookie_dialog .exec_ ()
-
-                if cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_PROCEED_WITHOUT_COOKIES and dialog_exec_result ==QDialog .Accepted :
-                    self .log_signal .emit ("ℹ️ User chose to download without cookies for this session.")
-                    use_cookie_for_this_run =False 
-                elif cookie_dialog .user_choice ==CookieHelpDialog .CHOICE_CANCEL_DOWNLOAD or dialog_exec_result ==QDialog .Rejected :
-                    self .log_signal .emit ("❌ Download cancelled by user at cookie prompt.")
-                    return False 
-                else :
-                    self .log_signal .emit ("⚠️ Cookie dialog closed or unexpected choice. Aborting download.")
-                    return False 
-
-        current_skip_words_scope =self .get_skip_words_scope ()
-        manga_mode_is_checked =self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False 
-
-        extract_links_only =(self .radio_only_links and self .radio_only_links .isChecked ())
-        backend_filter_mode =self .get_filter_mode ()
-        checked_radio_button =self .radio_group .checkedButton ()
-        user_selected_filter_text =checked_radio_button .text ()if checked_radio_button else "All"
-
-
-        effective_output_dir_for_run =""
-
-        if selected_cookie_file_path_for_backend :
-            cookie_text_from_input =""
-
-        if backend_filter_mode =='archive':
-            effective_skip_zip =False 
-            effective_skip_rar =False 
-        else :
-            effective_skip_zip =self .skip_zip_checkbox .isChecked ()
-            effective_skip_rar =self .skip_rar_checkbox .isChecked ()
-            if backend_filter_mode =='audio':
-                effective_skip_zip =self .skip_zip_checkbox .isChecked ()
-                effective_skip_rar =self .skip_rar_checkbox .isChecked ()
-
-        if not api_url :
-            QMessageBox .critical (self ,"Input Error","URL is required.")
-            return False 
-
-        if override_output_dir :
-            if not main_ui_download_dir :
-                QMessageBox .critical (self ,"Configuration Error",
-                "The main 'Download Location' must be set in the UI "
-                "before downloading favorites with 'Artist Folders' scope.")
-                if self .is_processing_favorites_queue :
-                    self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory not set.")
-                return False 
-
-            if not os .path .isdir (main_ui_download_dir ):
-                QMessageBox .critical (self ,"Directory Error",
-                f"The main 'Download Location' ('{main_ui_download_dir }') "
-                "does not exist or is not a directory. Please set a valid one for 'Artist Folders' scope.")
-                if self .is_processing_favorites_queue :
-                    self .log_signal .emit (f"❌ Favorite download for '{api_url }' skipped: Main download directory invalid.")
-                return False 
-            effective_output_dir_for_run =os .path .normpath (override_output_dir )
-        else :
-            if not extract_links_only and not main_ui_download_dir :
-                QMessageBox .critical (self ,"Input Error","Download Directory is required when not in 'Only Links' mode.")
-                return False 
-
-            if not extract_links_only and main_ui_download_dir and not os .path .isdir (main_ui_download_dir ):
-                reply =QMessageBox .question (self ,"Create Directory?",
-                f"The directory '{main_ui_download_dir }' does not exist.\nCreate it now?",
-                QMessageBox .Yes |QMessageBox .No ,QMessageBox .Yes )
-                if reply ==QMessageBox .Yes :
-                    try :
-                        os .makedirs (main_ui_download_dir ,exist_ok =True )
-                        self .log_signal .emit (f"ℹ️ Created directory: {main_ui_download_dir }")
-                    except Exception as e :
-                        QMessageBox .critical (self ,"Directory Error",f"Could not create directory: {e }")
-                        return False 
-                else :
-                    self .log_signal .emit ("❌ Download cancelled: Output directory does not exist and was not created.")
-                    return False 
-            effective_output_dir_for_run =os .path .normpath (main_ui_download_dir )
-
-        service ,user_id ,post_id_from_url =extract_post_info (api_url )
-        if not service or not user_id :
-            QMessageBox .critical (self ,"Input Error","Invalid or unsupported URL format.")
-            return False 
-
-        creator_folder_ignore_words_for_run =None 
-        is_full_creator_download =not post_id_from_url 
-
-        if compress_images and Image is None :
-            QMessageBox .warning (self ,"Missing Dependency","Pillow library (for image compression) not found. Compression will be disabled.")
-            compress_images =False ;self .compress_images_checkbox .setChecked (False )
-
-        log_messages =["="*40 ,f"🚀 Starting {'Link Extraction'if extract_links_only else ('Archive Download'if backend_filter_mode =='archive'else 'Download')} @ {time .strftime ('%Y-%m-%d %H:%M:%S')}",f"    URL: {api_url }"]
-
-        current_mode_log_text ="Download"
-        if extract_links_only :current_mode_log_text ="Link Extraction"
-        elif backend_filter_mode =='archive':current_mode_log_text ="Archive Download"
-        elif backend_filter_mode =='audio':current_mode_log_text ="Audio Download"
-
-        current_char_filter_scope =self .get_char_filter_scope ()
-        manga_mode =manga_mode_is_checked and not post_id_from_url 
-
-        manga_date_prefix_text =""
-        if manga_mode and (self .manga_filename_style ==STYLE_DATE_BASED or self .manga_filename_style ==STYLE_ORIGINAL_NAME )and hasattr (self ,'manga_date_prefix_input'):
-            manga_date_prefix_text =self .manga_date_prefix_input .text ().strip ()
-            if manga_date_prefix_text :
-                log_messages .append (f"      ↳ Manga Date Prefix: '{manga_date_prefix_text }'")
-
-        start_page_str ,end_page_str =self .start_page_input .text ().strip (),self .end_page_input .text ().strip ()
-        start_page ,end_page =None ,None 
-        is_creator_feed =bool (not post_id_from_url )
-
-        if is_creator_feed :
-            try :
-                if start_page_str :start_page =int (start_page_str )
-                if end_page_str :end_page =int (end_page_str )
-
-                if start_page is not None and start_page <=0 :raise ValueError ("Start page must be positive.")
-                if end_page is not None and end_page <=0 :raise ValueError ("End page must be positive.")
-                if start_page and end_page and start_page >end_page :raise ValueError ("Start page cannot be greater than end page.")
-
-                if manga_mode and start_page and end_page :
-                    msg_box =QMessageBox (self )
-                    msg_box .setIcon (QMessageBox .Warning )
-                    msg_box .setWindowTitle ("Manga Mode & Page Range Warning")
-                    msg_box .setText (
-                    "You have enabled <b>Manga/Comic Mode</b> and also specified a <b>Page Range</b>.\n\n"
-                    "Manga Mode processes posts from oldest to newest across all available pages by default.\n"
-                    "If you use a page range, you might miss parts of the manga/comic if it starts before your 'Start Page' or continues after your 'End Page'.\n\n"
-                    "However, if you are certain the content you want is entirely within this page range (e.g., a short series, or you know the specific pages for a volume), then proceeding is okay.\n\n"
-                    "Do you want to proceed with this page range in Manga Mode?"
+                if manga_mode and start_page and end_page:
+                    msg_box = QMessageBox(self)
+                    msg_box.setIcon(QMessageBox.Warning)
+                    msg_box.setWindowTitle("Manga Mode & Page Range Warning")
+                    msg_box.setText(
+                        "You have enabled <b>Manga/Comic Mode</b> and also specified a <b>Page Range</b>.\n\n"
+                        "Manga Mode processes posts from oldest to newest across all available pages by default.\n"
+                        "If you use a page range, you might miss parts of the manga/comic if it starts before your 'Start Page' or continues after your 'End Page'.\n\n"
+                        "However, if you are certain the content you want is entirely within this page range (e.g., a short series, or you know the specific pages for a volume), then proceeding is okay.\n\n"
+                        "Do you want to proceed with this page range in Manga Mode?"
                     )
-                    proceed_button =msg_box .addButton ("Proceed Anyway",QMessageBox .AcceptRole )
-                    cancel_button =msg_box .addButton ("Cancel Download",QMessageBox .RejectRole )
-                    msg_box .setDefaultButton (proceed_button )
-                    msg_box .setEscapeButton (cancel_button )
-                    msg_box .exec_ ()
+                    proceed_button = msg_box.addButton("Proceed Anyway", QMessageBox.AcceptRole)
+                    cancel_button = msg_box.addButton("Cancel Download", QMessageBox.RejectRole)
+                    msg_box.setDefaultButton(proceed_button)
+                    msg_box.setEscapeButton(cancel_button)
+                    msg_box.exec_()
 
-                    if msg_box .clickedButton ()==cancel_button :
-                        self .log_signal .emit ("❌ Download cancelled by user due to Manga Mode & Page Range warning.")
-                        return False 
-            except ValueError as e :
-                QMessageBox .critical (self ,"Page Range Error",f"Invalid page range: {e }")
-                return False 
-        self .external_link_queue .clear ();self .extracted_links_cache =[];self ._is_processing_external_link_queue =False ;self ._current_link_post_title =None 
+                    if msg_box.clickedButton() == cancel_button:
+                        self.log_signal.emit("❌ Download cancelled by user due to Manga Mode & Page Range warning.")
+                        return False
+            except ValueError as e:
+                QMessageBox.critical(self, "Page Range Error", f"Invalid page range: {e}")
+                return False
+        self.external_link_queue.clear();
+        self.extracted_links_cache = [];
+        self._is_processing_external_link_queue = False;
+        self._current_link_post_title = None
 
-        raw_character_filters_text =self .character_input .text ().strip ()
-        parsed_character_filter_objects =self ._parse_character_filters (raw_character_filters_text )
+        raw_character_filters_text = self.character_input.text().strip()
+        parsed_character_filter_objects = self._parse_character_filters(raw_character_filters_text)
 
-        actual_filters_to_use_for_run =[]
+        actual_filters_to_use_for_run = []
 
-        needs_folder_naming_validation =(use_subfolders or manga_mode )and not extract_links_only 
+        needs_folder_naming_validation = (use_subfolders or manga_mode) and not extract_links_only
 
-        if parsed_character_filter_objects :
-            actual_filters_to_use_for_run =parsed_character_filter_objects 
+        if parsed_character_filter_objects:
+            actual_filters_to_use_for_run = parsed_character_filter_objects
 
-            if not extract_links_only :
-                self .log_signal .emit (f"ℹ️ Using character filters for matching: {', '.join (item ['name']for item in actual_filters_to_use_for_run )}")
+            if not extract_links_only:
+                self.log_signal.emit(f"ℹ️ Using character filters for matching: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
 
-                filter_objects_to_potentially_add_to_known_list =[]
-                for filter_item_obj in parsed_character_filter_objects :
-                    item_primary_name =filter_item_obj ["name"]
-                    cleaned_name_test =clean_folder_name (item_primary_name )
-                    if needs_folder_naming_validation and not cleaned_name_test :
-                        QMessageBox .warning (self ,"Invalid Filter Name for Folder",f"Filter name '{item_primary_name }' is invalid for a folder and will be skipped for Known.txt interaction.")
-                        self .log_signal .emit (f"⚠️ Skipping invalid filter for Known.txt interaction: '{item_primary_name }'")
-                        continue 
+                filter_objects_to_potentially_add_to_known_list = []
+                for filter_item_obj in parsed_character_filter_objects:
+                    item_primary_name = filter_item_obj["name"]
+                    cleaned_name_test = clean_folder_name(item_primary_name)
+                    if needs_folder_naming_validation and not cleaned_name_test:
+                        QMessageBox.warning(self, "Invalid Filter Name for Folder", f"Filter name '{item_primary_name}' is invalid for a folder and will be skipped for Known.txt interaction.")
+                        self.log_signal.emit(f"⚠️ Skipping invalid filter for Known.txt interaction: '{item_primary_name}'")
+                        continue
 
-                    an_alias_is_already_known =False 
-                    if any (kn_entry ["name"].lower ()==item_primary_name .lower ()for kn_entry in KNOWN_NAMES ):
-                        an_alias_is_already_known =True 
-                    elif filter_item_obj ["is_group"]and needs_folder_naming_validation :
-                        for alias_in_filter_obj in filter_item_obj ["aliases"]:
-                            if any (kn_entry ["name"].lower ()==alias_in_filter_obj .lower ()or alias_in_filter_obj .lower ()in [a .lower ()for a in kn_entry ["aliases"]]for kn_entry in KNOWN_NAMES ):
-                                an_alias_is_already_known =True ;break 
+                    an_alias_is_already_known = False
+                    if any(kn_entry["name"].lower() == item_primary_name.lower() for kn_entry in KNOWN_NAMES):
+                        an_alias_is_already_known = True
+                    elif filter_item_obj["is_group"] and needs_folder_naming_validation:
+                        for alias_in_filter_obj in filter_item_obj["aliases"]:
+                            if any(kn_entry["name"].lower() == alias_in_filter_obj.lower() or alias_in_filter_obj.lower() in [a.lower() for a in kn_entry["aliases"]] for kn_entry in KNOWN_NAMES):
+                                an_alias_is_already_known = True;
+                                break
 
-                    if an_alias_is_already_known and filter_item_obj ["is_group"]:
-                        self .log_signal .emit (f"ℹ️ An alias from group '{item_primary_name }' is already known. Group will not be prompted for Known.txt addition.")
+                    if an_alias_is_already_known and filter_item_obj["is_group"]:
+                        self.log_signal.emit(f"ℹ️ An alias from group '{item_primary_name}' is already known. Group will not be prompted for Known.txt addition.")
 
-                    should_prompt_to_add_to_known_list =(
-                    needs_folder_naming_validation and not manga_mode and 
-                    not any (kn_entry ["name"].lower ()==item_primary_name .lower ()for kn_entry in KNOWN_NAMES )and 
-                    not an_alias_is_already_known 
+                    should_prompt_to_add_to_known_list = (
+                            needs_folder_naming_validation and not manga_mode and
+                            not any(kn_entry["name"].lower() == item_primary_name.lower() for kn_entry in KNOWN_NAMES) and
+                            not an_alias_is_already_known
                     )
-                    if should_prompt_to_add_to_known_list :
-                        if not any (obj_to_add ["name"].lower ()==item_primary_name .lower ()for obj_to_add in filter_objects_to_potentially_add_to_known_list ):
-                            filter_objects_to_potentially_add_to_known_list .append (filter_item_obj )
-                    elif manga_mode and needs_folder_naming_validation and item_primary_name .lower ()not in {kn_entry ["name"].lower ()for kn_entry in KNOWN_NAMES }and not an_alias_is_already_known :
-                        self .log_signal .emit (f"ℹ️ Manga Mode: Using filter '{item_primary_name }' for this session without adding to Known Names.")
+                    if should_prompt_to_add_to_known_list:
+                        if not any(obj_to_add["name"].lower() == item_primary_name.lower() for obj_to_add in filter_objects_to_potentially_add_to_known_list):
+                            filter_objects_to_potentially_add_to_known_list.append(filter_item_obj)
+                    elif manga_mode and needs_folder_naming_validation and item_primary_name.lower() not in {kn_entry["name"].lower() for kn_entry in KNOWN_NAMES} and not an_alias_is_already_known:
+                        self.log_signal.emit(f"ℹ️ Manga Mode: Using filter '{item_primary_name}' for this session without adding to Known Names.")
 
-                if filter_objects_to_potentially_add_to_known_list :
-                    confirm_dialog =ConfirmAddAllDialog (filter_objects_to_potentially_add_to_known_list ,self ,self )
-                    dialog_result =confirm_dialog .exec_ ()
+                if filter_objects_to_potentially_add_to_known_list:
+                    confirm_dialog = ConfirmAddAllDialog(filter_objects_to_potentially_add_to_known_list, self, self)
+                    dialog_result = confirm_dialog.exec_()
 
-                    if dialog_result ==CONFIRM_ADD_ALL_CANCEL_DOWNLOAD :
-                        self .log_signal .emit ("❌ Download cancelled by user at new name confirmation stage.")
-                        return False 
-                    elif isinstance (dialog_result ,list ):
-                        if dialog_result :
-                            self .log_signal .emit (f"ℹ️ User chose to add {len (dialog_result )} new entry/entries to Known.txt.")
-                            for filter_obj_to_add in dialog_result :
-                                if filter_obj_to_add .get ("components_are_distinct_for_known_txt"):
-                                    self .log_signal .emit (f"    Processing group '{filter_obj_to_add ['name']}' to add its components individually to Known.txt.")
-                                    for alias_component in filter_obj_to_add ["aliases"]:
-                                        self .add_new_character (
-                                        name_to_add =alias_component ,
-                                        is_group_to_add =False ,
-                                        aliases_to_add =[alias_component ],
-                                        suppress_similarity_prompt =True 
+                    if dialog_result == CONFIRM_ADD_ALL_CANCEL_DOWNLOAD:
+                        self.log_signal.emit("❌ Download cancelled by user at new name confirmation stage.")
+                        return False
+                    elif isinstance(dialog_result, list):
+                        if dialog_result:
+                            self.log_signal.emit(f"ℹ️ User chose to add {len(dialog_result)} new entry/entries to Known.txt.")
+                            for filter_obj_to_add in dialog_result:
+                                if filter_obj_to_add.get("components_are_distinct_for_known_txt"):
+                                    self.log_signal.emit(f"    Processing group '{filter_obj_to_add['name']}' to add its components individually to Known.txt.")
+                                    for alias_component in filter_obj_to_add["aliases"]:
+                                        self.add_new_character(
+                                            name_to_add=alias_component,
+                                            is_group_to_add=False,
+                                            aliases_to_add=[alias_component],
+                                            suppress_similarity_prompt=True
                                         )
-                                else :
-                                    self .add_new_character (
-                                    name_to_add =filter_obj_to_add ["name"],
-                                    is_group_to_add =filter_obj_to_add ["is_group"],
-                                    aliases_to_add =filter_obj_to_add ["aliases"],
-                                    suppress_similarity_prompt =True 
+                                else:
+                                    self.add_new_character(
+                                        name_to_add=filter_obj_to_add["name"],
+                                        is_group_to_add=filter_obj_to_add["is_group"],
+                                        aliases_to_add=filter_obj_to_add["aliases"],
+                                        suppress_similarity_prompt=True
                                     )
-                        else :
-                            self .log_signal .emit ("ℹ️ User confirmed adding, but no names were selected in the dialog. No new names added to Known.txt.")
-                    elif dialog_result ==CONFIRM_ADD_ALL_SKIP_ADDING :
-                        self .log_signal .emit ("ℹ️ User chose not to add new names to Known.txt for this session.")
-            else :
-                self .log_signal .emit (f"ℹ️ Using character filters for link extraction: {', '.join (item ['name']for item in actual_filters_to_use_for_run )}")
+                        else:
+                            self.log_signal.emit("ℹ️ User confirmed adding, but no names were selected in the dialog. No new names added to Known.txt.")
+                    elif dialog_result == CONFIRM_ADD_ALL_SKIP_ADDING:
+                        self.log_signal.emit("ℹ️ User chose not to add new names to Known.txt for this session.")
+            else:
+                self.log_signal.emit(f"ℹ️ Using character filters for link extraction: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
 
-        self .dynamic_character_filter_holder .set_filters (actual_filters_to_use_for_run )
+        self.dynamic_character_filter_holder.set_filters(actual_filters_to_use_for_run)
 
-        creator_folder_ignore_words_for_run =None 
-        character_filters_are_empty =not actual_filters_to_use_for_run 
-        if is_full_creator_download and character_filters_are_empty :
-            creator_folder_ignore_words_for_run =CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS 
-            log_messages .append (f"    Creator Download (No Char Filter): Applying default folder name ignore list ({len (creator_folder_ignore_words_for_run )} words).")
+        creator_folder_ignore_words_for_run = None
+        character_filters_are_empty = not actual_filters_to_use_for_run
+        if is_full_creator_download and character_filters_are_empty:
+            creator_folder_ignore_words_for_run = CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS
+            log_messages.append(f"    Creator Download (No Char Filter): Applying default folder name ignore list ({len(creator_folder_ignore_words_for_run)} words).")
 
-        custom_folder_name_cleaned =None 
-        if use_subfolders and post_id_from_url and self .custom_folder_widget and self .custom_folder_widget .isVisible ()and not extract_links_only :
-            raw_custom_name =self .custom_folder_input .text ().strip ()
-            if raw_custom_name :
-                cleaned_custom =clean_folder_name (raw_custom_name )
-                if cleaned_custom :custom_folder_name_cleaned =cleaned_custom 
-                else :self .log_signal .emit (f"⚠️ Invalid custom folder name ignored: '{raw_custom_name }' (resulted in empty string after cleaning).")
+        custom_folder_name_cleaned = None
+        if use_subfolders and post_id_from_url and self.custom_folder_widget and self.custom_folder_widget.isVisible() and not extract_links_only:
+            raw_custom_name = self.custom_folder_input.text().strip()
+            if raw_custom_name:
+                cleaned_custom = clean_folder_name(raw_custom_name)
+                if cleaned_custom:
+                    custom_folder_name_cleaned = cleaned_custom
+                else:
+                    self.log_signal.emit(f"⚠️ Invalid custom folder name ignored: '{raw_custom_name}' (resulted in empty string after cleaning).")
 
+        self.main_log_output.clear()
+        if extract_links_only: self.main_log_output.append("🔗 Extracting Links...");
+        elif backend_filter_mode == 'archive': self.main_log_output.append("📦 Downloading Archives Only...")
 
-        self .main_log_output .clear ()
-        if extract_links_only :self .main_log_output .append ("🔗 Extracting Links...");
-        elif backend_filter_mode =='archive':self .main_log_output .append ("📦 Downloading Archives Only...")
+        if self.external_log_output: self.external_log_output.clear()
+        if self.show_external_links and not extract_links_only and backend_filter_mode != 'archive':
+            self.external_log_output.append("🔗 External Links Found:")
 
-        if self .external_log_output :self .external_log_output .clear ()
-        if self .show_external_links and not extract_links_only and backend_filter_mode !='archive':
-            self .external_log_output .append ("🔗 External Links Found:")
+        self.file_progress_label.setText("");
+        self.cancellation_event.clear();
+        self.active_futures = []
+        self.total_posts_to_process = 0;
+        self.processed_posts_count = 0;
+        self.download_counter = 0;
+        self.skip_counter = 0
+        self.progress_label.setText(self._tr("progress_initializing_text", "Progress: Initializing..."))
 
-        self .file_progress_label .setText ("");self .cancellation_event .clear ();self .active_futures =[]
-        self .total_posts_to_process =0 ;self .processed_posts_count =0 ;self .download_counter =0 ;self .skip_counter =0 
-        self .progress_label .setText (self ._tr ("progress_initializing_text","Progress: Initializing..."))
-
-        self .retryable_failed_files_info .clear ()
-        self .permanently_failed_files_for_dialog .clear ()
+        self.retryable_failed_files_info.clear()
+        self.permanently_failed_files_for_dialog.clear()
         self._update_error_button_count()
 
-        manga_date_file_counter_ref_for_thread =None 
-        if manga_mode and self .manga_filename_style ==STYLE_DATE_BASED and not extract_links_only :
-            manga_date_file_counter_ref_for_thread =None 
-            self .log_signal .emit (f"ℹ️ Manga Date Mode: File counter will be initialized by the download thread.")
+        manga_date_file_counter_ref_for_thread = None
+        if manga_mode and self.manga_filename_style == STYLE_DATE_BASED and not extract_links_only:
+            start_val = 1
+            if is_restore and manga_counters_for_restore:
+                start_val = manga_counters_for_restore.get('date_based', 1)
+            self.log_signal.emit(f"ℹ️ Manga Date Mode: Initializing shared file counter starting at {start_val}.")
+            manga_date_file_counter_ref_for_thread = [start_val, threading.Lock()]
 
-        manga_global_file_counter_ref_for_thread =None 
-        if manga_mode and self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING and not extract_links_only :
-            manga_global_file_counter_ref_for_thread =None 
-            self .log_signal .emit (f"ℹ️ Manga Title+GlobalNum Mode: File counter will be initialized by the download thread (starts at 1).")
+        manga_global_file_counter_ref_for_thread = None
+        if manga_mode and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING and not extract_links_only:
+            start_val = 1
+            if is_restore and manga_counters_for_restore:
+                start_val = manga_counters_for_restore.get('global_numbering', 1)
+            self.log_signal.emit(f"ℹ️ Manga Title+GlobalNum Mode: Initializing shared file counter starting at {start_val}.")
+            manga_global_file_counter_ref_for_thread = [start_val, threading.Lock()]
 
-        effective_num_post_workers =1 
+        effective_num_post_workers = 1
+        effective_num_file_threads_per_worker = 1
 
-        effective_num_file_threads_per_worker =1 
+        if post_id_from_url:
+            if use_multithreading_enabled_by_checkbox:
+                effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
+        else:
+            if manga_mode and self.manga_filename_style == STYLE_DATE_BASED:
+                effective_num_post_workers = 1
+            elif manga_mode and self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING:
+                effective_num_post_workers = 1
+                effective_num_file_threads_per_worker = 1
+            elif use_multithreading_enabled_by_checkbox:
+                effective_num_post_workers = max(1, min(num_threads_from_gui, MAX_THREADS))
+                effective_num_file_threads_per_worker = 1
 
-        if post_id_from_url :
-            if use_multithreading_enabled_by_checkbox :
-                effective_num_file_threads_per_worker =max (1 ,min (num_threads_from_gui ,MAX_FILE_THREADS_PER_POST_OR_WORKER ))
-        else :
-            if manga_mode and self .manga_filename_style ==STYLE_DATE_BASED :
-                effective_num_post_workers =1 
-            elif manga_mode and self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
-                effective_num_post_workers =1 
-                effective_num_file_threads_per_worker =1 
-            elif use_multithreading_enabled_by_checkbox :
-                effective_num_post_workers =max (1 ,min (num_threads_from_gui ,MAX_THREADS ))
-                effective_num_file_threads_per_worker =1 
+        if not extract_links_only: log_messages.append(f"    Save Location: {effective_output_dir_for_run}")
 
-        if not extract_links_only :log_messages .append (f"    Save Location: {effective_output_dir_for_run }")
+        if post_id_from_url:
+            log_messages.append(f"    Mode: Single Post")
+            log_messages.append(f"      ↳ File Downloads: Up to {effective_num_file_threads_per_worker} concurrent file(s)")
+        else:
+            log_messages.append(f"    Mode: Creator Feed")
+            log_messages.append(f"    Post Processing: {'Multi-threaded (' + str(effective_num_post_workers) + ' workers)' if effective_num_post_workers > 1 else 'Single-threaded (1 worker)'}")
+            log_messages.append(f"      ↳ File Downloads per Worker: Up to {effective_num_file_threads_per_worker} concurrent file(s)")
+            pr_log = "All"
+            if start_page or end_page:
+                pr_log = f"{f'From {start_page} ' if start_page else ''}{'to ' if start_page and end_page else ''}{f'{end_page}' if end_page else (f'Up to {end_page}' if end_page else (f'From {start_page}' if start_page else 'Specific Range'))}".strip()
 
-        if post_id_from_url :
-            log_messages .append (f"    Mode: Single Post")
-            log_messages .append (f"      ↳ File Downloads: Up to {effective_num_file_threads_per_worker } concurrent file(s)")
-        else :
-            log_messages .append (f"    Mode: Creator Feed")
-            log_messages .append (f"    Post Processing: {'Multi-threaded ('+str (effective_num_post_workers )+' workers)'if effective_num_post_workers >1 else 'Single-threaded (1 worker)'}")
-            log_messages .append (f"      ↳ File Downloads per Worker: Up to {effective_num_file_threads_per_worker } concurrent file(s)")
-            pr_log ="All"
-            if start_page or end_page :
-                pr_log =f"{f'From {start_page } 'if start_page else ''}{'to 'if start_page and end_page else ''}{f'{end_page }'if end_page else (f'Up to {end_page }'if end_page else (f'From {start_page }'if start_page else 'Specific Range'))}".strip ()
+            if manga_mode:
+                log_messages.append(f"    Page Range: {pr_log if pr_log else 'All'} (Manga Mode - Oldest Posts Processed First within range)")
+            else:
+                log_messages.append(f"    Page Range: {pr_log if pr_log else 'All'}")
 
-            if manga_mode :
-                log_messages .append (f"    Page Range: {pr_log if pr_log else 'All'} (Manga Mode - Oldest Posts Processed First within range)")
-            else :
-                log_messages .append (f"    Page Range: {pr_log if pr_log else 'All'}")
-
-
-        if not extract_links_only :
-            log_messages .append (f"    Subfolders: {'Enabled'if use_subfolders else 'Disabled'}")
+        if not extract_links_only:
+            log_messages.append(f"    Subfolders: {'Enabled' if use_subfolders else 'Disabled'}")
             if use_subfolders and self.use_subfolder_per_post_checkbox.isChecked():
                 use_date_prefix = self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False
-                log_messages.append(f"      ↳ Date Prefix for Post Subfolders: {'Enabled' if use_date_prefix else 'Disabled'}")                    
-            if use_subfolders :
-                if custom_folder_name_cleaned :log_messages .append (f"    Custom Folder (Post): '{custom_folder_name_cleaned }'")
-            if actual_filters_to_use_for_run :
-                log_messages .append (f"    Character Filters: {', '.join (item ['name']for item in actual_filters_to_use_for_run )}")
-                log_messages .append (f"      ↳ Char Filter Scope: {current_char_filter_scope .capitalize ()}")
-            elif use_subfolders :
-                log_messages .append (f"    Folder Naming: Automatic (based on title/known names)")
-
+                log_messages.append(f"      ↳ Date Prefix for Post Subfolders: {'Enabled' if use_date_prefix else 'Disabled'}")
+            if use_subfolders:
+                if custom_folder_name_cleaned: log_messages.append(f"    Custom Folder (Post): '{custom_folder_name_cleaned}'")
+            if actual_filters_to_use_for_run:
+                log_messages.append(f"    Character Filters: {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
+                log_messages.append(f"      ↳ Char Filter Scope: {current_char_filter_scope.capitalize()}")
+            elif use_subfolders:
+                log_messages.append(f"    Folder Naming: Automatic (based on title/known names)")
 
             keep_duplicates = self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False
             log_messages.extend([
                 f"    File Type Filter: {user_selected_filter_text} (Backend processing as: {backend_filter_mode})",
                 f"    Keep In-Post Duplicates: {'Enabled' if keep_duplicates else 'Disabled'}",
                 f"    Skip Archives: {'.zip' if effective_skip_zip else ''}{', ' if effective_skip_zip and effective_skip_rar else ''}{'.rar' if effective_skip_rar else ''}{'None (Archive Mode)' if backend_filter_mode == 'archive' else ('None' if not (effective_skip_zip or effective_skip_rar) else '')}",
-                f"    Skip Words Scope: {current_skip_words_scope .capitalize ()}",
-                f"    Remove Words from Filename: {', '.join (remove_from_filename_words_list )if remove_from_filename_words_list else 'None'}",
-                f"    Compress Images: {'Enabled'if compress_images else 'Disabled'}",
-                f"    Thumbnails Only: {'Enabled'if download_thumbnails else 'Disabled'}"
+                f"    Skip Words Scope: {current_skip_words_scope.capitalize()}",
+                f"    Remove Words from Filename: {', '.join(remove_from_filename_words_list) if remove_from_filename_words_list else 'None'}",
+                f"    Compress Images: {'Enabled' if compress_images else 'Disabled'}",
+                f"    Thumbnails Only: {'Enabled' if download_thumbnails else 'Disabled'}"
             ])
-            log_messages .append (f"    Scan Post Content for Images: {'Enabled'if scan_content_for_images else 'Disabled'}")
-        else :
-            log_messages .append (f"    Mode: Extracting Links Only")
+            log_messages.append(f"    Scan Post Content for Images: {'Enabled' if scan_content_for_images else 'Disabled'}")
+        else:
+            log_messages.append(f"    Mode: Extracting Links Only")
 
-        log_messages .append (f"    Show External Links: {'Enabled'if self .show_external_links and not extract_links_only and backend_filter_mode !='archive'else 'Disabled'}")
+        log_messages.append(f"    Show External Links: {'Enabled' if self.show_external_links and not extract_links_only and backend_filter_mode != 'archive' else 'Disabled'}")
 
-        if manga_mode :
-            log_messages .append (f"    Manga Mode (File Renaming by Post Title): Enabled")
-            log_messages .append (f"      ↳ Manga Filename Style: {'Post Title Based'if self .manga_filename_style ==STYLE_POST_TITLE else 'Original File Name'}")
-            if actual_filters_to_use_for_run :
-                log_messages .append (f"      ↳ Manga Character Filter (for naming/folder): {', '.join (item ['name']for item in actual_filters_to_use_for_run )}")
-            log_messages .append (f"      ↳ Manga Duplicates: Will be renamed with numeric suffix if names clash (e.g., _1, _2).")
+        if manga_mode:
+            log_messages.append(f"    Manga Mode (File Renaming by Post Title): Enabled")
+            log_messages.append(f"      ↳ Manga Filename Style: {'Post Title Based' if self.manga_filename_style == STYLE_POST_TITLE else 'Original File Name'}")
+            if actual_filters_to_use_for_run:
+                log_messages.append(f"      ↳ Manga Character Filter (for naming/folder): {', '.join(item['name'] for item in actual_filters_to_use_for_run)}")
+            log_messages.append(f"      ↳ Manga Duplicates: Will be renamed with numeric suffix if names clash (e.g., _1, _2).")
 
-        log_messages .append (f"    Use Cookie ('cookies.txt'): {'Enabled'if use_cookie_from_checkbox else 'Disabled'}")
-        if use_cookie_from_checkbox and cookie_text_from_input :
-            log_messages .append (f"      ↳ Cookie Text Provided: Yes (length: {len (cookie_text_from_input )})")
-        elif use_cookie_from_checkbox and selected_cookie_file_path_for_backend :
-            log_messages .append (f"      ↳ Cookie File Selected: {os .path .basename (selected_cookie_file_path_for_backend )}")
-        should_use_multithreading_for_posts =use_multithreading_enabled_by_checkbox and not post_id_from_url 
-        if manga_mode and (self .manga_filename_style ==STYLE_DATE_BASED or self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING )and not post_id_from_url :
-            enforced_by_style ="Date Mode"if self .manga_filename_style ==STYLE_DATE_BASED else "Title+GlobalNum Mode"
-            should_use_multithreading_for_posts =False 
-            log_messages .append (f"    Threading: Single-threaded (posts) - Enforced by Manga {enforced_by_style } (Actual workers: {effective_num_post_workers if effective_num_post_workers >1 else 1 })")
-        else :
-            log_messages .append (f"    Threading: {'Multi-threaded (posts)'if should_use_multithreading_for_posts else 'Single-threaded (posts)'}")
-        if should_use_multithreading_for_posts :
-            log_messages .append (f"    Number of Post Worker Threads: {effective_num_post_workers }")
-        log_messages .append ("="*40 )
-        for msg in log_messages :self .log_signal .emit (msg )
+        log_messages.append(f"    Use Cookie ('cookies.txt'): {'Enabled' if use_cookie_from_checkbox else 'Disabled'}")
+        if use_cookie_from_checkbox and cookie_text_from_input:
+            log_messages.append(f"      ↳ Cookie Text Provided: Yes (length: {len(cookie_text_from_input)})")
+        elif use_cookie_from_checkbox and selected_cookie_file_path_for_backend:
+            log_messages.append(f"      ↳ Cookie File Selected: {os.path.basename(selected_cookie_file_path_for_backend)}")
+        should_use_multithreading_for_posts = use_multithreading_enabled_by_checkbox and not post_id_from_url
+        if manga_mode and (self.manga_filename_style == STYLE_DATE_BASED or self.manga_filename_style == STYLE_POST_TITLE_GLOBAL_NUMBERING) and not post_id_from_url:
+            enforced_by_style = "Date Mode" if self.manga_filename_style == STYLE_DATE_BASED else "Title+GlobalNum Mode"
+            should_use_multithreading_for_posts = False
+            log_messages.append(f"    Threading: Single-threaded (posts) - Enforced by Manga {enforced_by_style} (Actual workers: {effective_num_post_workers if effective_num_post_workers > 1 else 1})")
+        else:
+            log_messages.append(f"    Threading: {'Multi-threaded (posts)' if should_use_multithreading_for_posts else 'Single-threaded (posts)'}")
+        if should_use_multithreading_for_posts:
+            log_messages.append(f"    Number of Post Worker Threads: {effective_num_post_workers}")
+        log_messages.append("=" * 40)
+        for msg in log_messages: self.log_signal.emit(msg)
 
-        self .set_ui_enabled (False )
-
+        self.set_ui_enabled(False)
 
         from src.config.constants import FOLDER_NAME_STOP_WORDS
 
-
-        args_template ={
-        'api_url_input':api_url ,
-        'download_root':effective_output_dir_for_run ,
-        'output_dir':effective_output_dir_for_run ,
-        'known_names':list (KNOWN_NAMES ),
-        'known_names_copy':list (KNOWN_NAMES ),
-        'filter_character_list':actual_filters_to_use_for_run ,
-        'filter_mode':backend_filter_mode ,
-        'text_only_scope': text_only_scope_for_run,
-        'text_export_format': export_format_for_run,
-        'single_pdf_mode': self.single_pdf_setting,
-        'skip_zip':effective_skip_zip ,
-        'skip_rar':effective_skip_rar ,
-        'use_subfolders':use_subfolders ,
-        'use_post_subfolders':use_post_subfolders ,
-        'compress_images':compress_images ,
-        'download_thumbnails':download_thumbnails ,
-        'service':service ,
-        'user_id':user_id ,
-        'downloaded_files':self .downloaded_files ,
-        'downloaded_files_lock':self .downloaded_files_lock ,
-        'downloaded_file_hashes':self .downloaded_file_hashes ,
-        'downloaded_file_hashes_lock':self .downloaded_file_hashes_lock ,
-        'skip_words_list':skip_words_list ,
-        'skip_words_scope':current_skip_words_scope ,
-        'remove_from_filename_words_list':remove_from_filename_words_list ,
-        'char_filter_scope':current_char_filter_scope ,
-        'show_external_links':self .show_external_links ,
-        'extract_links_only':extract_links_only ,
-        'start_page':start_page ,
-        'end_page':end_page ,
-        'target_post_id_from_initial_url':post_id_from_url ,
-        'custom_folder_name':custom_folder_name_cleaned ,
-        'manga_mode_active':manga_mode ,
-        'unwanted_keywords':FOLDER_NAME_STOP_WORDS ,
-        'cancellation_event':self .cancellation_event ,
-        'manga_date_prefix':manga_date_prefix_text ,
-        'dynamic_character_filter_holder':self .dynamic_character_filter_holder ,
-        'pause_event':self .pause_event ,
-        'scan_content_for_images':scan_content_for_images ,
-        'manga_filename_style':self .manga_filename_style ,
-        'num_file_threads_for_worker':effective_num_file_threads_per_worker ,
-        'manga_date_file_counter_ref':manga_date_file_counter_ref_for_thread ,
-        'allow_multipart_download':allow_multipart ,
-        'cookie_text':cookie_text_from_input ,
-        'selected_cookie_file':selected_cookie_file_path_for_backend ,
-        'manga_global_file_counter_ref':manga_global_file_counter_ref_for_thread ,
-        'app_base_dir':app_base_dir_for_cookies ,
-        'project_root_dir': self.app_base_dir,
-        'use_cookie':use_cookie_for_this_run ,
-        'session_file_path': self.session_file_path,
-        'session_lock': self.session_lock,
-        'creator_download_folder_ignore_words':creator_folder_ignore_words_for_run ,
-        'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
-        'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False,        
-        'skip_current_file_flag': None,
+        args_template = {
+            'api_url_input': api_url,
+            'download_root': effective_output_dir_for_run,
+            'output_dir': effective_output_dir_for_run,
+            'known_names': list(KNOWN_NAMES),
+            'known_names_copy': list(KNOWN_NAMES),
+            'filter_character_list': actual_filters_to_use_for_run,
+            'filter_mode': backend_filter_mode,
+            'text_only_scope': text_only_scope_for_run,
+            'text_export_format': export_format_for_run,
+            'single_pdf_mode': self.single_pdf_setting,
+            'skip_zip': effective_skip_zip,
+            'skip_rar': effective_skip_rar,
+            'use_subfolders': use_subfolders,
+            'use_post_subfolders': use_post_subfolders,
+            'compress_images': compress_images,
+            'download_thumbnails': download_thumbnails,
+            'service': service,
+            'user_id': user_id,
+            'downloaded_files': self.downloaded_files,
+            'downloaded_files_lock': self.downloaded_files_lock,
+            'downloaded_file_hashes': self.downloaded_file_hashes,
+            'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
+            'skip_words_list': skip_words_list,
+            'skip_words_scope': current_skip_words_scope,
+            'remove_from_filename_words_list': remove_from_filename_words_list,
+            'char_filter_scope': current_char_filter_scope,
+            'show_external_links': self.show_external_links,
+            'extract_links_only': extract_links_only,
+            'start_page': start_page,
+            'end_page': end_page,
+            'target_post_id_from_initial_url': post_id_from_url,
+            'custom_folder_name': custom_folder_name_cleaned,
+            'manga_mode_active': manga_mode,
+            'unwanted_keywords': FOLDER_NAME_STOP_WORDS,
+            'cancellation_event': self.cancellation_event,
+            'manga_date_prefix': manga_date_prefix_text,
+            'dynamic_character_filter_holder': self.dynamic_character_filter_holder,
+            'pause_event': self.pause_event,
+            'scan_content_for_images': scan_content_for_images,
+            'manga_filename_style': self.manga_filename_style,
+            'num_file_threads_for_worker': effective_num_file_threads_per_worker,
+            'manga_date_file_counter_ref': manga_date_file_counter_ref_for_thread,
+            'allow_multipart_download': allow_multipart,
+            'cookie_text': cookie_text_from_input,
+            'selected_cookie_file': selected_cookie_file_path_for_backend,
+            'manga_global_file_counter_ref': manga_global_file_counter_ref_for_thread,
+            'app_base_dir': app_base_dir_for_cookies,
+            'project_root_dir': self.app_base_dir,
+            'use_cookie': use_cookie_for_this_run,
+            'session_file_path': self.session_file_path,
+            'session_lock': self.session_lock,
+            'creator_download_folder_ignore_words': creator_folder_ignore_words_for_run,
+            'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
+            'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False,
+            'skip_current_file_flag': None,
+            'processed_post_ids': processed_post_ids_for_restore,
         }
 
-        args_template ['override_output_dir']=override_output_dir 
-        try :
-            if should_use_multithreading_for_posts :
-                self .log_signal .emit (f"    Initializing multi-threaded {current_mode_log_text .lower ()} with {effective_num_post_workers } post workers...")
-                args_template ['emitter']=self .worker_to_gui_queue 
-                self .start_multi_threaded_download (num_post_workers =effective_num_post_workers ,**args_template )
-            else :
-                self .log_signal .emit (f"    Initializing single-threaded {'link extraction'if extract_links_only else 'download'}...")
-                dt_expected_keys =[
-                'api_url_input','output_dir','known_names_copy','cancellation_event',
-                'filter_character_list','filter_mode','skip_zip','skip_rar',
-                'use_subfolders','use_post_subfolders','custom_folder_name',
-                'compress_images','download_thumbnails','service','user_id',
-                'downloaded_files','downloaded_file_hashes','pause_event','remove_from_filename_words_list',
-                'downloaded_files_lock','downloaded_file_hashes_lock','dynamic_character_filter_holder', 'session_file_path',
-                'session_lock',
-                'skip_words_list','skip_words_scope','char_filter_scope',
-                'show_external_links','extract_links_only','num_file_threads_for_worker',
-                'start_page','end_page','target_post_id_from_initial_url',
-                'manga_date_file_counter_ref',
-                'manga_global_file_counter_ref','manga_date_prefix',
-                'manga_mode_active','unwanted_keywords','manga_filename_style','scan_content_for_images',
-                'allow_multipart_download','use_cookie','cookie_text','app_base_dir','selected_cookie_file','override_output_dir','project_root_dir',
-                'text_only_scope', 'text_export_format',
-                'single_pdf_mode'
+        args_template['override_output_dir'] = override_output_dir
+        try:
+            if should_use_multithreading_for_posts:
+                self.log_signal.emit(f"    Initializing multi-threaded {current_mode_log_text.lower()} with {effective_num_post_workers} post workers...")
+                args_template['emitter'] = self.worker_to_gui_queue
+                self.start_multi_threaded_download(num_post_workers=effective_num_post_workers, **args_template)
+            else:
+                self.log_signal.emit(f"    Initializing single-threaded {'link extraction' if extract_links_only else 'download'}...")
+                dt_expected_keys = [
+                    'api_url_input', 'output_dir', 'known_names_copy', 'cancellation_event',
+                    'filter_character_list', 'filter_mode', 'skip_zip', 'skip_rar',
+                    'use_subfolders', 'use_post_subfolders', 'custom_folder_name',
+                    'compress_images', 'download_thumbnails', 'service', 'user_id',
+                    'downloaded_files', 'downloaded_file_hashes', 'pause_event', 'remove_from_filename_words_list',
+                    'downloaded_files_lock', 'downloaded_file_hashes_lock', 'dynamic_character_filter_holder', 'session_file_path',
+                    'session_lock',
+                    'skip_words_list', 'skip_words_scope', 'char_filter_scope',
+                    'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
+                    'start_page', 'end_page', 'target_post_id_from_initial_url',
+                    'manga_date_file_counter_ref',
+                    'manga_global_file_counter_ref', 'manga_date_prefix',
+                    'manga_mode_active', 'unwanted_keywords', 'manga_filename_style', 'scan_content_for_images',
+                    'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', 'override_output_dir', 'project_root_dir',
+                    'text_only_scope', 'text_export_format',
+                    'single_pdf_mode',
+                    'processed_post_ids'
                 ]
-                args_template ['skip_current_file_flag']=None 
-                single_thread_args ={key :args_template [key ]for key in dt_expected_keys if key in args_template }
-                self .start_single_threaded_download (**single_thread_args )
-        except Exception as e :
-            self._update_button_states_and_connections() # Re-enable UI if start fails           
-            self .log_signal .emit (f"❌ CRITICAL ERROR preparing download: {e }\n{traceback .format_exc ()}")
-            QMessageBox .critical (self ,"Start Error",f"Failed to start process:\n{e }")
-            self .download_finished (0 ,0 ,False ,[])
-            if self .pause_event :self .pause_event .clear ()
-            self .is_paused =False 
-        return True 
+                args_template['skip_current_file_flag'] = None
+                single_thread_args = {key: args_template[key] for key in dt_expected_keys if key in args_template}
+                self.start_single_threaded_download(**single_thread_args)
+        except Exception as e:
+            self._update_button_states_and_connections()
+            self.log_signal.emit(f"❌ CRITICAL ERROR preparing download: {e}\n{traceback.format_exc()}")
+            QMessageBox.critical(self, "Start Error", f"Failed to start process:\n{e}")
+            self.download_finished(0, 0, False, [])
+            if self.pause_event: self.pause_event.clear()
+            self.is_paused = False
+        return True
 
     def restore_download(self):
         """Initiates the download restoration process."""
@@ -3844,10 +3213,19 @@ class DownloaderApp (QWidget ):
             self._clear_session_and_reset_ui()
             return
 
-        self.log_signal.emit("🔄 Restoring download session...")
-        # The main start_download function now handles the restore logic
-        self.is_restore_pending = True # Set state to indicate restore is in progress       
-        self.start_download(is_restore=True)
+        self.log_signal.emit("🔄 Preparing to restore download session...")
+        
+        settings = self.interrupted_session_data.get("ui_settings", {})
+        restore_url = settings.get("api_url")
+        restore_dir = settings.get("output_dir")
+
+        if not restore_url:
+            QMessageBox.critical(self, "Restore Error", "Session file is corrupt. Cannot restore because the URL is missing.")
+            self._clear_session_and_reset_ui()
+            return
+            
+        self.is_restore_pending = True
+        self.start_download(direct_api_url=restore_url, override_output_dir=restore_dir, is_restore=True)
 
     def start_single_threaded_download (self ,**kwargs ):
         global BackendDownloadThread 
@@ -3999,36 +3377,60 @@ class DownloaderApp (QWidget ):
         self._update_manga_filename_style_button_text()
         self._update_multipart_toggle_button_text()
 
-    def start_multi_threaded_download (self ,num_post_workers ,**kwargs ):
-        global PostProcessorWorker 
-        if self .thread_pool is None :
-            if self .pause_event :self .pause_event .clear ()
-            self .is_paused =False 
-            self .thread_pool =ThreadPoolExecutor (max_workers =num_post_workers ,thread_name_prefix ='PostWorker_')
-
-        self .active_futures =[]
-        self .processed_posts_count =0 ;self .total_posts_to_process =0 ;self .download_counter =0 ;self .skip_counter =0 
-        self .all_kept_original_filenames =[]
-        self .is_fetcher_thread_running =True 
-
-        fetcher_thread =threading .Thread (
-        target =self ._fetch_and_queue_posts ,
-        args =(kwargs ['api_url_input'],kwargs ,num_post_workers ),
-        daemon =True ,
-        name ="PostFetcher"
-        )
-        fetcher_thread .start ()
-        self .log_signal .emit (f"✅ Post fetcher thread started. {num_post_workers } post worker threads initializing...")
-        self._update_button_states_and_connections() # Update buttons after fetcher thread starts
-
-    def _fetch_and_queue_posts(self, api_url_input_for_fetcher, worker_args_template, num_post_workers):
+    def start_multi_threaded_download(self, num_post_workers, **kwargs):
         """
-        Fetches post data and submits tasks to the pool. It does NOT wait for completion.
+        Initializes and starts the multi-threaded download process.
+        This version bundles arguments into a dictionary to prevent TypeErrors.
+        """
+        global PostProcessorWorker
+        if self.thread_pool is None:
+            if self.pause_event: self.pause_event.clear()
+            self.is_paused = False
+            self.thread_pool = ThreadPoolExecutor(max_workers=num_post_workers, thread_name_prefix='PostWorker_')
+
+        self.active_futures = []
+        self.processed_posts_count = 0; self.total_posts_to_process = 0; self.download_counter = 0; self.skip_counter = 0
+        self.all_kept_original_filenames = []
+        self.is_fetcher_thread_running = True
+
+        # --- START OF FIX ---
+        # Bundle all arguments for the fetcher thread into a single dictionary
+        # to ensure the correct number of arguments are passed.
+        fetcher_thread_args = {
+            'api_url': kwargs.get('api_url_input'),
+            'worker_args_template': kwargs,
+            'num_post_workers': num_post_workers,
+            'processed_post_ids': kwargs.get('processed_post_ids', [])
+        }
+
+        fetcher_thread = threading.Thread(
+            target=self._fetch_and_queue_posts,
+            args=(fetcher_thread_args,),  # Pass the single dictionary as an argument
+            daemon=True,
+            name="PostFetcher"
+        )
+        # --- END OF FIX ---
+        
+        fetcher_thread.start()
+        self.log_signal.emit(f"✅ Post fetcher thread started. {num_post_workers} post worker threads initializing...")
+        self._update_button_states_and_connections()
+
+    def _fetch_and_queue_posts(self, fetcher_args):
+        """
+        Fetches post data and submits tasks to the pool.
+        This version unpacks arguments from a single dictionary.
         """
         global PostProcessorWorker, download_from_api
+
+        # --- START OF FIX ---
+        # Unpack arguments from the dictionary passed by the thread
+        api_url_input_for_fetcher = fetcher_args['api_url']
+        worker_args_template = fetcher_args['worker_args_template']
+        num_post_workers = fetcher_args['num_post_workers']
+        processed_post_ids = fetcher_args['processed_post_ids']
+        # --- END OF FIX ---
         
         try:
-            # This section remains the same as before
             post_generator = download_from_api(
                 api_url_input_for_fetcher,
                 logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"),
@@ -4041,7 +3443,8 @@ class DownloaderApp (QWidget ):
                 cookie_text=worker_args_template.get('cookie_text'),
                 selected_cookie_file=worker_args_template.get('selected_cookie_file'),
                 app_base_dir=worker_args_template.get('app_base_dir'),
-                manga_filename_style_for_sort_check=worker_args_template.get('manga_filename_style')
+                manga_filename_style_for_sort_check=worker_args_template.get('manga_filename_style'),
+                processed_post_ids=processed_post_ids
             )
 
             ppw_expected_keys = [
@@ -4058,7 +3461,8 @@ class DownloaderApp (QWidget ):
                 'manga_mode_active','manga_filename_style','manga_date_prefix','text_only_scope',
                 'text_export_format', 'single_pdf_mode',
                 'use_date_prefix_for_subfolder','keep_in_post_duplicates','manga_global_file_counter_ref',
-                'creator_download_folder_ignore_words','session_file_path','project_root_dir','session_lock'
+                'creator_download_folder_ignore_words','session_file_path','project_root_dir','session_lock',
+                'processed_post_ids' # This key was missing
             ]
             
             num_file_dl_threads_for_each_worker = worker_args_template.get('num_file_threads_for_worker', 1)
@@ -4076,7 +3480,6 @@ class DownloaderApp (QWidget ):
         except Exception as e:
             self.log_signal.emit(f"❌ Error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
         finally:
-            # The fetcher's only job is to mark itself as done.
             self.is_fetcher_thread_running = False
             self.log_signal.emit("ℹ️ Post fetcher thread has finished submitting tasks.")
 
@@ -4098,17 +3501,20 @@ class DownloaderApp (QWidget ):
                 self.download_counter += downloaded
                 self.skip_counter += skipped
 
-            # Other result handling can go here if needed
+            if permanent:
+                self.permanently_failed_files_for_dialog.extend(permanent)
+                self._update_error_button_count()  # <-- THIS IS THE FIX
+
+            # Other result handling
             if history_data: self._add_to_history_candidates(history_data)
-            if permanent: self.permanently_failed_files_for_dialog.extend(permanent)
+            # You can add handling for 'retryable' here if needed in the future
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
         except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_worker_result: {e}\n{traceback.format_exc(limit=2)}")
         
-        # THE CRITICAL CHECK:
-        # Is the fetcher thread done AND have we processed all the tasks it submitted?
+        # Check if all submitted tasks are complete
         if not self.is_fetcher_thread_running and self.processed_posts_count >= self.total_posts_to_process:
             self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
             self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)

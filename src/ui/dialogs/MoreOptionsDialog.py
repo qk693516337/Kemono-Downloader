@@ -2,6 +2,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QRadioButton, QDialogButtonBox, QButtonGroup, QLabel, QComboBox, QHBoxLayout, QCheckBox
 )
 from PyQt5.QtCore import Qt
+from ...utils.resolution import get_dark_theme
 
 class MoreOptionsDialog(QDialog):
     """
@@ -12,6 +13,7 @@ class MoreOptionsDialog(QDialog):
 
     def __init__(self, parent=None, current_scope=None, current_format=None, single_pdf_checked=False):
         super().__init__(parent)
+        self.parent_app = parent
         self.setWindowTitle("More Options")
         self.setMinimumWidth(350)
 
@@ -62,7 +64,7 @@ class MoreOptionsDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
         self.setLayout(layout)
-
+        self._apply_theme()
     def update_single_pdf_checkbox_state(self, text):
         """Enable the Single PDF checkbox only if the format is PDF."""
         is_pdf = (text.upper() == "PDF")
@@ -81,3 +83,14 @@ class MoreOptionsDialog(QDialog):
     def get_single_pdf_state(self):
         """Returns the state of the Single PDF checkbox."""
         return self.single_pdf_checkbox.isChecked() and self.single_pdf_checkbox.isEnabled()
+
+    def _apply_theme(self):
+        """Applies the current theme from the parent application."""
+        if self.parent_app and self.parent_app.current_theme == "dark":
+            # Get the scale factor from the parent app
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            # Call the imported function with the correct scale
+            self.setStyleSheet(get_dark_theme(scale))
+        else:
+            # Explicitly set a blank stylesheet for light mode
+            self.setStyleSheet("")

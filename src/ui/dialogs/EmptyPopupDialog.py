@@ -21,6 +21,7 @@ from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
 from ...core.api_client import download_from_api
 from ...utils.network_utils import extract_post_info, prepare_cookies_for_request
+from ...utils.resolution import get_dark_theme
 
 
 class PostsFetcherThread (QThread ):
@@ -128,6 +129,7 @@ class PostsFetcherThread (QThread ):
         else :
             self .status_update .emit (self .parent_dialog ._tr ("post_fetch_finished_status","Finished fetching posts for selected creators."))
         self .finished_signal .emit ()
+
 
 class EmptyPopupDialog (QDialog ):
     """A simple empty popup dialog."""
@@ -289,9 +291,14 @@ class EmptyPopupDialog (QDialog ):
 
         self ._retranslate_ui ()
 
-        if self .parent_app and hasattr (self .parent_app ,'get_dark_theme')and self .parent_app .current_theme =="dark":
-            self .setStyleSheet (self .parent_app .get_dark_theme ())
-
+        if self.parent_app and self.parent_app.current_theme == "dark":
+            # Get the scale factor from the parent app
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            # Call the imported function with the correct scale
+            self.setStyleSheet(get_dark_theme(scale))
+        else:
+            # Explicitly set a blank stylesheet for light mode
+            self.setStyleSheet("")
 
         self .resize (int ((self .original_size .width ()+50 )*scale_factor ),int ((self .original_size .height ()+100 )*scale_factor ))
 

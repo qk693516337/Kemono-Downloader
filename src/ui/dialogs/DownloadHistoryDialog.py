@@ -13,6 +13,7 @@ from PyQt5.QtWidgets import (
 # --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
+from ...utils.resolution import get_dark_theme
 
 
 class DownloadHistoryDialog (QDialog ):
@@ -23,7 +24,7 @@ class DownloadHistoryDialog (QDialog ):
         self .last_3_downloaded_entries =last_3_downloaded_entries 
         self .first_processed_entries =first_processed_entries 
         self .setModal (True )
-
+        self._apply_theme()
         # Patch missing creator_display_name and creator_name using parent_app.creator_name_cache if available
         creator_name_cache = getattr(parent_app, 'creator_name_cache', None)
         if creator_name_cache:
@@ -157,6 +158,14 @@ class DownloadHistoryDialog (QDialog ):
         if callable (get_translation )and self .parent_app :
             return get_translation (self .parent_app .current_selected_language ,key ,default_text )
         return default_text 
+
+    def _apply_theme(self):
+        """Applies the current theme from the parent application."""
+        if self.parent_app and self.parent_app.current_theme == "dark":
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            self.setStyleSheet(get_dark_theme(scale))
+        else:
+            self.setStyleSheet("QDialog { background-color: #f0f0f0; }")
 
     def _save_history_to_txt (self ):
         if not self .last_3_downloaded_entries and not self .first_processed_entries :

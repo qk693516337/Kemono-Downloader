@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
 # --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
+from ...utils.resolution import get_dark_theme
 from ...config.constants import (
     CONFIG_ORGANIZATION_NAME
 )
@@ -150,8 +151,9 @@ class TourDialog(QDialog):
 
     def _apply_theme(self):
         """Applies the current theme from the parent application."""
-        if self.parent_app and hasattr(self.parent_app, 'get_dark_theme') and self.parent_app.current_theme == "dark":
-            self.setStyleSheet(self.parent_app.get_dark_theme())
+        if self.parent_app and self.parent_app.current_theme == "dark":
+            scale = getattr(self.parent_app, 'scale_factor', 1)
+            self.setStyleSheet(get_dark_theme(scale))
         else:
             self.setStyleSheet("QDialog { background-color: #f0f0f0; }")
 

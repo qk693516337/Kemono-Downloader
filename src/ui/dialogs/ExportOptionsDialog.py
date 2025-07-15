@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 from ...i18n.translator import get_translation
 # get_app_icon_object is defined in the main window module in this refactoring plan.
 from ..main_window import get_app_icon_object
-
+from ...utils.resolution import get_dark_theme
 
 class ExportOptionsDialog(QDialog):
     """

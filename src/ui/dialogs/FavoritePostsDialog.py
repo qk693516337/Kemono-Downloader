@@ -25,7 +25,7 @@ from ...utils.network_utils import prepare_cookies_for_request
 # Corrected Import: Import CookieHelpDialog directly from its own module
 from .CookieHelpDialog import CookieHelpDialog
 from ...core.api_client import download_from_api
-
+from ...utils.resolution import get_dark_theme
 
 class FavoritePostsFetcherThread (QThread ):
     """Worker thread to fetch favorite posts and creator names."""

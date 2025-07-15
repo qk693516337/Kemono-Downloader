@@ -16,7 +16,7 @@ from ...i18n.translator import get_translation
 from ..assets import get_app_icon_object 
 from ...utils.network_utils import prepare_cookies_for_request
 from .CookieHelpDialog import CookieHelpDialog
-
+from ...utils.resolution import get_dark_theme
 
 class FavoriteArtistsDialog (QDialog ):
     """Dialog to display and select favorite artists."""
