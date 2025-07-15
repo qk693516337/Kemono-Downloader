@@ -2667,69 +2667,43 @@ class DownloaderApp (QWidget ):
 
     def _handle_more_options_toggled(self, button, checked):
         """Shows the MoreOptionsDialog when the 'More' radio button is selected."""
-
-        # This block handles when the user clicks ON the "More" button.
         if button == self.radio_more and checked:
             current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
             current_format = self.text_export_format or 'pdf'
-
-            dialog = MoreOptionsDialog(
-                self,
-                current_scope=current_scope,
-                current_format=current_format,
-                single_pdf_checked=self.single_pdf_setting
-            )
+            
+            dialog = MoreOptionsDialog(self, current_scope=current_scope, current_format=current_format, single_pdf_checked=self.single_pdf_setting)
 
             if dialog.exec_() == QDialog.Accepted:
                 self.more_filter_scope = dialog.get_selected_scope()
                 self.text_export_format = dialog.get_selected_format()
                 self.single_pdf_setting = dialog.get_single_pdf_state()
 
-                # Define the variable based on the dialog's result
-                is_any_pdf_mode = (self.text_export_format == 'pdf')
-
-                # Update the radio button text to reflect the choice
                 scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
+                
                 format_display = f" ({self.text_export_format.upper()})"
                 if self.single_pdf_setting:
                     format_display = " (Single PDF)"
-                self.radio_more.setText(f"{scope_text}{format_display}")
-
-                # --- Logic to Disable/Enable Checkboxes ---
-                # Disable multithreading for ANY PDF export
-                if hasattr(self, 'use_multithreading_checkbox'):
-                    self.use_multithreading_checkbox.setEnabled(not is_any_pdf_mode)
-                    if is_any_pdf_mode:
+                    # --- NEW: Disable checkboxes if Single PDF is active ---
+                    if hasattr(self, 'use_multithreading_checkbox'):
                         self.use_multithreading_checkbox.setChecked(False)
-                    self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
-
-                # Also disable subfolders for the "Single PDF" case, as it doesn't apply
-                if hasattr(self, 'use_subfolders_checkbox'):
-                    self.use_subfolders_checkbox.setEnabled(not self.single_pdf_setting)
-                    if self.single_pdf_setting:
+                        self.use_multithreading_checkbox.setEnabled(False)
+                    if hasattr(self, 'use_subfolders_checkbox'):
                         self.use_subfolders_checkbox.setChecked(False)
+                        self.use_subfolders_checkbox.setEnabled(False)
+                else:
+                    # --- NEW: Re-enable checkboxes if Single PDF is not active ---
+                    if hasattr(self, 'use_multithreading_checkbox'): self.use_multithreading_checkbox.setEnabled(True)
+                    if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setEnabled(True)
 
+
+                self.radio_more.setText(f"{scope_text}{format_display}")
+                
                 self.log_signal.emit(f"ℹ️ 'More' filter scope set to: {scope_text}, Format: {self.text_export_format.upper()}")
                 self.log_signal.emit(f"ℹ️ Single PDF setting: {'Enabled' if self.single_pdf_setting else 'Disabled'}")
-                if is_any_pdf_mode:
-                    self.log_signal.emit("ℹ️ Multithreading automatically disabled for PDF export.")
             else:
-                # User cancelled the dialog, so revert to the 'All' option.
                 self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
                 self.radio_all.setChecked(True)
 
-        # This block handles when the user switches AWAY from "More" to another option.
-        elif button != self.radio_more and checked:
-            self.radio_more.setText("More")
-            self.more_filter_scope = None
-            self.single_pdf_setting = False
-            # Re-enable the checkboxes when switching to any non-PDF mode
-            if hasattr(self, 'use_multithreading_checkbox'):
-                self.use_multithreading_checkbox.setEnabled(True)
-                self._update_multithreading_for_date_mode()
-            if hasattr(self, 'use_subfolders_checkbox'):
-                self.use_subfolders_checkbox.setEnabled(True)
-    
     def delete_selected_character (self ):
         global KNOWN_NAMES 
         selected_items =self .character_list .selectedItems ()
@@ -3818,7 +3792,7 @@ class DownloaderApp (QWidget ):
                 'manga_global_file_counter_ref','manga_date_prefix',
                 'manga_mode_active','unwanted_keywords','manga_filename_style','scan_content_for_images',
                 'allow_multipart_download','use_cookie','cookie_text','app_base_dir','selected_cookie_file','override_output_dir','project_root_dir',
-                'text_only_scope', 'text_export_format',
+                'text_only_scope',
                 'single_pdf_mode'
                 ]
                 args_template ['skip_current_file_flag']=None 
