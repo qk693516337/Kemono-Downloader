@@ -56,6 +56,7 @@ from .dialogs.FavoriteArtistsDialog import FavoriteArtistsDialog
 from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
 from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from .dialogs.SinglePDF import create_single_pdf_from_content
+from .dialogs.SupportDialog import SupportDialog
 
 class DynamicFilterHolder:
     """A thread-safe class to hold and update character filters during a download."""
@@ -735,6 +736,8 @@ class DownloaderApp (QWidget ):
             self .history_button .clicked .connect (self ._show_download_history_dialog )
         if hasattr (self ,'error_btn'):
             self .error_btn .clicked .connect (self ._show_error_files_dialog )
+        if hasattr(self, 'support_button'): 
+            self.support_button.clicked.connect(self._show_support_dialog)
 
     def _on_character_input_changed_live (self ,text ):
         """
@@ -1311,6 +1314,11 @@ class DownloaderApp (QWidget ):
         dialog = FutureSettingsDialog(self)
         dialog.exec_()
 
+    def _show_support_dialog(self): 
+        """Shows the support/donation dialog."""
+        dialog = SupportDialog(self)
+        dialog.exec_()
+
     def _check_if_all_work_is_done(self):
         """
         Checks if the fetcher thread is done AND if all submitted tasks have been processed.
@@ -1732,7 +1740,7 @@ class DownloaderApp (QWidget ):
             if self .log_splitter :self .log_splitter .setSizes ([self .height ()//2 ,self .height ()//2 ])
             if self .main_log_output :self .main_log_output .setMinimumHeight (50 )
             if self .external_log_output :self .external_log_output .setMinimumHeight (50 )
-            self .log_signal .emit ("\n"+"="*40 +"\n🔗 External Links Log Enabled\n"+"="*40 )
+            self.log_signal.emit("ℹ️ External Links Log Enabled")
             if self .external_log_output :
                 self .external_log_output .clear ()
                 self .external_log_output .append ("🔗 External Links Found:")
@@ -1743,8 +1751,7 @@ class DownloaderApp (QWidget ):
             if self .main_log_output :self .main_log_output .setMinimumHeight (0 )
             if self .external_log_output :self .external_log_output .setMinimumHeight (0 )
             if self .external_log_output :self .external_log_output .clear ()
-            self .log_signal .emit ("\n"+"="*40 +"\n🔗 External Links Log Disabled\n"+"="*40 )
-
+            self.log_signal.emit("ℹ️ External Links Log Disabled")
 
     def _handle_filter_mode_change(self, button, checked):
         # If a button other than "More" is selected, reset the UI
@@ -1833,24 +1840,24 @@ class DownloaderApp (QWidget ):
                 self .log_signal .emit ("INTERNAL: _handle_filter_mode_change - Log cleared by _handle_filter_mode_change.")
 
             if self .main_log_output :self .main_log_output .setMinimumHeight (0 )
-            self .log_signal .emit ("="*20 +" Mode changed to: Only Links "+"="*20 )
+            self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
             self ._try_process_next_external_link ()
         elif is_only_archives :
             self .progress_log_label .setText ("📜 Progress Log (Archives Only):")
             if self .external_log_output :self .external_log_output .hide ()
             if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
             if self .main_log_output :self .main_log_output .clear ()
-            self .log_signal .emit ("="*20 +" Mode changed to: Only Archives "+"="*20 )
+            self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
         elif is_only_audio :
             self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:")+f" ({self ._tr ('filter_audio_radio','🎧 Only Audio')})")
             if self .external_log_output :self .external_log_output .hide ()
             if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
             if self .main_log_output :self .main_log_output .clear ()
-            self .log_signal .emit ("="*20 +f" Mode changed to: {self ._tr ('filter_audio_radio','🎧 Only Audio')} "+"="*20 )
+            self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
         else :
             self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
             self .update_external_links_setting (self .external_links_checkbox .isChecked ()if self .external_links_checkbox else False )
-            self .log_signal .emit (f"="*20 +f" Mode changed to: {button .text ()} "+"="*20 )
+            self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
 
 
         if is_only_links :

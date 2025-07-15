@@ -556,17 +556,34 @@ class PostProcessorWorker:
             if self._check_pause(f"Post-download hash check for '{api_original_filename}'"):
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
+            ### START OF CHANGE 1: INSERT THIS NEW BLOCK ###
+            with self.downloaded_file_hashes_lock:
+                if calculated_file_hash in self.downloaded_file_hashes:
+                    self.logger(f"   -> Skip (Content Duplicate): '{api_original_filename}' is identical to a file already downloaded. Discarding.")
+                    # Clean up the downloaded temporary file as it's a duplicate.
+                    if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                        try:
+                            os.remove(downloaded_part_file_path)
+                        except OSError:
+                            pass
+                    return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+
+            # If the content is unique, we proceed to save.
+            # Now, handle FILENAME collisions by adding a numeric suffix if needed.
             effective_save_folder = target_folder_path
-            # ... (History check and other pre-save logic would be here) ...
-        
-            final_filename_on_disk = filename_to_save_in_main_path # This may be adjusted by collision logic
-        
-            # This is a placeholder for your collision and final filename logic
-            # For example:
-            # final_filename_on_disk = self._handle_collisions(target_folder_path, filename_to_save_in_main_path)
-
-
+            base_name, extension = os.path.splitext(filename_to_save_in_main_path)
+            counter = 1
+            final_filename_on_disk = filename_to_save_in_main_path
             final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
+
+            while os.path.exists(final_save_path):
+                final_filename_on_disk = f"{base_name}_{counter}{extension}"
+                final_save_path = os.path.join(effective_save_folder, final_filename_on_disk)
+                counter += 1
+            
+            if counter > 1:
+                self.logger(f"   ⚠️ Filename collision: Saving as '{final_filename_on_disk}' instead.")
+
             try:
                 if data_to_write_io:
                     with open(final_save_path, 'wb') as f_out:
@@ -584,8 +601,10 @@ class PostProcessorWorker:
                     else:
                         raise FileNotFoundError(f"Original .part file not found for saving: {downloaded_part_file_path}")
                 
-                with self.downloaded_file_hashes_lock: self.downloaded_file_hashes.add(calculated_file_hash)
-                with self.downloaded_files_lock: self.downloaded_files.add(filename_to_save_in_main_path)
+                with self.downloaded_file_hashes_lock:
+                    self.downloaded_file_hashes.add(calculated_file_hash)
+                with self.downloaded_files_lock:
+                    self.downloaded_files.add(final_filename_on_disk)
                 
                 final_filename_saved_for_return = final_filename_on_disk
                 self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024 * 1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
