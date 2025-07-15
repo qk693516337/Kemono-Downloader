@@ -448,8 +448,25 @@ def setup_ui(main_app):
     # --- Final Assembly ---
     main_app.main_splitter.addWidget(left_scroll_area)
     main_app.main_splitter.addWidget(right_panel_widget)
-    main_app.main_splitter.setStretchFactor(0, 7)
-    main_app.main_splitter.setStretchFactor(1, 3)
+    
+    # --- START: Resolution-based Splitter Sizing ---
+    # Check screen resolution to set the initial splitter sizes
+    if screen:
+        resolution = screen.size()
+        if resolution.width() >= 1920 and resolution.height() >= 1200:
+            # For 1920x1200 and higher, set 40% left, 60% right
+            main_app.main_splitter.setStretchFactor(0, 4)
+            main_app.main_splitter.setStretchFactor(1, 6)
+        else:
+            # Default for lower resolutions
+            main_app.main_splitter.setStretchFactor(0, 7)
+            main_app.main_splitter.setStretchFactor(1, 3)
+    else:
+        # Fallback if no screen is detected
+        main_app.main_splitter.setStretchFactor(0, 7)
+        main_app.main_splitter.setStretchFactor(1, 3)
+    # --- END: Resolution-based Splitter Sizing ---
+
     top_level_layout = QHBoxLayout(main_app)
     top_level_layout.setContentsMargins(0, 0, 0, 0)
     top_level_layout.addWidget(main_app.main_splitter)
