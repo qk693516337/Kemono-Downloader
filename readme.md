@@ -39,8 +39,19 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 [![](https://img.shields.io/badge/📝%20License-90EE90?style=for-the-badge&logoColor=black&color=90EE90)](LICENSE)
 [![](https://img.shields.io/badge/⚠️%20Important%20Note-FFCCCB?style=for-the-badge&logoColor=black&color=FFCCCB)](note.md)
 
-</div>
+<br><br>
 
+<a href="https://ko-fi.com/C0C31F2F2B">
+  <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 36px;">
+</a>
+
+&nbsp;&nbsp;
+
+<a href="https://buymeacoffee.com/yuvi9587">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" >
+</a>
+
+</div>
 
 ---
 
