@@ -213,6 +213,6 @@ This project is under the Custom Licence
 
 <p align="center">
   <a href="https://buymeacoffee.com/yuvi9587" target="_blank">
-    <img src="Read/bmac.png" alt="Default Mode" width="400"><br>
+    <img src="Read/bmac.gif" alt="Default Mode" width="400"><br>
   </a>
 </p>
