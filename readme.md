@@ -210,9 +210,3 @@ This project is under the Custom Licence
 </table>
 
 👉 See [features.md](features.md) for the full feature list.
-
-<p align="center">
-  <a href="https://buymeacoffee.com/yuvi9587">
-    <img src="Read/bmac.gif" alt="Buy me a coffee" width="100">
-  </a>
-</p>
