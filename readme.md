@@ -213,6 +213,6 @@ This project is under the Custom Licence
 
 <p align="center">
   <a href="https://buymeacoffee.com/yuvi9587" target="_blank">
-    <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMTlqYTA3OWJnY2hibmhxbWZjaDR1MWM2bGc1MWpkNmlicHI1YWRmaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/7kZE0z52Sd9zSESzDA/giphy.gif" alt="Buy Me A Coffee" style="height: 36px;">
+    <img src="https://media1.giphy.com/media/v1.Y2lkPTc5MGI3NjExMTlqYTA3OWJnY2hibmhxbWZjaDR1MWM2bGc1MWpkNmlicHI1YWRmaCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/7kZE0z52Sd9zSESzDA/giphy.gif" alt="Buy Me A Coffee" style="width: 160px;">
   </a>
 </p>
