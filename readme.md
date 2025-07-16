@@ -209,9 +209,12 @@ This project is under the Custom Licence
       </a>
 </table>
 
-<div align="center">
+<p align="center">
+  <a href="https://ko-fi.com/yuvi427183">
+    <img src="https://img.shields.io/badge/📝%20Ko%20fi000000?style=for-the-badge&logoColor=black&color=90EE90" alt="Ko-fi">
+  </a>
+  <a href="https://buymeacoffee.com/yuvi9587">
+    <img src="https://img.shields.io/badge/🍺%20Buy%20Me%20a%20Coffee-FFCCCB?style=for-the-badge&logoColor=black&color=FFDD00" alt="Buy Me a Coffee">
+  </a>
+</p>
 
-[![](https://img.shields.io/badge/📝%20Ko%20fi000000?style=for-the-badge&logoColor=black&color=90EE90)](https://ko-fi.com/yuvi427183)
-[![](https://img.shields.io/badge/🍺%20Buy%20Me%20a%20Coffee-FFCCCB?style=for-the-badge&logoColor=black&color=FFDD00)](https://buymeacoffee.com/yuvi9587)
-
-</div>
