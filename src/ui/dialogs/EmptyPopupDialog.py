@@ -140,12 +140,11 @@ class EmptyPopupDialog (QDialog ):
 
     def __init__ (self ,app_base_dir ,parent_app_ref ,parent =None ):
         super ().__init__ (parent )
-        self .setMinimumSize (400 ,300 )
-        screen_height =QApplication .primaryScreen ().availableGeometry ().height ()if QApplication .primaryScreen ()else 768 
-        scale_factor =screen_height /768.0 
-        self .setMinimumSize (int (400 *scale_factor ),int (300 *scale_factor ))
+        self.parent_app = parent_app_ref
 
-        self .parent_app =parent_app_ref 
+        scale_factor = getattr(self.parent_app, 'scale_factor', 1.0)
+        
+        self.setMinimumSize(int(400 * scale_factor), int(300 * scale_factor))
         self.current_scope_mode = self.SCOPE_CREATORS
         self .app_base_dir =app_base_dir 
 

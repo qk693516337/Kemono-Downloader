@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QListWidget, QTextEdit, QApplication
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QIntValidator # <-- Import QIntValidator from here
+from PyQt5.QtGui import QIntValidator, QFont # <-- Import QFont
 
 # --- Local Application Imports ---
 # Assuming execution from project root
@@ -24,20 +24,24 @@ def setup_ui(main_app):
     Args:
         main_app: The instance of the main DownloaderApp.
     """
-    # --- START: New Scaling Logic ---
-    screen = QApplication.primaryScreen()
-    if screen:
-        resolution = screen.size()
-        if resolution.width() > 1920 and resolution.height() > 1200:
-            main_app.scale_factor = 2
-        else:
-            main_app.scale_factor = 1
-    else:
-        # Fallback if a primary screen isn't detected
-        main_app.scale_factor = 1
-    
-    scale = main_app.scale_factor  # Use a convenient local variable
-    # --- END: New Scaling Logic ---
+    # --- START: Modified Scaling Logic ---
+    # Force a fixed scale factor to disable UI scaling on high-DPI screens.
+    scale = float(main_app.settings.value(UI_SCALE_KEY, 1.0))
+    main_app.scale_factor = scale
+
+    # --- Set the global font size for the application ---
+    default_font = QApplication.font()
+    base_font_size = 9 # Use a standard base size
+    default_font.setPointSize(int(base_font_size * scale))
+    main_app.setFont(default_font)
+    # --- END: Modified Scaling Logic ---
+
+    # --- Set the global font size for the application ---
+    default_font = QApplication.font()
+    base_font_size = 9 # Use a standard base size
+    default_font.setPointSize(int(base_font_size * scale))
+    main_app.setFont(default_font)
+    # --- END: Improved Scaling Logic ---
 
     main_app.main_splitter = QSplitter(Qt.Horizontal)
     
@@ -68,7 +72,11 @@ def setup_ui(main_app):
     main_app.link_input.textChanged.connect(main_app.update_custom_folder_visibility)
     url_input_layout.addWidget(main_app.link_input, 1)
     main_app.empty_popup_button = QPushButton("🎨")
-    main_app.empty_popup_button.setStyleSheet(f"padding: {4*scale}px {6*scale}px;")
+    special_font_size = int(9.5 * scale) 
+    main_app.empty_popup_button.setStyleSheet(f"""
+        padding: {4*scale}px {6*scale}px;
+        font-size: {special_font_size}pt;
+    """)
     main_app.empty_popup_button.clicked.connect(main_app._show_empty_popup)
     url_input_layout.addWidget(main_app.empty_popup_button)
     main_app.page_range_label = QLabel(main_app._tr("page_range_label_text", "Page Range:"))
@@ -76,14 +84,14 @@ def setup_ui(main_app):
     url_input_layout.addWidget(main_app.page_range_label)
     main_app.start_page_input = QLineEdit()
     main_app.start_page_input.setPlaceholderText(main_app._tr("start_page_input_placeholder", "Start"))
-    main_app.start_page_input.setFixedWidth(50 * scale)
+    main_app.start_page_input.setFixedWidth(int(50 * scale))
     main_app.start_page_input.setValidator(QIntValidator(1, 99999))
     url_input_layout.addWidget(main_app.start_page_input)
     main_app.to_label = QLabel(main_app._tr("page_range_to_label_text", "to"))
     url_input_layout.addWidget(main_app.to_label)
     main_app.end_page_input = QLineEdit()
     main_app.end_page_input.setPlaceholderText(main_app._tr("end_page_input_placeholder", "End"))
-    main_app.end_page_input.setFixedWidth(50 * scale)
+    main_app.end_page_input.setFixedWidth(int(50 * scale))
     main_app.end_page_input.setToolTip(main_app._tr("end_page_input_tooltip", "For creator URLs: Specify the ending page number..."))
     main_app.end_page_input.setValidator(QIntValidator(1, 99999))
     url_input_layout.addWidget(main_app.end_page_input)
@@ -256,7 +264,7 @@ def setup_ui(main_app):
     advanced_row1_layout.addWidget(main_app.use_cookie_checkbox)
     advanced_row1_layout.addWidget(main_app.cookie_text_input, 2)
     main_app.cookie_browse_button = QPushButton("Browse...")
-    main_app.cookie_browse_button.setFixedWidth(80 * scale)
+    main_app.cookie_browse_button.setFixedWidth(int(80 * scale))
     advanced_row1_layout.addWidget(main_app.cookie_browse_button)
     advanced_row1_layout.addStretch(1)
     checkboxes_group_layout.addLayout(advanced_row1_layout)
@@ -270,7 +278,7 @@ def setup_ui(main_app):
     main_app.thread_count_label = QLabel("Threads:")
     multithreading_layout.addWidget(main_app.thread_count_label)
     main_app.thread_count_input = QLineEdit("4")
-    main_app.thread_count_input.setFixedWidth(40 * scale)
+    main_app.thread_count_input.setFixedWidth(int(40 * scale))
     main_app.thread_count_input.setValidator(QIntValidator(1, MAX_THREADS))
     multithreading_layout.addWidget(main_app.thread_count_input)
     advanced_row2_layout.addLayout(multithreading_layout)
@@ -288,7 +296,9 @@ def setup_ui(main_app):
     btn_layout.setContentsMargins(0, 10, 0, 0)
     btn_layout.setSpacing(10)
     main_app.download_btn = QPushButton("⬇️ Start Download")
-    main_app.download_btn.setStyleSheet("font-weight: bold;")
+    font = main_app.download_btn.font()
+    font.setBold(True)
+    main_app.download_btn.setFont(font)
     main_app.download_btn.clicked.connect(main_app.start_download)
     main_app.pause_btn = QPushButton("⏸️ Pause Download")
     main_app.pause_btn.setEnabled(False)
@@ -323,7 +333,7 @@ def setup_ui(main_app):
     main_app.known_chars_label = QLabel("🎭 Known Shows/Characters (for Folder Names):")
     known_chars_label_layout.addWidget(main_app.known_chars_label)
     main_app.open_known_txt_button = QPushButton("Open Known.txt")
-    main_app.open_known_txt_button.setFixedWidth(120 * scale)
+    main_app.open_known_txt_button.setFixedWidth(int(120 * scale))
     known_chars_label_layout.addWidget(main_app.open_known_txt_button)
     main_app.character_search_input = QLineEdit()
     main_app.character_search_input.setPlaceholderText("Search characters...")
@@ -347,23 +357,23 @@ def setup_ui(main_app):
     char_manage_layout.addWidget(main_app.new_char_input, 2)
     char_manage_layout.addWidget(main_app.add_char_button, 0)
     main_app.known_names_help_button = QPushButton("?")
-    main_app.known_names_help_button.setFixedWidth(45 * scale)
+    main_app.known_names_help_button.setFixedWidth(int(45 * scale))
     main_app.known_names_help_button.clicked.connect(main_app._show_feature_guide)
     main_app.history_button = QPushButton("📜")
-    main_app.history_button.setFixedWidth(45 * scale)
+    main_app.history_button.setFixedWidth(int(45 * scale))
     main_app.history_button.setToolTip(main_app._tr("history_button_tooltip_text", "View download history"))
     main_app.future_settings_button = QPushButton("⚙️")
-    main_app.future_settings_button.setFixedWidth(45 * scale)
+    main_app.future_settings_button.setFixedWidth(int(45 * scale))
     main_app.future_settings_button.clicked.connect(main_app._show_future_settings_dialog)
     main_app.support_button = QPushButton("❤️ Support")
-    main_app.support_button.setFixedWidth(100 * scale)
+    main_app.support_button.setFixedWidth(int(100 * scale))
     main_app.support_button.setToolTip("Support the application developer.")
     char_manage_layout.addWidget(main_app.add_to_filter_button, 1)
     char_manage_layout.addWidget(main_app.delete_char_button, 1)
     char_manage_layout.addWidget(main_app.known_names_help_button, 0)
     char_manage_layout.addWidget(main_app.history_button, 0)
     char_manage_layout.addWidget(main_app.future_settings_button, 0)
-    char_manage_layout.addWidget(main_app.support_button, 0) 
+    char_manage_layout.addWidget(main_app.support_button, 0)
     left_layout.addLayout(char_manage_layout)
     left_layout.addStretch(0)
 
@@ -379,11 +389,11 @@ def setup_ui(main_app):
     log_title_layout.addWidget(main_app.link_search_input)
     main_app.link_search_button = QPushButton("🔍")
     main_app.link_search_button.setVisible(False)
-    main_app.link_search_button.setFixedWidth(30 * scale)
+    main_app.link_search_button.setFixedWidth(int(30 * scale))
     log_title_layout.addWidget(main_app.link_search_button)
     main_app.manga_rename_toggle_button = QPushButton()
     main_app.manga_rename_toggle_button.setVisible(False)
-    main_app.manga_rename_toggle_button.setFixedWidth(140 * scale)
+    main_app.manga_rename_toggle_button.setFixedWidth(int(140 * scale))
     main_app._update_manga_filename_style_button_text()
     log_title_layout.addWidget(main_app.manga_rename_toggle_button)
     main_app.manga_date_prefix_input = QLineEdit()
@@ -392,17 +402,17 @@ def setup_ui(main_app):
     log_title_layout.addWidget(main_app.manga_date_prefix_input)
     main_app.multipart_toggle_button = QPushButton()
     main_app.multipart_toggle_button.setToolTip("Toggle between Multi-part and Single-stream downloads for large files.")
-    main_app.multipart_toggle_button.setFixedWidth(130 * scale)
+    main_app.multipart_toggle_button.setFixedWidth(int(130 * scale))
     main_app._update_multipart_toggle_button_text()
     log_title_layout.addWidget(main_app.multipart_toggle_button)
     main_app.EYE_ICON = "\U0001F441"
     main_app.CLOSED_EYE_ICON = "\U0001F648"
     main_app.log_verbosity_toggle_button = QPushButton(main_app.EYE_ICON)
-    main_app.log_verbosity_toggle_button.setFixedWidth(45 * scale)
+    main_app.log_verbosity_toggle_button.setFixedWidth(int(45 * scale))
     main_app.log_verbosity_toggle_button.setStyleSheet(f"font-size: {11 * scale}pt; padding: {4 * scale}px {2 * scale}px;")
     log_title_layout.addWidget(main_app.log_verbosity_toggle_button)
     main_app.reset_button = QPushButton("🔄 Reset")
-    main_app.reset_button.setFixedWidth(80 * scale)
+    main_app.reset_button.setFixedWidth(int(80 * scale))
     log_title_layout.addWidget(main_app.reset_button)
     right_layout.addLayout(log_title_layout)
     main_app.log_splitter = QSplitter(Qt.Vertical)
@@ -426,17 +436,17 @@ def setup_ui(main_app):
     export_button_layout = QHBoxLayout()
     export_button_layout.addStretch(1)
     main_app.export_links_button = QPushButton(main_app._tr("export_links_button_text", "Export Links"))
-    main_app.export_links_button.setFixedWidth(100 * scale)
+    main_app.export_links_button.setFixedWidth(int(100 * scale))
     main_app.export_links_button.setEnabled(False)
     main_app.export_links_button.setVisible(False)
     export_button_layout.addWidget(main_app.export_links_button)
     main_app.download_extracted_links_button = QPushButton(main_app._tr("download_extracted_links_button_text", "Download"))
-    main_app.download_extracted_links_button.setFixedWidth(100 * scale)
+    main_app.download_extracted_links_button.setFixedWidth(int(100 * scale))
     main_app.download_extracted_links_button.setEnabled(False)
     main_app.download_extracted_links_button.setVisible(False)
     export_button_layout.addWidget(main_app.download_extracted_links_button)
     main_app.log_display_mode_toggle_button = QPushButton()
-    main_app.log_display_mode_toggle_button.setFixedWidth(120 * scale)
+    main_app.log_display_mode_toggle_button.setFixedWidth(int(120 * scale))
     main_app.log_display_mode_toggle_button.setVisible(False)
     export_button_layout.addWidget(main_app.log_display_mode_toggle_button)
     right_layout.addLayout(export_button_layout)
@@ -453,23 +463,15 @@ def setup_ui(main_app):
     main_app.main_splitter.addWidget(left_scroll_area)
     main_app.main_splitter.addWidget(right_panel_widget)
     
-    # --- START: Resolution-based Splitter Sizing ---
-    # Check screen resolution to set the initial splitter sizes
-    if screen:
-        resolution = screen.size()
-        if resolution.width() >= 1920 and resolution.height() >= 1200:
-            # For 1920x1200 and higher, set 40% left, 60% right
-            main_app.main_splitter.setStretchFactor(0, 4)
-            main_app.main_splitter.setStretchFactor(1, 6)
-        else:
-            # Default for lower resolutions
-            main_app.main_splitter.setStretchFactor(0, 7)
-            main_app.main_splitter.setStretchFactor(1, 3)
+    if main_app.width() >= 1920:
+        # For wider resolutions, give more space to the log panel (right).
+        main_app.main_splitter.setStretchFactor(0, 4)
+        main_app.main_splitter.setStretchFactor(1, 6)
     else:
-        # Fallback if no screen is detected
+        # Default for lower resolutions, giving more space to controls (left).
         main_app.main_splitter.setStretchFactor(0, 7)
         main_app.main_splitter.setStretchFactor(1, 3)
-    # --- END: Resolution-based Splitter Sizing ---
+
 
     top_level_layout = QHBoxLayout(main_app)
     top_level_layout.setContentsMargins(0, 0, 0, 0)
@@ -505,45 +507,62 @@ def get_dark_theme(scale=1):
     """
     Generates the stylesheet for the dark theme, scaled by the given factor.
     """
-    # Define base sizes
-    font_size_base = 10
-    font_size_small_base = 9.5
-    padding_base = 5
-    padding_small = 4
-    button_h_padding_base = 12
-    indicator_size_base = 14
+    # Adjust base font size for better readability
+    font_size_base = 9.5
+    font_size_small_base = 8.5
     
     # Apply scaling
-    font_size = font_size_base * scale
-    font_size_small = font_size_small_base * scale
-    line_edit_padding = padding_base * scale
-    button_padding_v = padding_base * scale
-    button_padding_h = button_h_padding_base * scale
-    tooltip_padding = padding_small * scale
+    font_size = int(font_size_base * scale)
+    font_size_small = int(font_size_small_base * scale)
+    line_edit_padding = int(5 * scale)
+    button_padding_v = int(5 * scale)
+    button_padding_h = int(12 * scale)
+    tooltip_padding = int(4 * scale)
+    indicator_size = int(14 * scale)
     
     return f"""
-    QWidget {{ background-color: #2E2E2E; color: #E0E0E0; font-family: Segoe UI, Arial, sans-serif; font-size: {font_size}pt; }}
-    QLineEdit, QListWidget {{ background-color: #3C3F41; border: 1px solid #5A5A5A; padding: {line_edit_padding}px; color: #F0F0F0; border-radius: 4px; }}
-    QTextEdit {{ background-color: #3C3F41; border: 1px solid #5A5A5A; padding: {line_edit_padding}px;
-                      color: #F0F0F0; border-radius: 4px; 
-                      font-family: Consolas, Courier New, monospace; font-size: {font_size_small}pt; }}
-    QPushButton {{ background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: {button_padding_v}px {button_padding_h}px; border-radius: 4px; }}
+    QWidget {{ 
+        background-color: #2E2E2E; 
+        color: #E0E0E0; 
+        font-family: Segoe UI, Arial, sans-serif; 
+        font-size: {font_size}pt;
+    }}
+    QLineEdit, QListWidget, QTextEdit {{ 
+        background-color: #3C3F41; 
+        border: 1px solid #5A5A5A; 
+        padding: {line_edit_padding}px; 
+        color: #F0F0F0; 
+        border-radius: 4px; 
+        font-size: {font_size}pt; 
+    }}
+    QTextEdit {{
+        font-family: Consolas, Courier New, monospace;
+    }}
+    QPushButton {{ 
+        background-color: #555; 
+        color: #F0F0F0; 
+        border: 1px solid #6A6A6A; 
+        padding: {button_padding_v}px {button_padding_h}px; 
+        border-radius: 4px; 
+    }}
     QPushButton:hover {{ background-color: #656565; border: 1px solid #7A7A7A; }}
     QPushButton:pressed {{ background-color: #4A4A4A; }}
     QPushButton:disabled {{ background-color: #404040; color: #888; border-color: #555; }}
-    QLabel {{ font-weight: bold; padding-top: {4 * scale}px; padding-bottom: {2 * scale}px; color: #C0C0C0; }}
-    QRadioButton, QCheckBox {{ spacing: {5 * scale}px; color: #E0E0E0; padding-top: {4 * scale}px; padding-bottom: {4 * scale}px; }}
-    QRadioButton::indicator, QCheckBox::indicator {{ width: {indicator_size_base * scale}px; height: {indicator_size_base * scale}px; }}
-    QListWidget {{ alternate-background-color: #353535; border: 1px solid #5A5A5A; }}
+    QLabel {{ font-weight: bold; color: #C0C0C0; }}
+    QRadioButton, QCheckBox {{ spacing: {int(5 * scale)}px; color: #E0E0E0; }}
+    QRadioButton::indicator, QCheckBox::indicator {{ width: {indicator_size}px; height: {indicator_size}px; }}
+    QListWidget {{ alternate-background-color: #353535; }}
     QListWidget::item:selected {{ background-color: #007ACC; color: #FFFFFF; }}
-    QToolTip {{ background-color: #4A4A4A; color: #F0F0F0; border: 1px solid #6A6A6A; padding: {tooltip_padding}px; border-radius: 3px; }}
-    QSplitter::handle {{ background-color: #5A5A5A; }}
-    QSplitter::handle:horizontal {{ width: {5 * scale}px; }}
-    QSplitter::handle:vertical {{ height: {5 * scale}px; }}
-    QFrame[frameShape="4"], QFrame[frameShape="5"] {{ 
-        border: 1px solid #4A4A4A; 
-        border-radius: 3px;
+    QToolTip {{ 
+        background-color: #4A4A4A; 
+        color: #F0F0F0; 
+        border: 1px solid #6A6A6A; 
+        padding: {tooltip_padding}px; 
+        border-radius: 3px; 
     }}
+    QSplitter::handle {{ background-color: #5A5A5A; }}
+    QSplitter::handle:horizontal {{ width: {int(5 * scale)}px; }}
+    QSplitter::handle:vertical {{ height: {int(5 * scale)}px; }}
     """
 def apply_theme_to_app(main_app, theme_name, initial_load=False):
     """

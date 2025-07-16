@@ -57,6 +57,8 @@ THEME_KEY = "currentThemeV2"
 SCAN_CONTENT_IMAGES_KEY = "scanContentForImagesV1"
 LANGUAGE_KEY = "currentLanguageV1"
 DOWNLOAD_LOCATION_KEY = "downloadLocationV1"
+RESOLUTION_KEY = "window_resolution"
+UI_SCALE_KEY = "ui_scale_factor"
 
 # --- UI Constants and Identifiers ---
 HTML_PREFIX = "<!HTML!>"

@@ -607,7 +607,6 @@ class PostProcessorWorker:
                 self.logger(f"   ⚠️ Failed to rescue file despite matching size. Error: {rescue_exc}")
 
         if self.check_cancel() or (skip_event and skip_event.is_set()) or (self.pause_event and self.pause_event.is_set() and not download_successful_flag):
-            self.logger(f"   ⚠️ Download process interrupted for {api_original_filename}.")
             if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                 try: os.remove(downloaded_part_file_path)
                 except OSError: pass
@@ -1729,8 +1728,8 @@ class PostProcessorWorker:
             'download_location':determined_post_save_path_for_history ,
             'service':self .service ,'user_id':self .user_id ,
             }
-        if self .check_cancel ():self .logger (f"   Post {post_id } processing interrupted/cancelled.");
-        else :self .logger (f"   Post {post_id } Summary: Downloaded={total_downloaded_this_post }, Skipped Files={total_skipped_this_post }")
+            if not self.check_cancel():
+                self.logger(f"   Post {post_id} Summary: Downloaded={total_downloaded_this_post}, Skipped Files={total_skipped_this_post}")
 
         if not self .extract_links_only and self .use_post_subfolders and total_downloaded_this_post ==0 :
 

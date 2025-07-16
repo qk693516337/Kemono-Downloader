@@ -101,18 +101,22 @@ class DownloaderApp (QWidget ):
     def __init__(self):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
-        
-        # --- CORRECT PATH DEFINITION ---
-        # This block correctly determines the application's base directory whether
-        # it's running from source or as a frozen executable.
+        self.is_finishing = False 
+
+        saved_res = self.settings.value(RESOLUTION_KEY, "Auto")
+        if saved_res != "Auto":
+            try:
+                width, height = map(int, saved_res.split('x'))
+                self.resize(width, height)
+                self._center_on_screen() 
+            except ValueError:
+                self.log_signal.emit(f"⚠️ Invalid saved resolution '{saved_res}'. Using default.")
+
         if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-             # Path for PyInstaller one-file bundle
             self.app_base_dir = os.path.dirname(sys.executable)
         else:
-            # Path for running from source code
             self.app_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-        # All file paths will now correctly use the single, correct app_base_dir
         self.config_file = os.path.join(self.app_base_dir, "appdata", "Known.txt")
         self.session_file_path = os.path.join(self.app_base_dir, "appdata", "session.json")
         self.persistent_history_file = os.path.join(self.app_base_dir, "appdata", "download_history.json")
@@ -271,6 +275,28 @@ class DownloaderApp (QWidget ):
         self._load_saved_download_location()
         self._update_button_states_and_connections()
         self._check_for_interrupted_session()
+
+    def _apply_theme_and_restart_prompt(self):
+        """Applies the theme and prompts the user to restart."""
+        if self.current_theme == "dark":
+            scale = getattr(self, 'scale_factor', 1)
+            self.setStyleSheet(get_dark_theme(scale))
+        else:
+            self.setStyleSheet("")
+
+        # Prompt for restart
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Information)
+        msg_box.setWindowTitle(self._tr("theme_change_title", "Theme Changed"))
+        msg_box.setText(self._tr("language_change_message", "A restart is required for these changes to take effect."))
+        msg_box.setInformativeText(self._tr("language_change_informative", "Would you like to restart now?"))
+        restart_button = msg_box.addButton(self._tr("restart_now_button", "Restart Now"), QMessageBox.ApplyRole)
+        ok_button = msg_box.addButton(self._tr("ok_button", "OK"), QMessageBox.AcceptRole)
+        msg_box.setDefaultButton(ok_button)
+        msg_box.exec_()
+
+        if msg_box.clickedButton() == restart_button:
+            self._request_restart_application()
 
     def _create_initial_session_file(self, api_url_for_session, override_output_dir_for_session): # ADD override_output_dir_for_session
         """Creates the initial session file at the start of a new download."""
@@ -2602,6 +2628,7 @@ class DownloaderApp (QWidget ):
             self .file_progress_label .setText ("")
 
     def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False):
+        self.is_finishing = False 
         global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
 
         self._clear_stale_temp_files()
@@ -3521,9 +3548,7 @@ class DownloaderApp (QWidget ):
         except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_worker_result: {e}\n{traceback.format_exc(limit=2)}")
         
-        # Check if all submitted tasks are complete
         if not self.is_fetcher_thread_running and self.processed_posts_count >= self.total_posts_to_process:
-            self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
             self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
 
     def _trigger_single_pdf_creation(self):
@@ -3850,6 +3875,7 @@ class DownloaderApp (QWidget ):
         self ._filter_links_log ()
 
     def cancel_download_button_action (self ):
+        self.is_finishing = True
         if not self .cancel_btn .isEnabled ()and not self .cancellation_event .is_set ():self .log_signal .emit ("ℹ️ No active download to cancel or already cancelling.");return 
         self .log_signal .emit ("⚠️ Requesting cancellation of download process (soft reset)...")
 
@@ -3903,6 +3929,12 @@ class DownloaderApp (QWidget ):
         return "kemono.su"
 
     def download_finished (self ,total_downloaded ,total_skipped ,cancelled_by_user ,kept_original_names_list =None ):
+        if self.is_finishing:
+            return
+        self.is_finishing = True
+        
+        self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
+
         if kept_original_names_list is None :
             kept_original_names_list =list (self .all_kept_original_filenames )if hasattr (self ,'all_kept_original_filenames')else []
         if kept_original_names_list is None :
@@ -3940,7 +3972,7 @@ class DownloaderApp (QWidget ):
             self.single_pdf_setting = False
 
         # Reset session state for the next run
-        self.session_text_content = [] 
+        self.session_temp_files = [] 
         self.single_pdf_setting = False
 
         if kept_original_names_list :
@@ -4029,7 +4061,8 @@ class DownloaderApp (QWidget ):
                 self ._process_next_favorite_download ()
         else :
             self .set_ui_enabled (True )
-        self .cancellation_message_logged_this_session =False 
+        self .cancellation_message_logged_this_session =False
+
 
     def _handle_thumbnail_mode_change (self ,thumbnails_checked ):
         """Handles UI changes when 'Download Thumbnails Only' is toggled."""
