@@ -113,3 +113,7 @@ CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
     "fri", "friday", "sat", "saturday", "sun", "sunday"
     # add more according to need 
 }
+
+# --- Duplicate Handling Modes ---
+DUPLICATE_HANDLING_HASH = "hash"      
+DUPLICATE_HANDLING_KEEP_ALL = "keep_all"  

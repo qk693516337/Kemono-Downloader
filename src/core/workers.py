@@ -9,7 +9,7 @@ import uuid
 import http
 import html
 import json
-from collections import deque
+from collections import deque, defaultdict
 import hashlib
 from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError, Future
 from io import BytesIO
@@ -71,105 +71,114 @@ class PostProcessorSignals (QObject ):
     worker_finished_signal = pyqtSignal(tuple)
 
 class PostProcessorWorker:
-    def __init__ (self ,post_data ,download_root ,known_names ,
-    filter_character_list ,emitter ,
-    unwanted_keywords ,filter_mode ,skip_zip ,skip_rar ,
-    use_subfolders ,use_post_subfolders ,target_post_id_from_initial_url ,custom_folder_name ,
-    compress_images ,download_thumbnails ,service ,user_id ,pause_event ,
-    api_url_input ,cancellation_event ,
-    downloaded_files ,downloaded_file_hashes ,downloaded_files_lock ,downloaded_file_hashes_lock ,
-    dynamic_character_filter_holder =None ,skip_words_list =None ,
-    skip_words_scope =SKIP_SCOPE_FILES ,
-    show_external_links =False ,
-    extract_links_only =False ,
-    num_file_threads =4 ,skip_current_file_flag =None ,
-    manga_mode_active =False ,
-    manga_filename_style =STYLE_POST_TITLE ,
-    char_filter_scope =CHAR_SCOPE_FILES ,
-    remove_from_filename_words_list =None ,
-    allow_multipart_download =True ,
-    cookie_text ="",
-    use_cookie =False ,
-    override_output_dir =None ,
-    selected_cookie_file =None ,
-    app_base_dir =None ,
-    manga_date_prefix =MANGA_DATE_PREFIX_DEFAULT ,
-    manga_date_file_counter_ref =None ,
-    scan_content_for_images =False ,
-    creator_download_folder_ignore_words =None ,
-    manga_global_file_counter_ref =None ,
-    use_date_prefix_for_subfolder=False,
-    keep_in_post_duplicates=False,
-    session_file_path=None,
-    session_lock=None,
-    text_only_scope=None,
-    text_export_format='txt',
-    single_pdf_mode=False,
-    project_root_dir=None,
-    processed_post_ids=None
-    ):
-        self .post =post_data 
-        self .download_root =download_root 
-        self .known_names =known_names 
-        self .filter_character_list_objects_initial =filter_character_list if filter_character_list else []
-        self .dynamic_filter_holder =dynamic_character_filter_holder 
-        self .unwanted_keywords =unwanted_keywords if unwanted_keywords is not None else set ()
-        self .filter_mode =filter_mode 
-        self .skip_zip =skip_zip 
-        self .skip_rar =skip_rar 
-        self .use_subfolders =use_subfolders 
-        self .use_post_subfolders =use_post_subfolders 
-        self .target_post_id_from_initial_url =target_post_id_from_initial_url 
-        self .custom_folder_name =custom_folder_name 
-        self .compress_images =compress_images 
-        self .download_thumbnails =download_thumbnails 
-        self .service =service 
-        self .user_id =user_id 
-        self .api_url_input =api_url_input 
-        self .cancellation_event =cancellation_event 
-        self .pause_event =pause_event 
-        self .emitter =emitter 
-        if not self .emitter :
-            raise ValueError ("PostProcessorWorker requires an emitter (signals object or queue).")
-        self .skip_current_file_flag =skip_current_file_flag 
-        self .downloaded_files =downloaded_files if downloaded_files is not None else set ()
-        self .downloaded_file_hashes =downloaded_file_hashes if downloaded_file_hashes is not None else set ()
-        self .downloaded_files_lock =downloaded_files_lock if downloaded_files_lock is not None else threading .Lock ()
-        self .downloaded_file_hashes_lock =downloaded_file_hashes_lock if downloaded_file_hashes_lock is not None else threading .Lock ()
-        self .skip_words_list =skip_words_list if skip_words_list is not None else []
-        self .skip_words_scope =skip_words_scope 
-        self .show_external_links =show_external_links 
-        self .extract_links_only =extract_links_only 
-        self .num_file_threads =num_file_threads 
-        self .manga_mode_active =manga_mode_active 
-        self .manga_filename_style =manga_filename_style 
-        self .char_filter_scope =char_filter_scope 
-        self .remove_from_filename_words_list =remove_from_filename_words_list if remove_from_filename_words_list is not None else []
-        self .allow_multipart_download =allow_multipart_download 
-        self .manga_date_file_counter_ref =manga_date_file_counter_ref 
-        self .selected_cookie_file =selected_cookie_file 
-        self .app_base_dir =app_base_dir 
-        self .cookie_text =cookie_text 
-        self .manga_date_prefix =manga_date_prefix 
-        self .manga_global_file_counter_ref =manga_global_file_counter_ref 
-        self .use_cookie =use_cookie 
-        self .override_output_dir =override_output_dir 
-        self .scan_content_for_images =scan_content_for_images 
-        self .creator_download_folder_ignore_words =creator_download_folder_ignore_words 
+
+    def __init__(self, post_data, download_root, known_names,
+                 filter_character_list, emitter,
+                 unwanted_keywords, filter_mode, skip_zip, skip_rar,
+                 use_subfolders, use_post_subfolders, target_post_id_from_initial_url, custom_folder_name,
+                 compress_images, download_thumbnails, service, user_id, pause_event,
+                 api_url_input, cancellation_event,
+                 downloaded_files, downloaded_file_hashes, downloaded_files_lock, downloaded_file_hashes_lock,
+                 dynamic_character_filter_holder=None, skip_words_list=None,
+                 skip_words_scope=SKIP_SCOPE_FILES,
+                 show_external_links=False,
+                 extract_links_only=False,
+                 num_file_threads=4, skip_current_file_flag=None,
+                 manga_mode_active=False,
+                 manga_filename_style=STYLE_POST_TITLE,
+                 char_filter_scope=CHAR_SCOPE_FILES,
+                 remove_from_filename_words_list=None,
+                 allow_multipart_download=True,
+                 cookie_text="",
+                 use_cookie=False,
+                 override_output_dir=None,
+                 selected_cookie_file=None,
+                 app_base_dir=None,
+                 manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT,
+                 manga_date_file_counter_ref=None,
+                 scan_content_for_images=False,
+                 creator_download_folder_ignore_words=None,
+                 manga_global_file_counter_ref=None,
+                 use_date_prefix_for_subfolder=False,
+                 keep_in_post_duplicates=False,
+                 keep_duplicates_mode=DUPLICATE_HANDLING_HASH,
+                 keep_duplicates_limit=0,
+                 downloaded_hash_counts=None,
+                 downloaded_hash_counts_lock=None,
+                 session_file_path=None,
+                 session_lock=None,
+                 text_only_scope=None,
+                 text_export_format='txt',
+                 single_pdf_mode=False,
+                 project_root_dir=None,
+                 processed_post_ids=None
+                 ):
+        self.post = post_data
+        self.download_root = download_root
+        self.known_names = known_names
+        self.filter_character_list_objects_initial = filter_character_list if filter_character_list else []
+        self.dynamic_filter_holder = dynamic_character_filter_holder
+        self.unwanted_keywords = unwanted_keywords if unwanted_keywords is not None else set()
+        self.filter_mode = filter_mode
+        self.skip_zip = skip_zip
+        self.skip_rar = skip_rar
+        self.use_subfolders = use_subfolders
+        self.use_post_subfolders = use_post_subfolders
+        self.target_post_id_from_initial_url = target_post_id_from_initial_url
+        self.custom_folder_name = custom_folder_name
+        self.compress_images = compress_images
+        self.download_thumbnails = download_thumbnails
+        self.service = service
+        self.user_id = user_id
+        self.api_url_input = api_url_input
+        self.cancellation_event = cancellation_event
+        self.pause_event = pause_event
+        self.emitter = emitter
+        if not self.emitter:
+            raise ValueError("PostProcessorWorker requires an emitter (signals object or queue).")
+        self.skip_current_file_flag = skip_current_file_flag
+        self.downloaded_files = downloaded_files if downloaded_files is not None else set()
+        self.downloaded_file_hashes = downloaded_file_hashes if downloaded_file_hashes is not None else set()
+        self.downloaded_files_lock = downloaded_files_lock if downloaded_files_lock is not None else threading.Lock()
+        self.downloaded_file_hashes_lock = downloaded_file_hashes_lock if downloaded_file_hashes_lock is not None else threading.Lock()
+        self.skip_words_list = skip_words_list if skip_words_list is not None else []
+        self.skip_words_scope = skip_words_scope
+        self.show_external_links = show_external_links
+        self.extract_links_only = extract_links_only
+        self.num_file_threads = num_file_threads
+        self.manga_mode_active = manga_mode_active
+        self.manga_filename_style = manga_filename_style
+        self.char_filter_scope = char_filter_scope
+        self.remove_from_filename_words_list = remove_from_filename_words_list if remove_from_filename_words_list is not None else []
+        self.allow_multipart_download = allow_multipart_download
+        self.manga_date_file_counter_ref = manga_date_file_counter_ref
+        self.selected_cookie_file = selected_cookie_file
+        self.app_base_dir = app_base_dir
+        self.cookie_text = cookie_text
+        self.manga_date_prefix = manga_date_prefix
+        self.manga_global_file_counter_ref = manga_global_file_counter_ref
+        self.use_cookie = use_cookie
+        self.override_output_dir = override_output_dir
+        self.scan_content_for_images = scan_content_for_images
+        self.creator_download_folder_ignore_words = creator_download_folder_ignore_words
         self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
         self.keep_in_post_duplicates = keep_in_post_duplicates
+        self.keep_duplicates_mode = keep_duplicates_mode
+        self.keep_duplicates_limit = keep_duplicates_limit
+        self.downloaded_hash_counts = downloaded_hash_counts if downloaded_hash_counts is not None else defaultdict(int)
+        self.downloaded_hash_counts_lock = downloaded_hash_counts_lock if downloaded_hash_counts_lock is not None else threading.Lock()
         self.session_file_path = session_file_path
         self.session_lock = session_lock
         self.text_only_scope = text_only_scope
         self.text_export_format = text_export_format
-        self.single_pdf_mode = single_pdf_mode 
+        self.single_pdf_mode = single_pdf_mode
         self.project_root_dir = project_root_dir
         self.processed_post_ids = processed_post_ids if processed_post_ids is not None else []
 
-        if self .compress_images and Image is None :
+        if self.compress_images and Image is None:
+            self.logger("⚠️ Image compression disabled: Pillow library not found.")
+            self.compress_images = False
 
-            self .logger ("⚠️ Image compression disabled: Pillow library not found.")
-            self .compress_images =False 
     def _emit_signal (self ,signal_type_str ,*payload_args ):
         """Helper to emit signal either directly or via queue."""
         if isinstance (self .emitter ,queue .Queue ):
@@ -179,6 +188,7 @@ class PostProcessorWorker:
             signal_attr .emit (*payload_args )
         else :
             print (f"(Worker Log - Unrecognized Emitter for {signal_type_str }): {payload_args [0 ]if payload_args else ''}")
+    
     def logger (self ,message ):
         self ._emit_signal ('progress',message )
     def check_cancel (self ):
@@ -408,6 +418,7 @@ class PostProcessorWorker:
         total_size_bytes = 0
         download_successful_flag = False
         last_exception_for_retry_later = None
+        is_permanent_error = False
         data_to_write_io = None
 
         response_for_this_attempt = None
@@ -512,12 +523,14 @@ class PostProcessorWorker:
             except requests.exceptions.RequestException as e:
                 self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
                 last_exception_for_retry_later = e
+                is_permanent_error = True
                 if ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
                     self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
                 break
             except Exception as e:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
                 last_exception_for_retry_later = e
+                is_permanent_error = True                
                 break
             finally:
                 if response_for_this_attempt:
@@ -544,7 +557,6 @@ class PostProcessorWorker:
                 self.logger(f"   ⚠️ Failed to rescue file despite matching size. Error: {rescue_exc}")
 
         if self.check_cancel() or (skip_event and skip_event.is_set()) or (self.pause_event and self.pause_event.is_set() and not download_successful_flag):
-            self.logger(f"   ⚠️ Download process interrupted for {api_original_filename}.")
             if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                 try:
                     os.remove(downloaded_part_file_path)
@@ -556,20 +568,39 @@ class PostProcessorWorker:
             if self._check_pause(f"Post-download hash check for '{api_original_filename}'"):
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
-            ### START OF CHANGE 1: INSERT THIS NEW BLOCK ###
-            with self.downloaded_file_hashes_lock:
-                if calculated_file_hash in self.downloaded_file_hashes:
-                    self.logger(f"   -> Skip (Content Duplicate): '{api_original_filename}' is identical to a file already downloaded. Discarding.")
-                    # Clean up the downloaded temporary file as it's a duplicate.
-                    if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
-                        try:
-                            os.remove(downloaded_part_file_path)
-                        except OSError:
-                            pass
-                    return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+            # --- Final Corrected Duplicate Handling Logic ---
+            should_skip = False
+            with self.downloaded_hash_counts_lock:
+                current_count = self.downloaded_hash_counts.get(calculated_file_hash, 0)
+                
+                # Default to not skipping
+                decision_to_skip = False
 
-            # If the content is unique, we proceed to save.
-            # Now, handle FILENAME collisions by adding a numeric suffix if needed.
+                # Apply logic based on mode
+                if self.keep_duplicates_mode == DUPLICATE_HANDLING_HASH:
+                    if current_count >= 1:
+                        decision_to_skip = True
+                        self.logger(f"   -> Skip (Content Duplicate): '{api_original_filename}' is identical to a file already downloaded. Discarding.")
+                
+                elif self.keep_duplicates_mode == DUPLICATE_HANDLING_KEEP_ALL and self.keep_duplicates_limit > 0:
+                    if current_count >= self.keep_duplicates_limit:
+                        decision_to_skip = True
+                        self.logger(f"   -> Skip (Duplicate Limit Reached): Limit of {self.keep_duplicates_limit} for this file content has been met. Discarding.")
+
+                # If we are NOT skipping this file, we MUST increment the count.
+                if not decision_to_skip:
+                    self.downloaded_hash_counts[calculated_file_hash] = current_count + 1
+                
+                should_skip = decision_to_skip
+            # --- End of Final Corrected Logic ---
+
+            if should_skip:
+                if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
+                    try:
+                        os.remove(downloaded_part_file_path)
+                    except OSError: pass
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+
             effective_save_folder = target_folder_path
             base_name, extension = os.path.splitext(filename_to_save_in_main_path)
             counter = 1
@@ -603,8 +634,6 @@ class PostProcessorWorker:
                 
                 with self.downloaded_file_hashes_lock:
                     self.downloaded_file_hashes.add(calculated_file_hash)
-                with self.downloaded_files_lock:
-                    self.downloaded_files.add(final_filename_on_disk)
                 
                 final_filename_saved_for_return = final_filename_on_disk
                 self.logger(f"✅ Saved: '{final_filename_saved_for_return}' (from '{api_original_filename}', {downloaded_size_bytes / (1024 * 1024):.2f} MB) in '{os.path.basename(effective_save_folder)}'")
@@ -629,15 +658,12 @@ class PostProcessorWorker:
             except Exception as save_err:
                 self.logger(f"->>Save Fail for '{final_filename_on_disk}': {save_err}")
 
-                # --- START OF THE FIX ---
-                # If saving/renaming fails, try to clean up the orphaned .part file.
                 if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                     try:
                         os.remove(downloaded_part_file_path)
                         self.logger(f"   Cleaned up temporary file after save error: {os.path.basename(downloaded_part_file_path)}")
                     except OSError as e_rem:
                         self.logger(f"   ⚠️ Could not clean up temporary file '{os.path.basename(downloaded_part_file_path)}' after save error: {e_rem}")
-                # --- END OF THE FIX ---
 
                 if os.path.exists(final_save_path):
                     try:
@@ -656,22 +682,24 @@ class PostProcessorWorker:
                 if data_to_write_io and hasattr(data_to_write_io, 'close'):
                     data_to_write_io.close()
         else:
-            # This is the path if the download was not successful after all retries
             self.logger(f"->>Download Fail for '{api_original_filename}' (Post ID: {original_post_id_for_log}). No successful download after retries.")
-            retry_later_details = {
+            details_for_failure = {
                 'file_info': file_info, 'target_folder_path': target_folder_path, 'headers': headers,
                 'original_post_id_for_log': original_post_id_for_log, 'post_title': post_title,
                 'file_index_in_post': file_index_in_post, 'num_files_in_this_post': num_files_in_this_post
             }
-            return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, retry_later_details
+            if is_permanent_error:
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION, details_for_failure
+            else:
+                return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, details_for_failure
+
 
     def process(self):
-        # Default "empty" result tuple. It will be updated before any return path.
         result_tuple = (0, 0, [], [], [], None, None)
         try:
             if self._check_pause(f"Post processing for ID {self.post.get('id', 'N/A')}"):
                 result_tuple = (0, 0, [], [], [], None, None)
-                return result_tuple  # Return for the direct caller
+                return result_tuple  
             if self.check_cancel():
                 result_tuple = (0, 0, [], [], [], None, None)
                 return result_tuple
@@ -1236,6 +1264,25 @@ class PostProcessorWorker:
                 else:
                     self.logger(f"   ⚠️ Skipping invalid attachment {idx + 1} for post {post_id}: {str(att_info)[:100]}")
 
+            # --- START: Conditionally de-duplicate files from API response ---
+            # Only de-duplicate by URL if we are in the default hash-skipping mode.
+            # If the user wants to keep everything, we must process all entries from the API.
+            if self.keep_duplicates_mode == DUPLICATE_HANDLING_HASH:
+                unique_files_by_url = {}
+                for file_info in all_files_from_post_api:
+                    # Use the file URL as a unique key to avoid processing the same file multiple times
+                    file_url = file_info.get('url')
+                    if file_url and file_url not in unique_files_by_url:
+                        unique_files_by_url[file_url] = file_info
+                
+                original_count = len(all_files_from_post_api)
+                all_files_from_post_api = list(unique_files_by_url.values())
+                new_count = len(all_files_from_post_api)
+
+                if new_count < original_count:
+                    self.logger(f"   De-duplicated file list: Removed {original_count - new_count} redundant entries from the API response.")
+            # --- END: Conditionally de-duplicate files from API response ---
+
             if self.scan_content_for_images and post_content_html and not self.extract_links_only:
                 self.logger(f"   Scanning post content for additional image URLs (Post ID: {post_id})...")
                 parsed_input_url = urlparse(self.api_url_input)
@@ -1528,9 +1575,7 @@ class PostProcessorWorker:
                     'service': self.service, 'user_id': self.user_id,
                 }
 
-            if self.check_cancel():
-                self.logger(f"   Post {post_id} processing interrupted/cancelled.")
-            else:
+            if not self.check_cancel():
                 self.logger(f"   Post {post_id} Summary: Downloaded={total_downloaded_this_post}, Skipped Files={total_skipped_this_post}")
 
             if not self.extract_links_only and self.use_post_subfolders and total_downloaded_this_post == 0:
@@ -1542,18 +1587,14 @@ class PostProcessorWorker:
                 except OSError as e_rmdir:
                     self.logger(f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
 
-            # After all processing, set the final result tuple for the normal execution path
             result_tuple = (total_downloaded_this_post, total_skipped_this_post,
                             kept_original_filenames_for_log, retryable_failures_this_post,
                             permanent_failures_this_post, history_data_for_this_post,
                             None)
 
         finally:
-            # This block is GUARANTEED to execute, sending the signal for multi-threaded mode.
             self._emit_signal('worker_finished', result_tuple)
-
-        # This line is the critical fix. It ensures the method always returns a tuple
-        # for the single-threaded mode that directly calls it.
+        
         return result_tuple
 
 class DownloadThread(QThread):
@@ -1578,7 +1619,7 @@ class DownloadThread(QThread):
                  download_thumbnails=False, service=None, user_id=None,
                  downloaded_files=None, downloaded_file_hashes=None, downloaded_files_lock=None, downloaded_file_hashes_lock=None,
                  skip_words_list=None,
-                 skip_words_scope=SKIP_SCOPE_FILES,
+                 skip_words_scope='files',
                  show_external_links=False,
                  extract_links_only=False,
                  num_file_threads_for_worker=1,
@@ -1587,10 +1628,10 @@ class DownloadThread(QThread):
                  target_post_id_from_initial_url=None,
                  manga_mode_active=False,
                  unwanted_keywords=None,
-                 manga_filename_style=STYLE_POST_TITLE,
-                 char_filter_scope=CHAR_SCOPE_FILES,
+                 manga_filename_style='post_title',
+                 char_filter_scope='files',
                  remove_from_filename_words_list=None,
-                 manga_date_prefix=MANGA_DATE_PREFIX_DEFAULT,
+                 manga_date_prefix='',
                  allow_multipart_download=True,
                  selected_cookie_file=None,
                  override_output_dir=None,
@@ -1602,6 +1643,10 @@ class DownloadThread(QThread):
                  creator_download_folder_ignore_words=None,
                  use_date_prefix_for_subfolder=False,
                  keep_in_post_duplicates=False,
+                 keep_duplicates_mode='hash',
+                 keep_duplicates_limit=0,
+                 downloaded_hash_counts=None,
+                 downloaded_hash_counts_lock=None,
                  cookie_text="",
                  session_file_path=None,
                  session_lock=None,
@@ -1609,7 +1654,7 @@ class DownloadThread(QThread):
                  text_export_format='txt',
                  single_pdf_mode=False,
                  project_root_dir=None,
-                 processed_post_ids=None): # Add processed_post_ids here
+                 processed_post_ids=None):
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -1660,6 +1705,10 @@ class DownloadThread(QThread):
         self.creator_download_folder_ignore_words = creator_download_folder_ignore_words
         self.use_date_prefix_for_subfolder = use_date_prefix_for_subfolder
         self.keep_in_post_duplicates = keep_in_post_duplicates
+        self.keep_duplicates_mode = keep_duplicates_mode
+        self.keep_duplicates_limit = keep_duplicates_limit
+        self.downloaded_hash_counts = downloaded_hash_counts
+        self.downloaded_hash_counts_lock = downloaded_hash_counts_lock
         self.manga_global_file_counter_ref = manga_global_file_counter_ref
         self.session_file_path = session_file_path
         self.session_lock = session_lock
@@ -1668,7 +1717,7 @@ class DownloadThread(QThread):
         self.text_export_format = text_export_format
         self.single_pdf_mode = single_pdf_mode
         self.project_root_dir = project_root_dir
-        self.processed_post_ids = processed_post_ids if processed_post_ids is not None else [] # Add this line
+        self.processed_post_ids = processed_post_ids if processed_post_ids is not None else []
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -1769,6 +1818,10 @@ class DownloadThread(QThread):
                         manga_date_file_counter_ref=self.manga_date_file_counter_ref,
                         use_date_prefix_for_subfolder=self.use_date_prefix_for_subfolder,
                         keep_in_post_duplicates=self.keep_in_post_duplicates,
+                        keep_duplicates_mode=self.keep_duplicates_mode,
+                        keep_duplicates_limit=self.keep_duplicates_limit,
+                        downloaded_hash_counts=self.downloaded_hash_counts,
+                        downloaded_hash_counts_lock=self.downloaded_hash_counts_lock,
                         creator_download_folder_ignore_words=self.creator_download_folder_ignore_words,
                         session_file_path=self.session_file_path,
                         session_lock=self.session_lock,

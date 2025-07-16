@@ -12,7 +12,7 @@ import subprocess
 import datetime
 import requests
 import unicodedata
-from collections import deque
+from collections import deque, defaultdict
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor ,CancelledError
 from urllib .parse import urlparse 
@@ -57,6 +57,7 @@ from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
 from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from .dialogs.SinglePDF import create_single_pdf_from_content
 from .dialogs.SupportDialog import SupportDialog
+from .dialogs.KeepDuplicatesDialog import KeepDuplicatesDialog
 
 class DynamicFilterHolder:
     """A thread-safe class to hold and update character filters during a download."""
@@ -223,6 +224,10 @@ class DownloaderApp (QWidget ):
         self.more_filter_scope = None 
         self.text_export_format = 'pdf'
         self.single_pdf_setting = False
+        self.keep_duplicates_mode = DUPLICATE_HANDLING_HASH
+        self.keep_duplicates_limit = 0  # 0 means no limit
+        self.downloaded_hash_counts = defaultdict(int)
+        self.downloaded_hash_counts_lock = threading.Lock()
         self.session_temp_files = []
         
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
@@ -695,6 +700,8 @@ class DownloaderApp (QWidget ):
             self .cookie_text_input .textChanged .connect (self ._handle_cookie_text_manual_change )
         if hasattr (self ,'download_thumbnails_checkbox'):
             self .download_thumbnails_checkbox .toggled .connect (self ._handle_thumbnail_mode_change )
+        if hasattr(self, 'keep_duplicates_checkbox'):
+            self.keep_duplicates_checkbox.toggled.connect(self._handle_keep_duplicates_toggled)
         self .gui_update_timer .timeout .connect (self ._process_worker_queue )
         self .gui_update_timer .start (100 )
         self .log_signal .connect (self .handle_main_log )
@@ -2628,7 +2635,8 @@ class DownloaderApp (QWidget ):
             self .file_progress_label .setText ("")
 
     def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False):
-        self.is_finishing = False 
+        self.is_finishing = False
+        self.downloaded_hash_counts.clear()
         global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
 
         self._clear_stale_temp_files()
@@ -3071,7 +3079,6 @@ class DownloaderApp (QWidget ):
         else:
             log_messages.append(f"    Mode: Creator Feed")
             log_messages.append(f"    Post Processing: {'Multi-threaded (' + str(effective_num_post_workers) + ' workers)' if effective_num_post_workers > 1 else 'Single-threaded (1 worker)'}")
-            log_messages.append(f"      ↳ File Downloads per Worker: Up to {effective_num_file_threads_per_worker} concurrent file(s)")
             pr_log = "All"
             if start_page or end_page:
                 pr_log = f"{f'From {start_page} ' if start_page else ''}{'to ' if start_page and end_page else ''}{f'{end_page}' if end_page else (f'Up to {end_page}' if end_page else (f'From {start_page}' if start_page else 'Specific Range'))}".strip()
@@ -3192,7 +3199,11 @@ class DownloaderApp (QWidget ):
             'session_lock': self.session_lock,
             'creator_download_folder_ignore_words': creator_folder_ignore_words_for_run,
             'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked() if hasattr(self, 'date_prefix_checkbox') else False,
-            'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked() if hasattr(self, 'keep_duplicates_checkbox') else False,
+            'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked(),
+            'keep_duplicates_mode': self.keep_duplicates_mode,
+            'keep_duplicates_limit': self.keep_duplicates_limit,
+            'downloaded_hash_counts': self.downloaded_hash_counts,
+            'downloaded_hash_counts_lock': self.downloaded_hash_counts_lock,
             'skip_current_file_flag': None,
             'processed_post_ids': processed_post_ids_for_restore,
         }
@@ -3222,6 +3233,8 @@ class DownloaderApp (QWidget ):
                     'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', 'override_output_dir', 'project_root_dir',
                     'text_only_scope', 'text_export_format',
                     'single_pdf_mode',
+                    'use_date_prefix_for_subfolder','keep_in_post_duplicates', 'keep_duplicates_mode',
+                    'keep_duplicates_limit', 'downloaded_hash_counts', 'downloaded_hash_counts_lock',
                     'processed_post_ids'
                 ]
                 args_template['skip_current_file_flag'] = None
@@ -3494,9 +3507,9 @@ class DownloaderApp (QWidget ):
                 'skip_current_file_flag','manga_date_file_counter_ref','scan_content_for_images',
                 'manga_mode_active','manga_filename_style','manga_date_prefix','text_only_scope',
                 'text_export_format', 'single_pdf_mode',
-                'use_date_prefix_for_subfolder','keep_in_post_duplicates','manga_global_file_counter_ref',
+                'use_date_prefix_for_subfolder','keep_in_post_duplicates','keep_duplicates_mode','manga_global_file_counter_ref',
                 'creator_download_folder_ignore_words','session_file_path','project_root_dir','session_lock',
-                'processed_post_ids' # This key was missing
+                'processed_post_ids', 'keep_duplicates_limit', 'downloaded_hash_counts', 'downloaded_hash_counts_lock'
             ]
             
             num_file_dl_threads_for_each_worker = worker_args_template.get('num_file_threads_for_worker', 1)
@@ -3537,7 +3550,7 @@ class DownloaderApp (QWidget ):
 
             if permanent:
                 self.permanently_failed_files_for_dialog.extend(permanent)
-                self._update_error_button_count()  # <-- THIS IS THE FIX
+                self._update_error_button_count()
 
             # Other result handling
             if history_data: self._add_to_history_candidates(history_data)
@@ -3676,7 +3689,7 @@ class DownloaderApp (QWidget ):
         self .external_links_checkbox ,self .manga_mode_checkbox ,self .manga_rename_toggle_button ,self .use_cookie_checkbox ,self .cookie_text_input ,self .cookie_browse_button ,
         self .multipart_toggle_button ,self .radio_only_audio ,
         self .character_search_input ,self .new_char_input ,self .add_char_button ,self .add_to_filter_button ,self .delete_char_button ,
-        self .reset_button 
+        self .reset_button, self.radio_more, self.keep_duplicates_checkbox
         ]
 
         widgets_to_enable_on_pause =self ._get_configurable_widgets_on_pause ()
@@ -4063,6 +4076,42 @@ class DownloaderApp (QWidget ):
             self .set_ui_enabled (True )
         self .cancellation_message_logged_this_session =False
 
+    def _handle_keep_duplicates_toggled(self, checked):
+        """Shows the duplicate handling dialog when the checkbox is checked."""
+        if checked:
+            dialog = KeepDuplicatesDialog(self.keep_duplicates_mode, self.keep_duplicates_limit, self)
+            if dialog.exec_() == QDialog.Accepted:
+                options = dialog.get_selected_options()
+                self.keep_duplicates_mode = options["mode"]
+                self.keep_duplicates_limit = options["limit"]
+
+                limit_text = f"with a limit of {self.keep_duplicates_limit}" if self.keep_duplicates_limit > 0 else "with no limit"
+                self.log_signal.emit(f"ℹ️ Duplicate handling mode set to: '{self.keep_duplicates_mode}' {limit_text}.")
+                self.log_signal.emit(f"")
+                self.log_signal.emit(f"")
+
+                # Log warning only after the confirmation and only if the specific mode is selected
+                if self.keep_duplicates_mode == DUPLICATE_HANDLING_KEEP_ALL:
+                    self._log_keep_everything_warning()
+            else:
+                self.keep_duplicates_checkbox.setChecked(False)
+        else:
+            self.keep_duplicates_mode = DUPLICATE_HANDLING_HASH
+            self.keep_duplicates_limit = 0
+            self.log_signal.emit("ℹ️ 'Keep Duplicates' disabled. Reverted to default hash checking.")
+
+    def _log_keep_everything_warning(self):
+        """Logs a formatted warning when the 'Keep Everything' mode is selected."""
+     
+        warning_html = (
+            f'{HTML_PREFIX}'
+            '<h2 style="margin-top: 8px; margin-bottom: 4px; font-weight: bold;">⚠️ ATTENTION: "Keep Everything" Enabled</h2>'
+            '<h3><p style="margin-top: 0; margin-bottom: 4px;">This mode will download every single file from the API response for a post,</p>'
+            '<p style="margin-top: 0; margin-bottom: 4px;">even if they have identical content. This can lead to many redundant files.</p>'
+            '<p style="margin-top: 0; margin-bottom: 4px;"><b>Recommendation:</b> Consider using the <b>limit feature</b>.</p>'
+            '<p style="margin-top: 0; margin-bottom: 0;">For example, setting the limit to <b>2</b> will download a file with the same content up to two times.</p></h3>'
+        )
+        self.log_signal.emit(warning_html)
 
     def _handle_thumbnail_mode_change (self ,thumbnails_checked ):
         """Handles UI changes when 'Download Thumbnails Only' is toggled."""
@@ -4266,9 +4315,7 @@ class DownloaderApp (QWidget ):
             if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
 
     def reset_application_state(self):
-        # --- Stop all background tasks and threads ---
         if self._is_download_active():
-            # Try to cancel download thread
             if self.download_thread and self.download_thread.isRunning():
                 self.log_signal.emit("⚠️ Cancelling active download thread for reset...")
                 self.cancellation_event.set()
@@ -4308,6 +4355,14 @@ class DownloaderApp (QWidget ):
             if self.pause_event:
                 self.pause_event.clear()
             self.is_paused = False
+
+        self.log_signal.emit("🔄 Resetting application state to defaults...")
+        self._clear_session_file()
+        self._reset_ui_to_defaults()
+        self._load_saved_download_location()
+        self.main_log_output.clear()
+        self.external_log_output.clear()
+
     
         # --- Reset UI and all state ---
         self.log_signal.emit("🔄 Resetting application state to defaults...")
@@ -4407,6 +4462,10 @@ class DownloaderApp (QWidget ):
         self.use_multithreading_checkbox.setChecked(True)
         if self.favorite_mode_checkbox:
             self.favorite_mode_checkbox.setChecked(False)
+
+        if hasattr(self, 'keep_duplicates_checkbox'):
+            self.keep_duplicates_checkbox.setChecked(False)
+
         self.external_links_checkbox.setChecked(False)
         if self.manga_mode_checkbox:
             self.manga_mode_checkbox.setChecked(False)
@@ -4451,7 +4510,6 @@ class DownloaderApp (QWidget ):
         if self.pause_event:
             self.pause_event.clear()
     
-        # Reset extracted/external links state
         self.external_link_queue.clear()
         self.extracted_links_cache = []
         self._is_processing_external_link_queue = False

@@ -559,11 +559,13 @@ def get_dark_theme(scale=1):
         border: 1px solid #6A6A6A; 
         padding: {tooltip_padding}px; 
         border-radius: 3px; 
+        font-size: {font_size}pt;
     }}
     QSplitter::handle {{ background-color: #5A5A5A; }}
     QSplitter::handle:horizontal {{ width: {int(5 * scale)}px; }}
     QSplitter::handle:vertical {{ height: {int(5 * scale)}px; }}
     """
+
 def apply_theme_to_app(main_app, theme_name, initial_load=False):
     """
     Applies the selected theme and scaling to the main application window.
