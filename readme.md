@@ -211,7 +211,7 @@ This project is under the Custom Licence
 
 👉 See [features.md](features.md) for the full feature list.
 
-<div style="display: flex; justify-content: center; align-items: center; gap: 16px;">
+<div style="display: flex; justify-content: center; align-items: center; gap: 27px;">
 
   <a href="https://ko-fi.com/C0C31F2F2B">
     <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 36px;">
