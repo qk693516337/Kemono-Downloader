@@ -211,16 +211,14 @@ This project is under the Custom Licence
 
 👉 See [features.md](features.md) for the full feature list.
 
-<div align="center">
+<div style="display: flex; justify-content: center; align-items: center; gap: 16px;">
 
-<a href="https://ko-fi.com/C0C31F2F2B">
-  <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 36px;">
-</a>
+  <a href="https://ko-fi.com/C0C31F2F2B">
+    <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 36px;">
+  </a>
 
-&nbsp;&nbsp;
-
-<a href="https://buymeacoffee.com/yuvi9587">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 36px" >
-</a>
+  <a href="https://buymeacoffee.com/yuvi9587">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 36px;">
+  </a>
 
 </div>
