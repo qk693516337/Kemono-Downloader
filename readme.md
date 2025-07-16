@@ -213,12 +213,6 @@ This project is under the Custom Licence
 
 <div align="center">
 
-[![](https://img.shields.io/badge/📚%20Full%20Feature%20List-FFD700?style=for-the-badge&logoColor=black&color=FFD700)](features.md)
-[![](https://img.shields.io/badge/📝%20License-90EE90?style=for-the-badge&logoColor=black&color=90EE90)](LICENSE)
-[![](https://img.shields.io/badge/⚠️%20Important%20Note-FFCCCB?style=for-the-badge&logoColor=black&color=FFCCCB)](note.md)
-
-<br><br>
-
 <a href="https://ko-fi.com/C0C31F2F2B">
   <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi" style="height: 36px;">
 </a>
