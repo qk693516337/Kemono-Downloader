@@ -212,7 +212,7 @@ This project is under the Custom Licence
 👉 See [features.md](features.md) for the full feature list.
 
 <p align="center">
-  <a href="https://buymeacoffee.com/yuvi9587" target="_blank">
-    <img src="Read/bmac.gif" alt="Default Mode" width="400"><br>
+  <a href="https://buymeacoffee.com/yuvi9587">
+    <img src="Read/bmac.gif" alt="Buy me a coffee" width="400">
   </a>
 </p>
