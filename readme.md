@@ -41,13 +41,7 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 
 </div>
 
-<a href="https://ko-fi.com/C0C31F2F2B">
-  <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support me on Ko-fi">
-</a>
 
-<a href="https://buymeacoffee.com/yuvi9587">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" >
-</a>
 ---
 
 ## Feature Overview
