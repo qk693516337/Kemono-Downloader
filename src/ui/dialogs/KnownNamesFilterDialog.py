@@ -14,7 +14,6 @@ class KnownNamesFilterDialog(QDialog):
     """
     A dialog to select names from the Known.txt list to add to the main
     character filter input field. This provides a convenient way for users
-
     to reuse their saved names and groups for filtering downloads.
     """
 
@@ -40,11 +39,10 @@ class KnownNamesFilterDialog(QDialog):
 
         # Set window size dynamically
         screen_geometry = QApplication.primaryScreen().availableGeometry()
+        scale_factor = getattr(self.parent_app, 'scale_factor', 1.0)
         base_width, base_height = 460, 450
-        scale_factor_h = screen_geometry.height() / 1080.0
-        effective_scale_factor = max(0.75, min(scale_factor_h, 1.5))
-        self.setMinimumSize(int(base_width * effective_scale_factor), int(base_height * effective_scale_factor))
-        self.resize(int(base_width * effective_scale_factor * 1.1), int(base_height * effective_scale_factor * 1.1))
+        self.setMinimumSize(int(base_width * scale_factor), int(base_height * scale_factor))
+        self.resize(int(base_width * scale_factor * 1.1), int(base_height * scale_factor * 1.1))
 
         # --- Initialize UI and Apply Theming ---
         self._init_ui()

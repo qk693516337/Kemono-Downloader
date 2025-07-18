@@ -260,7 +260,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.0.0")
+        self.setWindowTitle("Kemono Downloader v6.1.0")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -303,7 +303,7 @@ class DownloaderApp (QWidget ):
         if msg_box.clickedButton() == restart_button:
             self._request_restart_application()
 
-    def _create_initial_session_file(self, api_url_for_session, override_output_dir_for_session): # ADD override_output_dir_for_session
+    def _create_initial_session_file(self, api_url_for_session, override_output_dir_for_session, remaining_queue=None):
         """Creates the initial session file at the start of a new download."""
         if self.is_restore_pending:
             return
@@ -319,19 +319,21 @@ class DownloaderApp (QWidget ):
             "download_state": {
                 "processed_post_ids": [],
                 "permanently_failed_files": [],
+                "successfully_downloaded_hashes": [], 
+                "last_processed_offset": 0,  
                 "manga_counters": {
                     "date_based": 1,
                     "global_numbering": 1
                 }
-            }
-        }
+            },
+            "remaining_queue": list(remaining_queue) if remaining_queue else []
+        }    
         self._save_session_file(session_data)
 
     def get_checkbox_map(self):
         """Returns a mapping of checkbox attribute names to their corresponding settings key."""
         return {
             'skip_zip_checkbox': 'skip_zip',
-            'skip_rar_checkbox': 'skip_rar',
             'download_thumbnails_checkbox': 'download_thumbnails',
             'compress_images_checkbox': 'compress_images',
             'use_subfolders_checkbox': 'use_subfolders',
@@ -377,6 +379,11 @@ class DownloaderApp (QWidget ):
         settings['char_filter_scope'] = self.char_filter_scope
         settings['manga_filename_style'] = self.manga_filename_style
         settings['allow_multipart_download'] = self.allow_multipart_download_setting
+        settings['more_filter_scope'] = self.more_filter_scope
+        settings['text_export_format'] = self.text_export_format
+        settings['single_pdf_setting'] = self.single_pdf_setting
+        settings['keep_duplicates_mode'] = self.keep_duplicates_mode
+        settings['keep_duplicates_limit'] = self.keep_duplicates_limit
         
         return settings
 
@@ -413,6 +420,12 @@ class DownloaderApp (QWidget ):
                     self.permanently_failed_files_for_dialog.clear()
                     self.permanently_failed_files_for_dialog.extend(failed_files_from_session)
                     self.log_signal.emit(f"ℹ️ Restored {len(failed_files_from_session)} failed file entries from the previous session.")
+
+                remaining_queue_from_session = session_data.get('remaining_queue', [])
+                if remaining_queue_from_session:
+                    self.favorite_download_queue.clear()
+                    self.favorite_download_queue.extend(remaining_queue_from_session)
+                    self.log_signal.emit(f"ℹ️ Restored {len(self.favorite_download_queue)} creator(s) to the download queue.")
 
                 self.interrupted_session_data = session_data
                 self.log_signal.emit("ℹ️ Incomplete download session found. UI updated for restore.")
@@ -457,6 +470,9 @@ class DownloaderApp (QWidget ):
         """Safely saves the session data to the session file using an atomic write pattern."""
         temp_session_file_path = self.session_file_path + ".tmp"
         try:
+            if 'download_state' in session_data:
+                with self.downloaded_file_hashes_lock:
+                    session_data['download_state']['successfully_downloaded_hashes'] = list(self.downloaded_file_hashes)
             with open(temp_session_file_path, 'w', encoding='utf-8') as f:
                 json.dump(session_data, f, indent=2)
             os.replace(temp_session_file_path, self.session_file_path)
@@ -554,11 +570,10 @@ class DownloaderApp (QWidget ):
         self ._update_skip_scope_button_text ()
 
         if hasattr (self ,'skip_zip_checkbox'):self .skip_zip_checkbox .setText (self ._tr ("skip_zip_checkbox_label","Skip .zip"))
-        if hasattr (self ,'skip_rar_checkbox'):self .skip_rar_checkbox .setText (self ._tr ("skip_rar_checkbox_label","Skip .rar"))
         if hasattr (self ,'download_thumbnails_checkbox'):self .download_thumbnails_checkbox .setText (self ._tr ("download_thumbnails_checkbox_label","Download Thumbnails Only"))
         if hasattr (self ,'scan_content_images_checkbox'):self .scan_content_images_checkbox .setText (self ._tr ("scan_content_images_checkbox_label","Scan Content for Images"))
         if hasattr (self ,'compress_images_checkbox'):self .compress_images_checkbox .setText (self ._tr ("compress_images_checkbox_label","Compress to WebP"))
-        if hasattr (self ,'use_subfolders_checkbox'):self .use_subfolders_checkbox .setText (self ._tr ("separate_folders_checkbox_label","Separate Folders by Name/Title"))
+        if hasattr (self ,'use_subfolders_checkbox'):self .use_subfolders_checkbox .setText (self ._tr ("separate_folders_checkbox_label","Separate Folders by Known.txt"))
         if hasattr (self ,'use_subfolder_per_post_checkbox'):self .use_subfolder_per_post_checkbox .setText (self ._tr ("subfolder_per_post_checkbox_label","Subfolder per Post"))
         if hasattr (self ,'use_cookie_checkbox'):self .use_cookie_checkbox .setText (self ._tr ("use_cookie_checkbox_label","Use Cookie"))
         if hasattr (self ,'use_multithreading_checkbox'):self .update_multithreading_label (self .thread_count_input .text ()if hasattr (self ,'thread_count_input')else "1")
@@ -931,28 +946,20 @@ class DownloaderApp (QWidget ):
         """
         global KNOWN_NAMES
         try:
-            # --- FIX STARTS HERE ---
-            # Get the directory path from the full file path.
             config_dir = os.path.dirname(self.config_file)
-            # Create the directory if it doesn't exist. 'exist_ok=True' prevents
-            # an error if the directory is already there.
             os.makedirs(config_dir, exist_ok=True)
-            # --- FIX ENDS HERE ---
 
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 for entry in KNOWN_NAMES:
                     if entry["is_group"]:
-                        # For groups, write the aliases in a sorted, comma-separated format inside parentheses.
                         f.write(f"({', '.join(sorted(entry['aliases'], key=str.lower))})\n")
                     else:
-                        # For single entries, write the name on its own line.
                         f.write(entry["name"] + '\n')
 
             if hasattr(self, 'log_signal'):
                 self.log_signal.emit(f"💾 Saved {len(KNOWN_NAMES)} known entries to {self.config_file}")
 
         except Exception as e:
-            # If any error occurs during saving, log it and show a warning popup.
             log_msg = f"❌ Error saving config '{self.config_file}': {e}"
             if hasattr(self, 'log_signal'):
                 self.log_signal.emit(log_msg)
@@ -1488,33 +1495,33 @@ class DownloaderApp (QWidget ):
             self .log_signal .emit (f"❌ Unexpected error opening folder dialog: {e }\n{traceback .format_exc (limit =3 )}")
             QMessageBox .critical (self ,"Dialog Error",f"An unexpected error occurred with the folder selection dialog: {e }")
 
-    def handle_main_log (self ,message ):
-        # vvv ADD THIS BLOCK AT THE TOP OF THE METHOD vvv
+    def handle_main_log(self, message):
         if message.startswith("TEMP_FILE_PATH:"):
             filepath = message.split(":", 1)[1]
             if self.single_pdf_setting:
                 self.session_temp_files.append(filepath)
             return
-        is_html_message =message .startswith (HTML_PREFIX )
-        display_message =message 
-        use_html =False 
+            
+        is_html_message = message.startswith(HTML_PREFIX)
+        display_message = message[len(HTML_PREFIX):] if is_html_message else message
+        
+        try:
+            safe_message = str(display_message).replace('\x00', '[NULL]')
+            lines = safe_message.split('\n')
 
-        if is_html_message :
-            display_message =message [len (HTML_PREFIX ):]
-            use_html =True 
+            for line in lines:
+                if is_html_message:
+                    self.main_log_output.insertHtml(line + "<br>") 
+                else:
+                    self.main_log_output.append(line)
 
-        try :
-            safe_message =str (display_message ).replace ('\x00','[NULL]')
-            if use_html :
-                self .main_log_output .insertHtml (safe_message )
-            else :
-                self .main_log_output .append (safe_message )
-
-            scrollbar =self .main_log_output .verticalScrollBar ()
-            if scrollbar .value ()>=scrollbar .maximum ()-30 :
-                scrollbar .setValue (scrollbar .maximum ())
-        except Exception as e :
-            print (f"GUI Main Log Error: {e }\nOriginal Message: {message }")
+            scrollbar = self.main_log_output.verticalScrollBar()
+            if scrollbar.value() >= scrollbar.maximum() - 30:
+                scrollbar.setValue(scrollbar.maximum())
+                
+        except Exception as e:
+            print(f"GUI Main Log Error: {e}\nOriginal Message: {message}")
+  
     def _extract_key_term_from_title (self ,title ):
         if not title :
             return None 
@@ -1635,27 +1642,49 @@ class DownloaderApp (QWidget ):
         post_title ,link_text ,link_url ,platform ,decryption_key =link_data 
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
 
-        max_link_text_len =50 
-        display_text =(link_text [:max_link_text_len ].strip ()+"..."
-        if len (link_text )>max_link_text_len else link_text .strip ())
-        formatted_link_info =f"{display_text } - {link_url } - {platform }"
+        if is_only_links_mode:
+            # Check if this is a new post title
+            if post_title != self._current_link_post_title:
+                # Add a styled horizontal rule as a separator
+                if self._current_link_post_title is not None:
+                    separator_html = f'{HTML_PREFIX}<hr style="border: 1px solid #444;">'
+                    self.log_signal.emit(separator_html)
+                
+                # Display the new post title as a styled heading
+                title_html = f'{HTML_PREFIX}<h3 style="color: #87CEEB; margin-bottom: 5px; margin-top: 8px;">{html.escape(post_title)}</h3>'
+                self.log_signal.emit(title_html)
+                self._current_link_post_title = post_title
 
-        if decryption_key :
-            formatted_link_info +=f" (Decryption Key: {decryption_key })"
+            # Sanitize the link text for safe HTML display
+            display_text = html.escape(link_text.strip() if link_text.strip() else link_url)
 
-        if is_only_links_mode :
-            if post_title !=self ._current_link_post_title :
-                separator_html ="<br>"+"-"*45 +"<br>"
-                if self ._current_link_post_title is not None :
-                    self .log_signal .emit (HTML_PREFIX +separator_html )
-                title_html =f'<b style="color: #87CEEB;">{html .escape (post_title )}</b><br>'
-                self .log_signal .emit (HTML_PREFIX +title_html )
-                self ._current_link_post_title =post_title 
+            # Build the HTML for the link item for a cleaner look
+            link_html_parts = [
+                # Use a div for indentation and a bullet point for list-like appearance
+                f'<div style="margin-left: 20px; margin-bottom: 4px;">'
+                f'• <a href="{link_url}" style="color: #A9D0F5; text-decoration: none;">{display_text}</a>'
+                f' <span style="color: #999;">({html.escape(platform)})</span>'
+            ]
 
-            self .log_signal .emit (formatted_link_info )
+            if decryption_key:
+                link_html_parts.append(
+                    # Display key on a new line, indented, and in a different color
+                    f'<br><span style="margin-left: 15px; color: #f0ad4e; font-size: 9pt;">'
+                    f'Key: {html.escape(decryption_key)}</span>'
+                )
+            
+            link_html_parts.append('</div>')
+            
+            final_link_html = f'{HTML_PREFIX}{"".join(link_html_parts)}'
+            self.log_signal.emit(final_link_html)
+        
+        # This part handles the secondary log panel and remains the same
         elif self .show_external_links :
             separator ="-"*45 
-            self ._append_to_external_log (formatted_link_info ,separator )
+            formatted_link_info = f"{link_text} - {link_url} - {platform}"
+            if decryption_key:
+                formatted_link_info += f" (Decryption Key: {decryption_key})"
+            self._append_to_external_log(formatted_link_info, separator)
 
         self ._is_processing_external_link_queue =False 
         self ._try_process_next_external_link ()
@@ -1787,140 +1816,141 @@ class DownloaderApp (QWidget ):
             self.log_signal.emit("ℹ️ External Links Log Disabled")
 
     def _handle_filter_mode_change(self, button, checked):
-        # If a button other than "More" is selected, reset the UI
-        if button != self.radio_more and checked:
-            self.radio_more.setText("More")
-            self.more_filter_scope = None
-            self.single_pdf_setting = False # Reset the setting
-            # Re-enable the checkboxes
-            if hasattr(self, 'use_multithreading_checkbox'): self.use_multithreading_checkbox.setEnabled(True)
-            if hasattr(self, 'use_subfolders_checkbox'): self.use_subfolders_checkbox.setEnabled(True)
-
         if not button or not checked:
             return
 
-        is_only_links =(button ==self .radio_only_links )
-        is_only_audio =(hasattr (self ,'radio_only_audio')and self .radio_only_audio is not None and button ==self .radio_only_audio )
-        is_only_archives =(hasattr (self ,'radio_only_archives')and self .radio_only_archives is not None and button ==self .radio_only_archives )
+        # Define this variable early to ensure it's always available.
+        is_only_links = (button == self.radio_only_links)
 
-        if self .skip_scope_toggle_button :
-            self .skip_scope_toggle_button .setVisible (not (is_only_links or is_only_archives or is_only_audio ))
-        if hasattr (self ,'multipart_toggle_button')and self .multipart_toggle_button :
-            self .multipart_toggle_button .setVisible (not (is_only_links or is_only_archives or is_only_audio ))
+        # Handle the automatic disabling of multithreading for link extraction
+        if hasattr(self, 'use_multithreading_checkbox'):
+            if is_only_links:
+                # Disable multithreading for "Only Links" to avoid the bug
+                self.use_multithreading_checkbox.setChecked(False)
+                self.use_multithreading_checkbox.setEnabled(False)
+            else:
+                # Re-enable the multithreading option for other modes.
+                # Other logic will handle disabling it if needed (e.g., for Manga Date mode).
+                self.use_multithreading_checkbox.setEnabled(True)
 
-        if self .link_search_input :self .link_search_input .setVisible (is_only_links )
-        if self .link_search_button :self .link_search_button .setVisible (is_only_links )
-        if self .export_links_button :
-            self .export_links_button .setVisible (is_only_links )
-            self .export_links_button .setEnabled (is_only_links and bool (self .extracted_links_cache ))
+        # Reset the "More" button text if another button is selected
+        if button != self.radio_more and checked:
+            self.radio_more.setText("More")
+            self.more_filter_scope = None
+            self.single_pdf_setting = False
+            if hasattr(self, 'use_subfolders_checkbox'):
+                self.use_subfolders_checkbox.setEnabled(True)
 
-        if hasattr (self ,'download_extracted_links_button')and self .download_extracted_links_button :
-            self .download_extracted_links_button .setVisible (is_only_links )
-            self ._update_download_extracted_links_button_state ()
+        is_only_audio = (hasattr(self, 'radio_only_audio') and self.radio_only_audio is not None and button == self.radio_only_audio)
+        is_only_archives = (hasattr(self, 'radio_only_archives') and self.radio_only_archives is not None and button == self.radio_only_archives)
 
-        if self .download_btn :
-            if is_only_links :
-                self .download_btn .setText (self ._tr ("extract_links_button_text","🔗 Extract Links"))
-            else :
-                self .download_btn .setText (self ._tr ("start_download_button_text","⬇️ Start Download"))
-        if not is_only_links and self .link_search_input :self .link_search_input .clear ()
+        if self.skip_scope_toggle_button:
+            self.skip_scope_toggle_button.setVisible(not (is_only_links or is_only_archives or is_only_audio))
+        if hasattr(self, 'multipart_toggle_button') and self.multipart_toggle_button:
+            self.multipart_toggle_button.setVisible(not (is_only_links or is_only_archives or is_only_audio))
 
-        file_download_mode_active =not is_only_links 
+        if self.link_search_input: self.link_search_input.setVisible(is_only_links)
+        if self.link_search_button: self.link_search_button.setVisible(is_only_links)
+        if self.export_links_button:
+            self.export_links_button.setVisible(is_only_links)
+            self.export_links_button.setEnabled(is_only_links and bool(self.extracted_links_cache))
 
+        if hasattr(self, 'download_extracted_links_button') and self.download_extracted_links_button:
+            self.download_extracted_links_button.setVisible(is_only_links)
+            self._update_download_extracted_links_button_state()
 
+        if self.download_btn:
+            if is_only_links:
+                self.download_btn.setText(self._tr("extract_links_button_text", "🔗 Extract Links"))
+            else:
+                self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+        if not is_only_links and self.link_search_input: self.link_search_input.clear()
 
-        if self .use_subfolders_checkbox :self .use_subfolders_checkbox .setEnabled (file_download_mode_active )
-        if self .skip_words_input :self .skip_words_input .setEnabled (file_download_mode_active )
-        if self .skip_scope_toggle_button :self .skip_scope_toggle_button .setEnabled (file_download_mode_active )
-        if hasattr (self ,'remove_from_filename_input'):self .remove_from_filename_input .setEnabled (file_download_mode_active )
+        file_download_mode_active = not is_only_links
 
-        if self .skip_zip_checkbox :
-            can_skip_zip =file_download_mode_active and not is_only_archives 
-            self .skip_zip_checkbox .setEnabled (can_skip_zip )
-            if is_only_archives :
-                self .skip_zip_checkbox .setChecked (False )
+        if self.use_subfolders_checkbox: self.use_subfolders_checkbox.setEnabled(file_download_mode_active)
+        if self.skip_words_input: self.skip_words_input.setEnabled(file_download_mode_active)
+        if self.skip_scope_toggle_button: self.skip_scope_toggle_button.setEnabled(file_download_mode_active)
+        if hasattr(self, 'remove_from_filename_input'): self.remove_from_filename_input.setEnabled(file_download_mode_active)
 
-        if self .skip_rar_checkbox :
-            can_skip_rar =file_download_mode_active and not is_only_archives 
-            self .skip_rar_checkbox .setEnabled (can_skip_rar )
-            if is_only_archives :
-                self .skip_rar_checkbox .setChecked (False )
+        if self.skip_zip_checkbox:
+            can_skip_zip = file_download_mode_active and not is_only_archives
+            self.skip_zip_checkbox.setEnabled(can_skip_zip)
+            if is_only_archives:
+                self.skip_zip_checkbox.setChecked(False)
 
-        other_file_proc_enabled =file_download_mode_active and not is_only_archives 
-        if self .download_thumbnails_checkbox :self .download_thumbnails_checkbox .setEnabled (other_file_proc_enabled )
-        if self .compress_images_checkbox :self .compress_images_checkbox .setEnabled (other_file_proc_enabled )
+        other_file_proc_enabled = file_download_mode_active and not is_only_archives
+        if self.download_thumbnails_checkbox: self.download_thumbnails_checkbox.setEnabled(other_file_proc_enabled)
+        if self.compress_images_checkbox: self.compress_images_checkbox.setEnabled(other_file_proc_enabled)
 
-        if self .external_links_checkbox :
-            can_show_external_log_option =file_download_mode_active and not is_only_archives 
-            self .external_links_checkbox .setEnabled (can_show_external_log_option )
-            if not can_show_external_log_option :
-                self .external_links_checkbox .setChecked (False )
+        if self.external_links_checkbox:
+            can_show_external_log_option = file_download_mode_active and not is_only_archives
+            self.external_links_checkbox.setEnabled(can_show_external_log_option)
+            if not can_show_external_log_option:
+                self.external_links_checkbox.setChecked(False)
 
+        if is_only_links:
+            self.progress_log_label.setText("📜 Extracted Links Log:")
+            if self.external_log_output: self.external_log_output.hide()
+            if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
 
-        if is_only_links :
-            self .progress_log_label .setText ("📜 Extracted Links Log:")
-            if self .external_log_output :self .external_log_output .hide ()
-            if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
+            do_clear_log_in_filter_change = True
+            if self.mega_download_log_preserved_once and self.only_links_log_display_mode == LOG_DISPLAY_DOWNLOAD_PROGRESS:
+                do_clear_log_in_filter_change = False
 
+            if self.main_log_output and do_clear_log_in_filter_change:
+                self.log_signal.emit("INTERNAL: _handle_filter_mode_change - About to clear log.")
+                self.main_log_output.clear()
+                self.log_signal.emit("INTERNAL: _handle_filter_mode_change - Log cleared by _handle_filter_mode_change.")
 
-            do_clear_log_in_filter_change =True 
-            if self .mega_download_log_preserved_once and self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
-                do_clear_log_in_filter_change =False 
-
-            if self .main_log_output and do_clear_log_in_filter_change :
-                self .log_signal .emit ("INTERNAL: _handle_filter_mode_change - About to clear log.")
-                self .main_log_output .clear ()
-                self .log_signal .emit ("INTERNAL: _handle_filter_mode_change - Log cleared by _handle_filter_mode_change.")
-
-            if self .main_log_output :self .main_log_output .setMinimumHeight (0 )
+            if self.main_log_output: self.main_log_output.setMinimumHeight(0)
             self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
-            self ._try_process_next_external_link ()
-        elif is_only_archives :
-            self .progress_log_label .setText ("📜 Progress Log (Archives Only):")
-            if self .external_log_output :self .external_log_output .hide ()
-            if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
-            if self .main_log_output :self .main_log_output .clear ()
+            self._try_process_next_external_link()
+        elif is_only_archives:
+            self.progress_log_label.setText("📜 Progress Log (Archives Only):")
+            if self.external_log_output: self.external_log_output.hide()
+            if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
+            if self.main_log_output: self.main_log_output.clear()
             self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
-        elif is_only_audio :
-            self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:")+f" ({self ._tr ('filter_audio_radio','🎧 Only Audio')})")
-            if self .external_log_output :self .external_log_output .hide ()
-            if self .log_splitter :self .log_splitter .setSizes ([self .height (),0 ])
-            if self .main_log_output :self .main_log_output .clear ()
+        elif is_only_audio:
+            self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:") + f" ({self._tr('filter_audio_radio', '🎧 Only Audio')})")
+            if self.external_log_output: self.external_log_output.hide()
+            if self.log_splitter: self.log_splitter.setSizes([self.height(), 0])
+            if self.main_log_output: self.main_log_output.clear()
             self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
-        else :
-            self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
-            self .update_external_links_setting (self .external_links_checkbox .isChecked ()if self .external_links_checkbox else False )
+        else:
+            self.progress_log_label.setText(self._tr("progress_log_label_text", "📜 Progress Log:"))
+            self.update_external_links_setting(self.external_links_checkbox.isChecked() if self.external_links_checkbox else False)
             self.log_signal.emit(f"ℹ️ Filter mode changed to: {button.text()}")
 
+        if is_only_links:
+            self._filter_links_log()
 
-        if is_only_links :
-            self ._filter_links_log ()
+        if hasattr(self, 'log_display_mode_toggle_button'):
+            self.log_display_mode_toggle_button.setVisible(is_only_links)
+            self._update_log_display_mode_button_text()
 
-        if hasattr (self ,'log_display_mode_toggle_button'):
-            self .log_display_mode_toggle_button .setVisible (is_only_links )
-            self ._update_log_display_mode_button_text ()
+        subfolders_on = self.use_subfolders_checkbox.isChecked() if self.use_subfolders_checkbox else False
+        manga_on = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
 
-        subfolders_on =self .use_subfolders_checkbox .isChecked ()if self .use_subfolders_checkbox else False 
-        manga_on =self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False 
+        character_filter_should_be_active = file_download_mode_active and not is_only_archives
 
-        character_filter_should_be_active =file_download_mode_active and not is_only_archives 
+        if self.character_filter_widget:
+            self.character_filter_widget.setVisible(character_filter_should_be_active)
 
-        if self .character_filter_widget :
-            self .character_filter_widget .setVisible (character_filter_should_be_active )
+        enable_character_filter_related_widgets = character_filter_should_be_active
 
-        enable_character_filter_related_widgets =character_filter_should_be_active 
+        if self.character_input:
+            self.character_input.setEnabled(enable_character_filter_related_widgets)
+            if not enable_character_filter_related_widgets:
+                self.character_input.clear()
 
-        if self .character_input :
-            self .character_input .setEnabled (enable_character_filter_related_widgets )
-            if not enable_character_filter_related_widgets :
-                self .character_input .clear ()
+        if self.char_filter_scope_toggle_button:
+            self.char_filter_scope_toggle_button.setEnabled(enable_character_filter_related_widgets)
 
-        if self .char_filter_scope_toggle_button :
-            self .char_filter_scope_toggle_button .setEnabled (enable_character_filter_related_widgets )
-
-        self .update_ui_for_subfolders (subfolders_on )
-        self .update_custom_folder_visibility ()
-        self .update_ui_for_manga_mode (self .manga_mode_checkbox .isChecked ()if self .manga_mode_checkbox else False )
+        self.update_ui_for_subfolders(subfolders_on)
+        self.update_custom_folder_visibility()
+        self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
 
 
     def _filter_links_log (self ):
@@ -2634,24 +2664,39 @@ class DownloaderApp (QWidget ):
         if total_posts >0 or processed_posts >0 :
             self .file_progress_label .setText ("")
 
-    def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False):
+    def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False, is_continuation=False):
         self.is_finishing = False
         self.downloaded_hash_counts.clear()
         global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
+
+        if not is_restore and not is_continuation:
+            self.permanently_failed_files_for_dialog.clear()
+
+        self.retryable_failed_files_info.clear()
+        self._update_error_button_count()
 
         self._clear_stale_temp_files()
         self.session_temp_files = []
 
         processed_post_ids_for_restore = []
         manga_counters_for_restore = None
+        start_offset_for_restore = 0 
 
         if is_restore and self.interrupted_session_data:
             self.log_signal.emit("   Restoring session state...")
             download_state = self.interrupted_session_data.get("download_state", {})
             processed_post_ids_for_restore = download_state.get("processed_post_ids", [])
+            start_offset_for_restore = download_state.get("last_processed_offset", 0) 
+            restored_hashes = download_state.get("successfully_downloaded_hashes", [])
+            if restored_hashes:
+                with self.downloaded_file_hashes_lock:
+                    self.downloaded_file_hashes.update(restored_hashes)
+                self.log_signal.emit(f"   Restored memory of {len(restored_hashes)} successfully downloaded files.")
             manga_counters_for_restore = download_state.get("manga_counters")
             if processed_post_ids_for_restore:
                 self.log_signal.emit(f"   Will skip {len(processed_post_ids_for_restore)} already processed posts.")
+            if start_offset_for_restore > 0: 
+                self.log_signal.emit(f"   Resuming fetch from page offset: {start_offset_for_restore}")
             if manga_counters_for_restore:
                 self.log_signal.emit(f"   Restoring manga counters: {manga_counters_for_restore}")
 
@@ -2659,7 +2704,7 @@ class DownloaderApp (QWidget ):
             QMessageBox.warning(self, "Busy", "A download is already in progress.")
             return False
 
-        if not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
+        if not is_restore and not direct_api_url and self.favorite_download_queue and not self.is_processing_favorites_queue:
             self.log_signal.emit(f"ℹ️ Detected {len(self.favorite_download_queue)} item(s) in the queue. Starting processing...")
             self.cancellation_message_logged_this_session = False
             self._process_next_favorite_download()
@@ -2670,9 +2715,9 @@ class DownloaderApp (QWidget ):
             self._clear_session_file()
             self.interrupted_session_data = None
             self.is_restore_pending = False
-        
+
         api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
-        
+
         main_ui_download_dir = self.dir_input.text().strip()
         extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
         effective_output_dir_for_run = ""
@@ -2716,7 +2761,7 @@ class DownloaderApp (QWidget ):
             effective_output_dir_for_run = os.path.normpath(main_ui_download_dir)
 
         if not is_restore:
-            self._create_initial_session_file(api_url, effective_output_dir_for_run)
+            self._create_initial_session_file(api_url, effective_output_dir_for_run, remaining_queue=self.favorite_download_queue)
 
         self.download_history_candidates.clear()
         self._update_button_states_and_connections()
@@ -2839,13 +2884,10 @@ class DownloaderApp (QWidget ):
 
         if backend_filter_mode == 'archive':
             effective_skip_zip = False
-            effective_skip_rar = False
         else:
             effective_skip_zip = self.skip_zip_checkbox.isChecked()
-            effective_skip_rar = self.skip_rar_checkbox.isChecked()
             if backend_filter_mode == 'audio':
                 effective_skip_zip = self.skip_zip_checkbox.isChecked()
-                effective_skip_rar = self.skip_rar_checkbox.isChecked()
 
         if not api_url:
             QMessageBox.critical(self, "Input Error", "URL is required.")
@@ -3036,7 +3078,6 @@ class DownloaderApp (QWidget ):
         self.progress_label.setText(self._tr("progress_initializing_text", "Progress: Initializing..."))
 
         self.retryable_failed_files_info.clear()
-        self.permanently_failed_files_for_dialog.clear()
         self._update_error_button_count()
 
         manga_date_file_counter_ref_for_thread = None
@@ -3105,7 +3146,7 @@ class DownloaderApp (QWidget ):
             log_messages.extend([
                 f"    File Type Filter: {user_selected_filter_text} (Backend processing as: {backend_filter_mode})",
                 f"    Keep In-Post Duplicates: {'Enabled' if keep_duplicates else 'Disabled'}",
-                f"    Skip Archives: {'.zip' if effective_skip_zip else ''}{', ' if effective_skip_zip and effective_skip_rar else ''}{'.rar' if effective_skip_rar else ''}{'None (Archive Mode)' if backend_filter_mode == 'archive' else ('None' if not (effective_skip_zip or effective_skip_rar) else '')}",
+                f"    Skip Archives: {'.zip' if effective_skip_zip else ''}{', ' if effective_skip_zip else ''}{'None (Archive Mode)' if backend_filter_mode == 'archive' else ('None' if not (effective_skip_zip ) else '')}",
                 f"    Skip Words Scope: {current_skip_words_scope.capitalize()}",
                 f"    Remove Words from Filename: {', '.join(remove_from_filename_words_list) if remove_from_filename_words_list else 'None'}",
                 f"    Compress Images: {'Enabled' if compress_images else 'Disabled'}",
@@ -3157,7 +3198,6 @@ class DownloaderApp (QWidget ):
             'text_export_format': export_format_for_run,
             'single_pdf_mode': self.single_pdf_setting,
             'skip_zip': effective_skip_zip,
-            'skip_rar': effective_skip_rar,
             'use_subfolders': use_subfolders,
             'use_post_subfolders': use_post_subfolders,
             'compress_images': compress_images,
@@ -3206,6 +3246,7 @@ class DownloaderApp (QWidget ):
             'downloaded_hash_counts_lock': self.downloaded_hash_counts_lock,
             'skip_current_file_flag': None,
             'processed_post_ids': processed_post_ids_for_restore,
+            'start_offset': start_offset_for_restore, 
         }
 
         args_template['override_output_dir'] = override_output_dir
@@ -3218,12 +3259,12 @@ class DownloaderApp (QWidget ):
                 self.log_signal.emit(f"    Initializing single-threaded {'link extraction' if extract_links_only else 'download'}...")
                 dt_expected_keys = [
                     'api_url_input', 'output_dir', 'known_names_copy', 'cancellation_event',
-                    'filter_character_list', 'filter_mode', 'skip_zip', 'skip_rar',
+                    'filter_character_list', 'filter_mode', 'skip_zip',
                     'use_subfolders', 'use_post_subfolders', 'custom_folder_name',
                     'compress_images', 'download_thumbnails', 'service', 'user_id',
                     'downloaded_files', 'downloaded_file_hashes', 'pause_event', 'remove_from_filename_words_list',
                     'downloaded_files_lock', 'downloaded_file_hashes_lock', 'dynamic_character_filter_holder', 'session_file_path',
-                    'session_lock',
+                    'session_lock', 'start_offset', 
                     'skip_words_list', 'skip_words_scope', 'char_filter_scope',
                     'show_external_links', 'extract_links_only', 'num_file_threads_for_worker',
                     'start_page', 'end_page', 'target_post_id_from_initial_url',
@@ -3254,14 +3295,21 @@ class DownloaderApp (QWidget ):
         if self._is_download_active():
             QMessageBox.warning(self, "Busy", "A download is already in progress.")
             return
-        
+
         if not self.interrupted_session_data:
             self.log_signal.emit("❌ No session data to restore.")
             self._clear_session_and_reset_ui()
             return
 
+        remaining_queue_from_session = self.interrupted_session_data.get("remaining_queue", [])
+        if remaining_queue_from_session:
+            self.favorite_download_queue.clear()
+            self.favorite_download_queue.extend(remaining_queue_from_session)
+            self.is_processing_favorites_queue = True
+            self.log_signal.emit(f"ℹ️ Restored {len(self.favorite_download_queue)} item(s) to the download queue. Processing will continue automatically.")
+
         self.log_signal.emit("🔄 Preparing to restore download session...")
-        
+
         settings = self.interrupted_session_data.get("ui_settings", {})
         restore_url = settings.get("api_url")
         restore_dir = settings.get("output_dir")
@@ -3270,7 +3318,7 @@ class DownloaderApp (QWidget ):
             QMessageBox.critical(self, "Restore Error", "Session file is corrupt. Cannot restore because the URL is missing.")
             self._clear_session_and_reset_ui()
             return
-            
+
         self.is_restore_pending = True
         self.start_download(direct_api_url=restore_url, override_output_dir=restore_dir, is_restore=True)
 
@@ -3355,6 +3403,13 @@ class DownloaderApp (QWidget ):
             self .cancellation_event .set ()
             return False 
 
+        if 'output_dir' in worker_init_args:
+            worker_init_args['download_root'] = worker_init_args.pop('output_dir')
+        if 'initial_target_post_id' in worker_init_args:
+            worker_init_args['target_post_id_from_initial_url'] = worker_init_args.pop('initial_target_post_id')
+        if 'filter_character_list_objects_initial' in worker_init_args:
+            worker_init_args['filter_character_list'] = worker_init_args.pop('filter_character_list_objects_initial')
+
         try :
             worker_instance =PostProcessorWorker (**worker_init_args )
             if self .thread_pool :
@@ -3376,7 +3431,7 @@ class DownloaderApp (QWidget ):
         except Exception as e :
             self .log_signal .emit (f"❌ Error submitting post {post_data_item .get ('id','N/A')} to worker: {e }")
             self .cancellation_event .set ()
-            return False 
+            return False
 
     def _load_ui_from_settings_dict(self, settings: dict):
         """Populates the UI with values from a settings dictionary."""
@@ -3412,6 +3467,27 @@ class DownloaderApp (QWidget ):
             elif filter_mode == 'audio' and hasattr(self, 'radio_only_audio'): self.radio_only_audio.setChecked(True)
             else: self.radio_all.setChecked(True)
 
+        self.keep_duplicates_mode = settings.get('keep_duplicates_mode', DUPLICATE_HANDLING_HASH)
+        self.keep_duplicates_limit = settings.get('keep_duplicates_limit', 0)
+        # Visually update the checkbox based on the restored mode
+        if hasattr(self, 'keep_duplicates_checkbox'):
+            is_keep_mode = (self.keep_duplicates_mode == DUPLICATE_HANDLING_KEEP_ALL)
+            self.keep_duplicates_checkbox.setChecked(is_keep_mode)
+
+        # Restore "More" dialog settings
+        self.more_filter_scope = settings.get('more_filter_scope')
+        self.text_export_format = settings.get('text_export_format', 'pdf')
+        self.single_pdf_setting = settings.get('single_pdf_setting', False)
+        
+        # Visually update the "More" button's text to reflect the restored settings
+        if self.radio_more.isChecked() and self.more_filter_scope:
+            from .dialogs.MoreOptionsDialog import MoreOptionsDialog
+            scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
+            format_display = f" ({self.text_export_format.upper()})"
+            if self.single_pdf_setting:
+                format_display = " (Single PDF)"
+            self.radio_more.setText(f"{scope_text}{format_display}")
+
         # Toggle button states
         self.skip_words_scope = settings.get('skip_words_scope', SKIP_SCOPE_POSTS)
         self.char_filter_scope = settings.get('char_filter_scope', CHAR_SCOPE_TITLE)
@@ -3440,9 +3516,6 @@ class DownloaderApp (QWidget ):
         self.all_kept_original_filenames = []
         self.is_fetcher_thread_running = True
 
-        # --- START OF FIX ---
-        # Bundle all arguments for the fetcher thread into a single dictionary
-        # to ensure the correct number of arguments are passed.
         fetcher_thread_args = {
             'api_url': kwargs.get('api_url_input'),
             'worker_args_template': kwargs,
@@ -3452,11 +3525,10 @@ class DownloaderApp (QWidget ):
 
         fetcher_thread = threading.Thread(
             target=self._fetch_and_queue_posts,
-            args=(fetcher_thread_args,),  # Pass the single dictionary as an argument
+            args=(fetcher_thread_args,),  
             daemon=True,
             name="PostFetcher"
         )
-        # --- END OF FIX ---
         
         fetcher_thread.start()
         self.log_signal.emit(f"✅ Post fetcher thread started. {num_post_workers} post worker threads initializing...")
@@ -3465,70 +3537,133 @@ class DownloaderApp (QWidget ):
     def _fetch_and_queue_posts(self, fetcher_args):
         """
         Fetches post data and submits tasks to the pool.
-        This version unpacks arguments from a single dictionary.
+        This version is corrected to handle single-post fetches directly
+        in multi-threaded mode.
         """
-        global PostProcessorWorker, download_from_api
+        global PostProcessorWorker, download_from_api, requests, json, traceback, urlparse
 
-        # --- START OF FIX ---
         # Unpack arguments from the dictionary passed by the thread
         api_url_input_for_fetcher = fetcher_args['api_url']
         worker_args_template = fetcher_args['worker_args_template']
-        num_post_workers = fetcher_args['num_post_workers']
-        processed_post_ids = fetcher_args['processed_post_ids']
-        # --- END OF FIX ---
-        
+        processed_post_ids_set = set(fetcher_args.get('processed_post_ids', []))
+        start_offset = fetcher_args.get('start_offset', 0)
+        target_post_id = worker_args_template.get('target_post_id_from_initial_url') # Get the target post ID
+        logger_func = lambda msg: self.log_signal.emit(f"[Fetcher] {msg}")
+
         try:
-            post_generator = download_from_api(
-                api_url_input_for_fetcher,
-                logger=lambda msg: self.log_signal.emit(f"[Fetcher] {msg}"),
-                start_page=worker_args_template.get('start_page'),
-                end_page=worker_args_template.get('end_page'),
-                manga_mode=worker_args_template.get('manga_mode_active', False),
-                cancellation_event=self.cancellation_event,
-                pause_event=self.pause_event,
-                use_cookie=worker_args_template.get('use_cookie'),
-                cookie_text=worker_args_template.get('cookie_text'),
-                selected_cookie_file=worker_args_template.get('selected_cookie_file'),
-                app_base_dir=worker_args_template.get('app_base_dir'),
-                manga_filename_style_for_sort_check=worker_args_template.get('manga_filename_style'),
-                processed_post_ids=processed_post_ids
+            # Prepare common variables for the fetcher thread
+            service = worker_args_template.get('service')
+            user_id = worker_args_template.get('user_id')
+            cancellation_event = self.cancellation_event
+            pause_event = self.pause_event
+            session_lock = self.session_lock
+            session_file_path = self.session_file_path
+            parsed_api_url = urlparse(api_url_input_for_fetcher)
+            headers = {'User-Agent': 'Mozilla/5.0', 'Referer': f"https://{parsed_api_url.netloc}/"}
+            cookies = prepare_cookies_for_request(
+                worker_args_template.get('use_cookie'),
+                worker_args_template.get('cookie_text'),
+                worker_args_template.get('selected_cookie_file'),
+                worker_args_template.get('app_base_dir'),
+                logger_func
             )
 
-            ppw_expected_keys = [
-                'post_data','download_root','known_names','filter_character_list','unwanted_keywords',
-                'filter_mode','skip_zip','skip_rar','use_subfolders','use_post_subfolders',
-                'target_post_id_from_initial_url','custom_folder_name','compress_images','emitter',
-                'pause_event','download_thumbnails','service','user_id','api_url_input',
-                'cancellation_event','downloaded_files','downloaded_file_hashes','downloaded_files_lock',
-                'downloaded_file_hashes_lock','remove_from_filename_words_list','dynamic_character_filter_holder',
-                'skip_words_list','skip_words_scope','char_filter_scope','show_external_links',
-                'extract_links_only','allow_multipart_download','use_cookie','cookie_text',
-                'app_base_dir','selected_cookie_file','override_output_dir','num_file_threads',
-                'skip_current_file_flag','manga_date_file_counter_ref','scan_content_for_images',
-                'manga_mode_active','manga_filename_style','manga_date_prefix','text_only_scope',
-                'text_export_format', 'single_pdf_mode',
-                'use_date_prefix_for_subfolder','keep_in_post_duplicates','keep_duplicates_mode','manga_global_file_counter_ref',
-                'creator_download_folder_ignore_words','session_file_path','project_root_dir','session_lock',
-                'processed_post_ids', 'keep_duplicates_limit', 'downloaded_hash_counts', 'downloaded_hash_counts_lock'
-            ]
-            
-            num_file_dl_threads_for_each_worker = worker_args_template.get('num_file_threads_for_worker', 1)
-            emitter_for_worker = worker_args_template.get('emitter')
+            if target_post_id:
+                logger_func(f"Mode: Single Post. Attempting direct fetch for post ID: {target_post_id}")
+                post_api_url = f"https://{parsed_api_url.netloc}/api/v1/{service}/user/{user_id}/post/{target_post_id}"
+                
+                try:
+                    response = requests.get(post_api_url, headers=headers, cookies=cookies, timeout=(15, 60))
+                    response.raise_for_status()
+                    single_post_data = response.json()
+                    
+                    if isinstance(single_post_data, list) and single_post_data:
+                        single_post_data = single_post_data[0]
+                    
+                    if not isinstance(single_post_data, dict):
+                        raise ValueError(f"Expected a dictionary for post data, but got {type(single_post_data)}")
 
-            for posts_batch in post_generator:
-                if self.cancellation_event.is_set():
+                    # Set total posts to 1 and submit the single job to the worker pool
+                    self.total_posts_to_process = 1
+                    self.overall_progress_signal.emit(1, 0)
+                    
+                    ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+                    self._submit_post_to_worker_pool(
+                        single_post_data,
+                        worker_args_template,
+                        worker_args_template.get('num_file_threads_for_worker', 1),
+                        worker_args_template.get('emitter'),
+                        ppw_expected_keys,
+                        {}
+                    )
+                except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
+                    logger_func(f"❌ Failed to fetch single post directly: {e}. Aborting.")
+                
+                return
+            offset = start_offset
+            page_size = 50
+
+            while not cancellation_event.is_set():
+                while pause_event.is_set():
+                    time.sleep(0.5)
+                    if cancellation_event.is_set(): break
+                if cancellation_event.is_set(): break
+
+                api_url = f"https://{parsed_api_url.netloc}/api/v1/{service}/user/{user_id}?o={offset}"
+                logger_func(f"Fetching post list: {api_url} (Page approx. {offset // page_size + 1})")
+
+                try:
+                    response = requests.get(api_url, headers=headers, cookies=cookies, timeout=20)
+                    response.raise_for_status()
+                    posts_batch_from_api = response.json()
+                except (requests.RequestException, json.JSONDecodeError) as e:
+                    logger_func(f"❌ API Error fetching posts: {e}. Stopping fetch.")
                     break
-                if isinstance(posts_batch, list) and posts_batch:
-                    for post_data_item in posts_batch:
-                        self._submit_post_to_worker_pool(post_data_item, worker_args_template, num_file_dl_threads_for_each_worker, emitter_for_worker, ppw_expected_keys, {})
-                    self.total_posts_to_process += len(posts_batch)
+                
+                if not posts_batch_from_api:
+                    logger_func("✅ Reached end of posts (API returned no more content).")
+                    break
+
+                new_posts_to_process = [
+                    post for post in posts_batch_from_api if post.get('id') not in processed_post_ids_set
+                ]
+                
+                num_skipped = len(posts_batch_from_api) - len(new_posts_to_process)
+                if num_skipped > 0:
+                    logger_func(f"   Skipped {num_skipped} already processed post(s) from this page.")
+
+                if new_posts_to_process:
+                    ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+                    num_file_dl_threads = worker_args_template.get('num_file_threads_for_worker', 1)
+                    emitter = worker_args_template.get('emitter')
+
+                    for post_data in new_posts_to_process:
+                        if cancellation_event.is_set():
+                            break
+                        self._submit_post_to_worker_pool(post_data, worker_args_template, num_file_dl_threads, emitter, ppw_expected_keys, {})
+                    
+                    self.total_posts_to_process += len(new_posts_to_process)
                     self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
-        
+
+                next_offset = offset + page_size
+                with session_lock:
+                    if os.path.exists(session_file_path):
+                        try:
+                            with open(session_file_path, 'r', encoding='utf-8') as f:
+                                session_data = json.load(f)
+                            session_data['download_state']['last_processed_offset'] = next_offset
+                            self._save_session_file(session_data)
+                        except (json.JSONDecodeError, KeyError, OSError) as e:
+                            logger_func(f"⚠️ Could not update session offset: {e}")
+                
+                offset = next_offset
+
         except Exception as e:
-            self.log_signal.emit(f"❌ Error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
+            logger_func(f"❌ Critical error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
         finally:
             self.is_fetcher_thread_running = False
-            self.log_signal.emit("ℹ️ Post fetcher thread has finished submitting tasks.")
+            logger_func("ℹ️ Post fetcher thread has finished submitting tasks.")
+            self._check_if_all_work_is_done()
 
     def _handle_worker_result(self, result_tuple: tuple):
         """
@@ -3554,13 +3689,14 @@ class DownloaderApp (QWidget ):
 
             # Other result handling
             if history_data: self._add_to_history_candidates(history_data)
-            # You can add handling for 'retryable' here if needed in the future
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
         except Exception as e:
             self.log_signal.emit(f"❌ Error in _handle_worker_result: {e}\n{traceback.format_exc(limit=2)}")
-        
+
+        self._check_if_all_work_is_done()
+
         if not self.is_fetcher_thread_running and self.processed_posts_count >= self.total_posts_to_process:
             self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
 
@@ -3595,12 +3731,8 @@ class DownloaderApp (QWidget ):
         
         font_path = os.path.join(self.app_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
         
-        # vvv THIS IS THE KEY CHANGE vvv
-        # Sort content by the 'published' date. ISO-formatted dates sort correctly as strings.
-        # Use a fallback value 'Z' to place any posts without a date at the end.
         self.log_signal.emit("   Sorting collected posts by date (oldest first)...")
         sorted_content = sorted(posts_content_data, key=lambda x: x.get('published', 'Z'))
-        # ^^^ END OF KEY CHANGE ^^^
 
         create_single_pdf_from_content(sorted_content, filepath, font_path, logger=self.log_signal.emit)
         self.log_signal.emit("="*40)
@@ -3659,7 +3791,7 @@ class DownloaderApp (QWidget ):
         self .remove_from_filename_input ,
         self .radio_all ,self .radio_images ,self .radio_videos ,
         self .radio_only_archives ,self .radio_only_links ,
-        self .skip_zip_checkbox ,self .skip_rar_checkbox ,
+        self .skip_zip_checkbox ,
         self .download_thumbnails_checkbox ,self .compress_images_checkbox ,
         self .use_subfolders_checkbox ,self .use_subfolder_per_post_checkbox ,
         self .manga_mode_checkbox ,
@@ -3682,7 +3814,7 @@ class DownloaderApp (QWidget ):
         self .custom_folder_label ,self .custom_folder_input ,
         self .skip_words_input ,self .skip_scope_toggle_button ,self .remove_from_filename_input ,
         self .radio_all ,self .radio_images ,self .radio_videos ,self .radio_only_archives ,self .radio_only_links ,
-        self .skip_zip_checkbox ,self .skip_rar_checkbox ,self .download_thumbnails_checkbox ,self .compress_images_checkbox ,
+        self .skip_zip_checkbox , self .download_thumbnails_checkbox ,self .compress_images_checkbox ,
         self .use_subfolders_checkbox ,self .use_subfolder_per_post_checkbox ,self .scan_content_images_checkbox ,
         self .use_multithreading_checkbox ,self .thread_count_input ,self .thread_count_label ,
         self .favorite_mode_checkbox ,
@@ -3801,7 +3933,7 @@ class DownloaderApp (QWidget ):
         self .skip_words_input .clear ();self .start_page_input .clear ();self .end_page_input .clear ();self .new_char_input .clear ();
         if hasattr (self ,'remove_from_filename_input'):self .remove_from_filename_input .clear ()
         self .character_search_input .clear ();self .thread_count_input .setText ("4");self .radio_all .setChecked (True );
-        self .skip_zip_checkbox .setChecked (True );self .skip_rar_checkbox .setChecked (True );self .download_thumbnails_checkbox .setChecked (False );
+        self .skip_zip_checkbox .setChecked (True );self .download_thumbnails_checkbox .setChecked (False );
         self .compress_images_checkbox .setChecked (False );self .use_subfolders_checkbox .setChecked (True );
         self .use_subfolder_per_post_checkbox .setChecked (False );self .use_multithreading_checkbox .setChecked (True );
         if self .favorite_mode_checkbox :self .favorite_mode_checkbox .setChecked (False )
@@ -3941,140 +4073,124 @@ class DownloaderApp (QWidget ):
             return "coomer.su"
         return "kemono.su"
 
-    def download_finished (self ,total_downloaded ,total_skipped ,cancelled_by_user ,kept_original_names_list =None ):
+
+    def download_finished(self, total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list=None):
         if self.is_finishing:
             return
         self.is_finishing = True
-        
-        self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
 
-        if kept_original_names_list is None :
-            kept_original_names_list =list (self .all_kept_original_filenames )if hasattr (self ,'all_kept_original_filenames')else []
-        if kept_original_names_list is None :
-            kept_original_names_list =[]
+        self.log_signal.emit("🏁 Download of current item complete.")
+
+        if self.is_processing_favorites_queue and self.favorite_download_queue:
+            self.log_signal.emit("✅ Item finished. Processing next in queue...")
+            self._process_next_favorite_download()
+            return  
+
+        if self.is_processing_favorites_queue:
+            self.is_processing_favorites_queue = False
+            self.log_signal.emit("✅ All items from the download queue have been processed.")
 
         if not cancelled_by_user and not self.retryable_failed_files_info:
             self._clear_session_file()
             self.interrupted_session_data = None
             self.is_restore_pending = False
 
-        self ._finalize_download_history ()
-        status_message =self ._tr ("status_cancelled_by_user","Cancelled by user")if cancelled_by_user else self ._tr ("status_completed","Completed")
-        if cancelled_by_user and self .retryable_failed_files_info :
-            self .log_signal .emit (f"    Download cancelled, discarding {len (self .retryable_failed_files_info )} file(s) that were pending retry.")
-            self .retryable_failed_files_info .clear ()
+        self._finalize_download_history()
+        status_message = self._tr("status_cancelled_by_user", "Cancelled by user") if cancelled_by_user else self._tr("status_completed", "Completed")
+        if cancelled_by_user and self.retryable_failed_files_info:
+            self.log_signal.emit(f"    Download cancelled, discarding {len(self.retryable_failed_files_info)} file(s) that were pending retry.")
+            self.retryable_failed_files_info.clear()
 
-        summary_log ="="*40 
-        summary_log +=f"\n🏁 Download {status_message }!\n    Summary: Downloaded Files={total_downloaded }, Skipped Files={total_skipped }\n"
-        summary_log +="="*40 
-        self.log_signal.emit (summary_log)
-
-        # Safely shut down the thread pool now that all work is done.
+        summary_log = "=" * 40
+        summary_log += f"\n🏁 Download {status_message}!\n    Summary: Downloaded Files={total_downloaded}, Skipped Files={total_skipped}\n"
+        summary_log += "=" * 40
+        self.log_signal.emit(summary_log)
+        self.log_signal.emit("")
+        
         if self.thread_pool:
             self.log_signal.emit("    Shutting down worker thread pool...")
             self.thread_pool.shutdown(wait=False)
             self.thread_pool = None
             self.log_signal.emit("    Thread pool shut down.")
 
-        try:
-            if self.single_pdf_setting and self.session_temp_files and not cancelled_by_user:
+        if self.single_pdf_setting and self.session_temp_files and not cancelled_by_user:
+            try:
                 self._trigger_single_pdf_creation()
-        finally:
-            # This ensures cleanup happens even if PDF creation fails or is cancelled
-            self._cleanup_temp_files() 
+            finally:
+                self._cleanup_temp_files()
+                self.single_pdf_setting = False
+        else:
+            self._cleanup_temp_files()
             self.single_pdf_setting = False
 
-        # Reset session state for the next run
-        self.session_temp_files = [] 
-        self.single_pdf_setting = False
+        if kept_original_names_list is None:
+            kept_original_names_list = list(self.all_kept_original_filenames) if hasattr(self, 'all_kept_original_filenames') else []
+        if kept_original_names_list is None:
+            kept_original_names_list = []
 
-        if kept_original_names_list :
-            intro_msg =(
-            HTML_PREFIX +
-            "<p>ℹ️ The following files from multi-file manga posts "
-            "(after the first file) kept their <b>original names</b>:</p>"
+        if kept_original_names_list:
+            intro_msg = (
+                HTML_PREFIX +
+                "<p>ℹ️ The following files from multi-file manga posts "
+                "(after the first file) kept their <b>original names</b>:</p>"
             )
-            self .log_signal .emit (intro_msg )
+            self.log_signal.emit(intro_msg)
+            html_list_items = "<ul>"
+            for name in kept_original_names_list:
+                html_list_items += f"<li><b>{name}</b></li>"
+            html_list_items += "</ul>"
+            self.log_signal.emit(HTML_PREFIX + html_list_items)
+            self.log_signal.emit("=" * 40)
 
-            html_list_items ="<ul>"
-            for name in kept_original_names_list :
-                html_list_items +=f"<li><b>{name }</b></li>"
-            html_list_items +="</ul>"
+        if self.download_thread:
+            try:
+                if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
+                if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
+                if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
+                if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
+                if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
+                if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
+                if hasattr(self.download_thread, 'missed_character_post_signal'): self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
+                if hasattr(self.download_thread, 'retryable_file_failed_signal'): self.download_thread.retryable_file_failed_signal.disconnect(self._handle_retryable_file_failure)
+                if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): self.download_thread.file_successfully_downloaded_signal.disconnect(self._handle_actual_file_downloaded)
+                if hasattr(self.download_thread, 'post_processed_for_history_signal'): self.download_thread.post_processed_for_history_signal.disconnect(self._add_to_history_candidates)
+            except (TypeError, RuntimeError) as e:
+                self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
 
-            self .log_signal .emit (HTML_PREFIX +html_list_items )
-            self .log_signal .emit ("="*40 )
+            if not self.download_thread.isRunning():
+                if self.download_thread:
+                    self.download_thread.deleteLater()
+                self.download_thread = None
 
-        if self .download_thread :
-            try :
-                if hasattr (self .download_thread ,'progress_signal'):self .download_thread .progress_signal .disconnect (self .handle_main_log )
-                if hasattr (self .download_thread ,'add_character_prompt_signal'):self .download_thread .add_character_prompt_signal .disconnect (self .add_character_prompt_signal )
-                if hasattr (self .download_thread ,'finished_signal'):self .download_thread .finished_signal .disconnect (self .download_finished )
-                if hasattr (self .download_thread ,'receive_add_character_result'):self .character_prompt_response_signal .disconnect (self .download_thread .receive_add_character_result )
-                if hasattr (self .download_thread ,'external_link_signal'):self .download_thread .external_link_signal .disconnect (self .handle_external_link_signal )
-                if hasattr (self .download_thread ,'file_progress_signal'):self .download_thread .file_progress_signal .disconnect (self .update_file_progress_display )
-                if hasattr (self .download_thread ,'missed_character_post_signal'):
-                    self .download_thread .missed_character_post_signal .disconnect (self .handle_missed_character_post )
-                if hasattr (self .download_thread ,'retryable_file_failed_signal'):
-                    self .download_thread .retryable_file_failed_signal .disconnect (self ._handle_retryable_file_failure )
-                if hasattr (self .download_thread ,'file_successfully_downloaded_signal'):
-                    self .download_thread .file_successfully_downloaded_signal .disconnect (self ._handle_actual_file_downloaded )
-                if hasattr (self .download_thread ,'post_processed_for_history_signal'):
-                    self .download_thread .post_processed_for_history_signal .disconnect (self ._add_to_history_candidates )
-            except (TypeError ,RuntimeError )as e :
-                self .log_signal .emit (f"ℹ️ Note during single-thread signal disconnection: {e }")
-
-            if not self .download_thread .isRunning ():
-
-                if self .download_thread :
-                    self .download_thread .deleteLater ()
-                self .download_thread =None 
-
-        self .progress_label .setText (
-        f"{status_message }: "
-        f"{total_downloaded } {self ._tr ('files_downloaded_label','downloaded')}, "
-        f"{total_skipped } {self ._tr ('files_skipped_label','skipped')}."
+        self.progress_label.setText(
+            f"{status_message}: "
+            f"{total_downloaded} {self._tr('files_downloaded_label', 'downloaded')}, "
+            f"{total_skipped} {self._tr('files_skipped_label', 'skipped')}."
         )
-        self .file_progress_label .setText ("")
-        if not cancelled_by_user :self ._try_process_next_external_link ()
+        self.file_progress_label.setText("")
 
-        if self .thread_pool :
-            self .log_signal .emit ("    Ensuring worker thread pool is shut down...")
-            self .thread_pool .shutdown (wait =True ,cancel_futures =True )
-            self .thread_pool =None 
+        if not cancelled_by_user and self.retryable_failed_files_info:
+            num_failed = len(self.retryable_failed_files_info)
+            reply = QMessageBox.question(self, "Retry Failed Downloads?",
+                                         f"{num_failed} file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
+                                         "Would you like to attempt to download these failed files again?",
+                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply == QMessageBox.Yes:
+                self._start_failed_files_retry_session()
+                return
+            else:
+                self.log_signal.emit("ℹ️ User chose not to retry failed files.")
+                self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info)
+                if self.permanently_failed_files_for_dialog:
+                    self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) can be viewed.")
+                self.cancellation_message_logged_this_session = False
+                self.retryable_failed_files_info.clear()
 
-        self .active_futures =[]
-        if self .pause_event :self .pause_event .clear ()
-        self .cancel_btn .setEnabled (False )
-        self .is_paused =False 
-        if not cancelled_by_user and self .retryable_failed_files_info :
-            num_failed =len (self .retryable_failed_files_info )
-            reply =QMessageBox .question (self ,"Retry Failed Downloads?",
-            f"{num_failed } file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
-            "Would you like to attempt to download these failed files again?",
-            QMessageBox .Yes |QMessageBox .No ,QMessageBox .Yes )
-            if reply ==QMessageBox .Yes :
-                self ._start_failed_files_retry_session ()
-                return 
-            else :
-                self .log_signal .emit ("ℹ️ User chose not to retry failed files.")
-                self .permanently_failed_files_for_dialog .extend (self .retryable_failed_files_info )
-                if self .permanently_failed_files_for_dialog :
-                    self .log_signal .emit (f"🆘 Error button enabled. {len (self .permanently_failed_files_for_dialog )} file(s) can be viewed.")
-                self .cancellation_message_logged_this_session =False 
-                self .retryable_failed_files_info .clear ()
+        self.is_fetcher_thread_running = False
 
-        self .is_fetcher_thread_running =False 
-
-        if self .is_processing_favorites_queue :
-            if not self .favorite_download_queue :
-                self .is_processing_favorites_queue =False 
-                self .log_signal .emit (f"✅ All {self .current_processing_favorite_item_info .get ('type','item')} downloads from favorite queue have been processed.")
-                self .set_ui_enabled (not self ._is_download_active ())
-            else :
-                self ._process_next_favorite_download ()
-        else :
-            self .set_ui_enabled (True )
-        self .cancellation_message_logged_this_session =False
+        self.set_ui_enabled(True)
+        self._update_button_states_and_connections()
+        self.cancellation_message_logged_this_session = False
 
     def _handle_keep_duplicates_toggled(self, checked):
         """Shows the duplicate handling dialog when the checkbox is checked."""
@@ -4167,7 +4283,6 @@ class DownloaderApp (QWidget ):
         'unwanted_keywords':{'spicy','hd','nsfw','4k','preview','teaser','clip'},
         'filter_mode':self .get_filter_mode (),
         'skip_zip':self .skip_zip_checkbox .isChecked (),
-        'skip_rar':self .skip_rar_checkbox .isChecked (),
         'use_subfolders':self .use_subfolders_checkbox .isChecked (),
         'use_post_subfolders':self .use_subfolder_per_post_checkbox .isChecked (),
         'compress_images':self .compress_images_checkbox .isChecked (),
@@ -4275,6 +4390,23 @@ class DownloaderApp (QWidget ):
         if self .retry_thread_pool :
             self .retry_thread_pool .shutdown (wait =True )
             self .retry_thread_pool =None 
+
+        if os.path.exists(self.session_file_path):
+            try:
+                with self.session_lock:
+                    # Read the current session data
+                    with open(self.session_file_path, 'r', encoding='utf-8') as f:
+                        session_data = json.load(f)
+                    
+                    if 'download_state' in session_data:
+                        session_data['download_state']['permanently_failed_files'] = self.permanently_failed_files_for_dialog
+                    
+                    # Save the updated session data back to the file
+                    self._save_session_file(session_data)
+                    self.log_signal.emit("ℹ️ Session file updated with retry results.")
+
+            except Exception as e:
+                self.log_signal.emit(f"⚠️ Could not update session file after retry: {e}")
 
         if self .external_link_download_thread and not self .external_link_download_thread .isRunning ():
             self .external_link_download_thread .deleteLater ()
@@ -4454,7 +4586,6 @@ class DownloaderApp (QWidget ):
         # Set radio buttons and checkboxes to defaults
         self.radio_all.setChecked(True)
         self.skip_zip_checkbox.setChecked(True)
-        self.skip_rar_checkbox.setChecked(True)
         self.download_thumbnails_checkbox.setChecked(False)
         self.compress_images_checkbox.setChecked(False)
         self.use_subfolders_checkbox.setChecked(True)
@@ -4781,13 +4912,9 @@ class DownloaderApp (QWidget ):
                         self.favorite_download_queue.append(queue_item)
 
                 if self.favorite_download_queue:
-                    # --- NEW: This block adds the selected creator names to the input field ---
                     if hasattr(self, 'link_input'):
-                        # 1. Get all the names from the queue
                         creator_names = [item['name'] for item in self.favorite_download_queue]
-                        # 2. Join them into a single string
                         display_text = ", ".join(creator_names)
-                        # 3. Set the text of the URL input field
                         self.link_input.setText(display_text)
                     
                     self.log_signal.emit(f"ℹ️ {len(self.favorite_download_queue)} creators added to download queue from popup. Click 'Start Download' to process.")
@@ -4982,7 +5109,7 @@ class DownloaderApp (QWidget ):
             override_dir =os .path .normpath (os .path .join (main_download_dir ,item_specific_folder_name ))
             self .log_signal .emit (f"    Scope requires artist folder. Target directory: '{override_dir }'")
 
-        success_starting_download =self .start_download (direct_api_url =next_url ,override_output_dir =override_dir )
+        success_starting_download =self .start_download (direct_api_url =next_url ,override_output_dir =override_dir, is_continuation=True )
 
         if not success_starting_download :
             self .log_signal .emit (f"⚠️ Failed to initiate download for '{item_display_name }'. Skipping this item in queue.")

@@ -42,13 +42,11 @@ class ErrorFilesDialog(QDialog):
         if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
 
-        # Set window size dynamically
-        screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-        scale_factor = screen_height / 1080.0
-        base_min_w, base_min_h = 500, 300
-        scaled_min_w = int(base_min_w * scale_factor)
-        scaled_min_h = int(base_min_h * scale_factor)
-        self.setMinimumSize(scaled_min_w, scaled_min_h)
+        scale_factor = getattr(self.parent_app, 'scale_factor', 1.0)
+
+        base_width, base_height = 550, 400
+        self.setMinimumSize(int(base_width * scale_factor), int(base_height * scale_factor))
+        self.resize(int(base_width * scale_factor * 1.1), int(base_height * scale_factor * 1.1))
 
         # --- Initialize UI and Apply Theming ---
         self._init_ui()

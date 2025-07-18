@@ -72,7 +72,7 @@ CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3
 
 # --- File Type Extensions ---
 IMAGE_EXTENSIONS = {
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
+    '.jpg', '.jpeg', '.jpe', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
     '.heic', '.heif', '.svg', '.ico', '.jfif', '.pjpeg', '.pjp', '.avif'
 }
 VIDEO_EXTENSIONS = {

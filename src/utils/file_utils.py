@@ -12,7 +12,7 @@ MAX_FILENAME_COMPONENT_LENGTH = 150
 
 # Sets of file extensions for quick type checking
 IMAGE_EXTENSIONS = {
-    '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
+    '.jpg', '.jpeg', '.jpe', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp',
     '.heic', '.heif', '.svg', '.ico', '.jfif', '.pjpeg', '.pjp', '.avif'
 }
 VIDEO_EXTENSIONS = {

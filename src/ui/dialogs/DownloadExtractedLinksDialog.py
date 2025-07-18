@@ -9,9 +9,7 @@ from PyQt5.QtWidgets import (
 )
 
 # --- Local Application Imports ---
-# This assumes the new project structure is in place.
 from ...i18n.translator import get_translation
-# get_app_icon_object is defined in the main window module in this refactoring plan.
 from ..main_window import get_app_icon_object
 from ...utils.resolution import get_dark_theme
 
@@ -42,21 +40,15 @@ class DownloadExtractedLinksDialog(QDialog):
         if not app_icon.isNull():
             self.setWindowIcon(app_icon)
 
-        # Set window size dynamically based on the parent window's size
-        if parent:
-            parent_width = parent.width()
-            parent_height = parent.height()
-            # Use a scaling factor for different screen resolutions
-            screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
-            scale_factor = screen_height / 768.0
+        # --- START OF FIX ---
+        # Get the user-defined scale factor from the parent application.
+        scale_factor = getattr(self.parent_app, 'scale_factor', 1.0)
 
-            base_min_w, base_min_h = 500, 400
-            scaled_min_w = int(base_min_w * scale_factor)
-            scaled_min_h = int(base_min_h * scale_factor)
-
-            self.setMinimumSize(scaled_min_w, scaled_min_h)
-            self.resize(max(int(parent_width * 0.6 * scale_factor), scaled_min_w),
-                        max(int(parent_height * 0.7 * scale_factor), scaled_min_h))
+        # Define base dimensions and apply the correct scale factor.
+        base_width, base_height = 600, 450
+        self.setMinimumSize(int(base_width * scale_factor), int(base_height * scale_factor))
+        self.resize(int(base_width * scale_factor * 1.1), int(base_height * scale_factor * 1.1))
+        # --- END OF FIX ---
 
         # --- Initialize UI and Apply Theming ---
         self._init_ui()

@@ -24,19 +24,14 @@ def setup_ui(main_app):
     Args:
         main_app: The instance of the main DownloaderApp.
     """
-    # --- START: Modified Scaling Logic ---
-    # Force a fixed scale factor to disable UI scaling on high-DPI screens.
     scale = float(main_app.settings.value(UI_SCALE_KEY, 1.0))
     main_app.scale_factor = scale
 
-    # --- Set the global font size for the application ---
     default_font = QApplication.font()
     base_font_size = 9 # Use a standard base size
     default_font.setPointSize(int(base_font_size * scale))
     main_app.setFont(default_font)
-    # --- END: Modified Scaling Logic ---
 
-    # --- Set the global font size for the application ---
     default_font = QApplication.font()
     base_font_size = 9 # Use a standard base size
     default_font.setPointSize(int(base_font_size * scale))
@@ -221,12 +216,10 @@ def setup_ui(main_app):
     checkboxes_group_layout.setSpacing(10)
     row1_layout = QHBoxLayout()
     row1_layout.setSpacing(10)
-    main_app.skip_zip_checkbox = QCheckBox("Skip .zip")
+    main_app.skip_zip_checkbox = QCheckBox("Skip archives")
+    main_app.skip_zip_checkbox.setToolTip("Skip Common Archives (Eg.. Zip, Rar, 7z)")
     main_app.skip_zip_checkbox.setChecked(True)
     row1_layout.addWidget(main_app.skip_zip_checkbox)
-    main_app.skip_rar_checkbox = QCheckBox("Skip .rar")
-    main_app.skip_rar_checkbox.setChecked(True)
-    row1_layout.addWidget(main_app.skip_rar_checkbox)
     main_app.download_thumbnails_checkbox = QCheckBox("Download Thumbnails Only")
     row1_layout.addWidget(main_app.download_thumbnails_checkbox)
     main_app.scan_content_images_checkbox = QCheckBox("Scan Content for Images")
@@ -246,7 +239,7 @@ def setup_ui(main_app):
     checkboxes_group_layout.addWidget(advanced_settings_label)
     advanced_row1_layout = QHBoxLayout()
     advanced_row1_layout.setSpacing(10)
-    main_app.use_subfolders_checkbox = QCheckBox("Separate Folders by Name/Title")
+    main_app.use_subfolders_checkbox = QCheckBox("Separate Folders by Known.txt")
     main_app.use_subfolders_checkbox.setChecked(True)
     main_app.use_subfolders_checkbox.toggled.connect(main_app.update_ui_for_subfolders)
     advanced_row1_layout.addWidget(main_app.use_subfolders_checkbox)

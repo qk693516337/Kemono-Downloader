@@ -20,17 +20,20 @@ class TourStepWidget(QWidget):
     A custom widget representing a single step or page in the feature guide.
     It neatly formats a title and its corresponding content.
     """
-    def __init__(self, title_text, content_text, parent=None):
+    def __init__(self, title_text, content_text, parent=None, scale=1.0):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(10)
 
+        title_font_size = int(14 * scale)
+        content_font_size = int(11 * scale)
+
         title_label = QLabel(title_text)
         title_label.setAlignment(Qt.AlignCenter)
-        title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #E0E0E0; padding-bottom: 15px;")
+        title_label.setStyleSheet(f"font-size: {title_font_size}pt; font-weight: bold; color: #E0E0E0; padding-bottom: 15px;")
         layout.addWidget(title_label)
-
+        
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.NoFrame)
@@ -42,8 +45,8 @@ class TourStepWidget(QWidget):
         content_label.setWordWrap(True)
         content_label.setAlignment(Qt.AlignLeft | Qt.AlignTop)
         content_label.setTextFormat(Qt.RichText)
-        content_label.setOpenExternalLinks(True) # Allow opening links in the content
-        content_label.setStyleSheet("font-size: 11pt; color: #C8C8C8; line-height: 1.8;")
+        content_label.setOpenExternalLinks(True)
+        content_label.setStyleSheet(f"font-size: {content_font_size}pt; color: #C8C8C8; line-height: 1.8;")
         scroll_area.setWidget(content_label)
         layout.addWidget(scroll_area, 1)
 
@@ -56,27 +59,38 @@ class HelpGuideDialog (QDialog ):
         self .steps_data =steps_data 
         self .parent_app =parent_app 
 
-        app_icon =get_app_icon_object ()
+        scale = self.parent_app.scale_factor if hasattr(self.parent_app, 'scale_factor') else 1.0
+
+        app_icon = get_app_icon_object()
         if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
 
-        self .setModal (True )
-        self .setFixedSize (650 ,600 )
+        self.setModal(True)
+        self.resize(int(650 * scale), int(600 * scale))
 
+        dialog_font_size = int(11 * scale)
+        
+        current_theme_style = ""
+        if hasattr(self.parent_app, 'current_theme') and self.parent_app.current_theme == "dark":
+            current_theme_style = get_dark_theme(scale)
+        else:
+            current_theme_style = f"""
+                QDialog {{ background-color: #F0F0F0; border: 1px solid #B0B0B0; }}
+                QLabel {{ color: #1E1E1E; }}
+                QPushButton {{ 
+                    background-color: #E1E1E1; 
+                    color: #1E1E1E; 
+                    border: 1px solid #ADADAD; 
+                    padding: {int(8*scale)}px {int(15*scale)}px; 
+                    border-radius: 4px; 
+                    min-height: {int(25*scale)}px; 
+                    font-size: {dialog_font_size}pt; 
+                }}
+                QPushButton:hover {{ background-color: #CACACA; }}
+                QPushButton:pressed {{ background-color: #B0B0B0; }}
+            """
 
-        current_theme_style =""
-        if hasattr (self .parent_app ,'current_theme')and self .parent_app .current_theme =="dark":
-            if hasattr (self .parent_app ,'get_dark_theme'):
-                current_theme_style =self .parent_app .get_dark_theme ()
-
-
-        self .setStyleSheet (current_theme_style if current_theme_style else """
-            QDialog { background-color: #2E2E2E; border: 1px solid #5A5A5A; }
-            QLabel { color: #E0E0E0; }
-            QPushButton { background-color: #555; color: #F0F0F0; border: 1px solid #6A6A6A; padding: 8px 15px; border-radius: 4px; min-height: 25px; font-size: 11pt; }
-            QPushButton:hover { background-color: #656565; }
-            QPushButton:pressed { background-color: #4A4A4A; }
-        """)
+        self.setStyleSheet(current_theme_style)
         self ._init_ui ()
         if self .parent_app :
             self .move (self .parent_app .geometry ().center ()-self .rect ().center ())
@@ -97,10 +111,11 @@ class HelpGuideDialog (QDialog ):
         main_layout .addWidget (self .stacked_widget ,1 )
 
         self .tour_steps_widgets =[]
-        for title ,content in self .steps_data :
-            step_widget =TourStepWidget (title ,content )
-            self .tour_steps_widgets .append (step_widget )
-            self .stacked_widget .addWidget (step_widget )
+        scale = self.parent_app.scale_factor if hasattr(self.parent_app, 'scale_factor') else 1.0
+        for title, content in self.steps_data:
+            step_widget = TourStepWidget(title, content, scale=scale) 
+            self.tour_steps_widgets.append(step_widget)
+            self.stacked_widget.addWidget(step_widget)
 
         self .setWindowTitle (self ._tr ("help_guide_dialog_title","Kemono Downloader - Feature Guide"))
 
@@ -115,7 +130,6 @@ class HelpGuideDialog (QDialog ):
         if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
             assets_base_dir =sys ._MEIPASS 
         else :
-            # Go up three levels from this file's directory (src/ui/dialogs) to the project root
             assets_base_dir =os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
         github_icon_path =os .path .join (assets_base_dir ,"assets","github.png")
@@ -126,7 +140,9 @@ class HelpGuideDialog (QDialog ):
         self .instagram_button =QPushButton (QIcon (instagram_icon_path ),"")
         self .Discord_button =QPushButton (QIcon (discord_icon_path ),"")
 
-        icon_size =QSize (24 ,24 )
+        scale = self.parent_app.scale_factor if hasattr(self.parent_app, 'scale_factor') else 1.0
+        icon_dim = int(24 * scale)
+        icon_size = QSize(icon_dim, icon_dim)
         self .github_button .setIconSize (icon_size )
         self .instagram_button .setIconSize (icon_size )
         self .Discord_button .setIconSize (icon_size )
