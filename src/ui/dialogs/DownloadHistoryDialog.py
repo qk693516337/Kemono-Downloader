@@ -1,16 +1,12 @@
-# --- Standard Library Imports ---
 import os
 import time
 import json
-# --- PyQt5 Imports ---
 from PyQt5.QtCore import Qt, QStandardPaths, QTimer
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QScrollArea,
     QPushButton, QVBoxLayout, QSplitter, QWidget, QGroupBox,
     QFileDialog, QMessageBox
 )
-
-# --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
 from ...utils.resolution import get_dark_theme
@@ -25,17 +21,14 @@ class DownloadHistoryDialog (QDialog ):
         self .first_processed_entries =first_processed_entries 
         self .setModal (True )
         self._apply_theme()
-        # Patch missing creator_display_name and creator_name using parent_app.creator_name_cache if available
         creator_name_cache = getattr(parent_app, 'creator_name_cache', None)
         if creator_name_cache:
-            # Patch left pane (files)
             for entry in self.last_3_downloaded_entries:
                 if not entry.get('creator_display_name'):
                     service = entry.get('service', '').lower()
                     user_id = str(entry.get('user_id', ''))
                     key = (service, user_id)
                     entry['creator_display_name'] = creator_name_cache.get(key, entry.get('folder_context_name', 'Unknown Creator/Series'))
-            # Patch right pane (posts)
             for entry in self.first_processed_entries:
                 if not entry.get('creator_name'):
                     service = entry.get('service', '').lower()

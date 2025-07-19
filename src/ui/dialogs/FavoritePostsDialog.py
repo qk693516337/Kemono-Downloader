@@ -1,4 +1,3 @@
-# --- Standard Library Imports ---
 import html
 import os
 import sys
@@ -8,8 +7,6 @@ import traceback
 import json
 import re
 from collections import defaultdict
-
-# --- Third-Party Library Imports ---
 import requests
 from PyQt5.QtCore import QCoreApplication, Qt, pyqtSignal, QThread
 from PyQt5.QtWidgets import (
@@ -17,12 +14,9 @@ from PyQt5.QtWidgets import (
     QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QProgressBar,
     QWidget, QCheckBox
 )
-
-# --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..assets import get_app_icon_object
 from ...utils.network_utils import prepare_cookies_for_request
-# Corrected Import: Import CookieHelpDialog directly from its own module
 from .CookieHelpDialog import CookieHelpDialog
 from ...core.api_client import download_from_api
 from ...utils.resolution import get_dark_theme

@@ -1,18 +1,10 @@
-# --- PyQt5 Imports ---
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QPushButton, QVBoxLayout
 )
-
-# --- Local Application Imports ---
-# This assumes the new project structure is in place.
 from ...i18n.translator import get_translation
-# get_app_icon_object is defined in the main window module in this refactoring plan.
 from ..main_window import get_app_icon_object
-
-# --- Constants for Dialog Choices ---
-# These were moved from main.py to be self-contained within this module's context.
 CONFIRM_ADD_ALL_ACCEPTED = 1
 CONFIRM_ADD_ALL_SKIP_ADDING = 2
 CONFIRM_ADD_ALL_CANCEL_DOWNLOAD = 3
@@ -38,23 +30,16 @@ class ConfirmAddAllDialog(QDialog):
         self.parent_app = parent_app
         self.setModal(True)
         self.new_filter_objects_list = new_filter_objects_list
-        # Default choice if the dialog is closed without a button press
         self.user_choice = CONFIRM_ADD_ALL_CANCEL_DOWNLOAD
-
-        # --- Basic Window Setup ---
         app_icon = get_app_icon_object()
         if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
-        
-        # Set window size dynamically
         screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 768
         scale_factor = screen_height / 768.0
         base_min_w, base_min_h = 480, 350
         scaled_min_w = int(base_min_w * scale_factor)
         scaled_min_h = int(base_min_h * scale_factor)
         self.setMinimumSize(scaled_min_w, scaled_min_h)
-
-        # --- Initialize UI and Apply Theming ---
         self._init_ui()
         self._retranslate_ui()
         self._apply_theme()
@@ -70,8 +55,6 @@ class ConfirmAddAllDialog(QDialog):
         self.names_list_widget = QListWidget()
         self._populate_list()
         main_layout.addWidget(self.names_list_widget)
-
-        # --- Selection Buttons ---
         selection_buttons_layout = QHBoxLayout()
         self.select_all_button = QPushButton()
         self.select_all_button.clicked.connect(self._select_all_items)
@@ -82,8 +65,6 @@ class ConfirmAddAllDialog(QDialog):
         selection_buttons_layout.addWidget(self.deselect_all_button)
         selection_buttons_layout.addStretch()
         main_layout.addLayout(selection_buttons_layout)
-
-        # --- Action Buttons ---
         buttons_layout = QHBoxLayout()
         self.add_selected_button = QPushButton()
         self.add_selected_button.clicked.connect(self._accept_add_selected)
@@ -171,7 +152,6 @@ class ConfirmAddAllDialog(QDialog):
         sensible default if no items are selected but the "Add" button is clicked.
         """
         super().exec_()
-        # If the user clicked "Add Selected" but didn't select any items, treat it as skipping.
         if isinstance(self.user_choice, list) and not self.user_choice:
             return CONFIRM_ADD_ALL_SKIP_ADDING
         return self.user_choice

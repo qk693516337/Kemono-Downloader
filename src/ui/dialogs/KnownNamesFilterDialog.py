@@ -37,12 +37,16 @@ class KnownNamesFilterDialog(QDialog):
         if app_icon and not app_icon.isNull():
             self.setWindowIcon(app_icon)
 
-        # Set window size dynamically
-        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        # --- START OF FIX ---
+        # Get the user-defined scale factor from the parent application
+        # instead of calculating an independent one.
         scale_factor = getattr(self.parent_app, 'scale_factor', 1.0)
+
+        # Define base size and apply the correct scale factor
         base_width, base_height = 460, 450
         self.setMinimumSize(int(base_width * scale_factor), int(base_height * scale_factor))
         self.resize(int(base_width * scale_factor * 1.1), int(base_height * scale_factor * 1.1))
+        # --- END OF FIX ---
 
         # --- Initialize UI and Apply Theming ---
         self._init_ui()

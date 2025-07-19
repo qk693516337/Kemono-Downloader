@@ -1,4 +1,3 @@
-# --- Standard Library Imports ---
 import os
 import queue
 import re
@@ -15,15 +14,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError,
 from io import BytesIO
 from urllib .parse import urlparse 
 import requests
-# --- Third-Party Library Imports ---
 try:
     from PIL import Image
 except ImportError:
     Image = None
-#
 try:
     from fpdf import FPDF
-    # Add a simple class to handle the header/footer for stories
     class PDF(FPDF):
         def header(self):
             pass # No header
@@ -39,16 +35,12 @@ try:
     from docx import Document
 except ImportError:
     Document = None
-  
-# --- PyQt5 Imports ---
 from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess 
-# --- Local Application Imports ---
 from .api_client import download_from_api, fetch_post_comments
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
 from ..services.drive_downloader import (
     download_mega_file, download_gdrive_file, download_dropbox_file
 )
-# Corrected Imports:
 from ..utils.file_utils import (
     is_image, is_video, is_zip, is_rar, is_archive, is_audio, KNOWN_NAMES,
     clean_filename, clean_folder_name
@@ -567,10 +559,8 @@ class PostProcessorWorker:
             with self.downloaded_hash_counts_lock:
                 current_count = self.downloaded_hash_counts.get(calculated_file_hash, 0)
                 
-                # Default to not skipping
                 decision_to_skip = False
 
-                # Apply logic based on mode
                 if self.keep_duplicates_mode == DUPLICATE_HANDLING_HASH:
                     if current_count >= 1:
                         decision_to_skip = True
@@ -581,12 +571,10 @@ class PostProcessorWorker:
                         decision_to_skip = True
                         self.logger(f"   -> Skip (Duplicate Limit Reached): Limit of {self.keep_duplicates_limit} for this file content has been met. Discarding.")
 
-                # If we are NOT skipping this file, we MUST increment the count.
                 if not decision_to_skip:
                     self.downloaded_hash_counts[calculated_file_hash] = current_count + 1
                 
                 should_skip = decision_to_skip
-            # --- End of Final Corrected Logic ---
 
             if should_skip:
                 if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
@@ -678,9 +666,14 @@ class PostProcessorWorker:
         else:
             self.logger(f"->>Download Fail for '{api_original_filename}' (Post ID: {original_post_id_for_log}). No successful download after retries.")
             details_for_failure = {
-                'file_info': file_info, 'target_folder_path': target_folder_path, 'headers': headers,
-                'original_post_id_for_log': original_post_id_for_log, 'post_title': post_title,
-                'file_index_in_post': file_index_in_post, 'num_files_in_this_post': num_files_in_this_post
+                'file_info': file_info, 
+                'target_folder_path': target_folder_path, 
+                'headers': headers,
+                'original_post_id_for_log': original_post_id_for_log, 
+                'post_title': post_title,
+                'file_index_in_post': file_index_in_post, 
+                'num_files_in_this_post': num_files_in_this_post,
+                'forced_filename_override': filename_to_save_in_main_path 
             }
             if is_permanent_error:
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION, details_for_failure
@@ -1040,7 +1033,9 @@ class PostProcessorWorker:
                     return result_tuple
 
                 raw_text_content = ""
+                comments_data = []
                 final_post_data = post_data
+                
                 if self.text_only_scope == 'content' and 'content' not in final_post_data:
                     self.logger(f"   Post {post_id} is missing 'content' field, fetching full data...")
                     parsed_url = urlparse(self.api_url_input)
@@ -1050,6 +1045,7 @@ class PostProcessorWorker:
                     full_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
                     if full_data:
                         final_post_data = full_data
+                
                 if self.text_only_scope == 'content':
                     raw_text_content = final_post_data.get('content', '')
                 elif self.text_only_scope == 'comments':
@@ -1060,46 +1056,46 @@ class PostProcessorWorker:
                         if comments_data:
                             comment_texts = []
                             for comment in comments_data:
-                                user = comment.get('user', {}).get('name', 'Unknown User')
-                                timestamp = comment.get('updated', 'No Date')
+                                user = comment.get('commenter_name', 'Unknown User')
+                                timestamp = comment.get('published', 'No Date')
                                 body = strip_html_tags(comment.get('content', ''))
                                 comment_texts.append(f"--- Comment by {user} on {timestamp} ---\n{body}\n")
                             raw_text_content = "\n".join(comment_texts)
+                        else:
+                            raw_text_content = ""
                     except Exception as e:
                         self.logger(f"   ❌ Error fetching comments for text-only mode: {e}")
 
-                if not raw_text_content or not raw_text_content.strip():
+                cleaned_text = ""
+                if self.text_only_scope == 'content':
+                    if not raw_text_content:
+                        cleaned_text = ""
+                    else:
+                        text_with_newlines = re.sub(r'(?i)</p>|<br\s*/?>', '\n', raw_text_content)
+                        just_text = re.sub(r'<.*?>', '', text_with_newlines)
+                        cleaned_text = html.unescape(just_text).strip()
+                else: 
+                    cleaned_text = raw_text_content
+                
+                cleaned_text = cleaned_text.replace('…', '...')
+
+                if not cleaned_text.strip():
                     self.logger("   -> Skip Saving Text: No content/comments found or fetched.")
                     result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
                     return result_tuple
 
-                paragraph_pattern = re.compile(r'<p.*?>(.*?)</p>', re.IGNORECASE | re.DOTALL)
-                html_paragraphs = paragraph_pattern.findall(raw_text_content)
-                cleaned_text = ""
-                if not html_paragraphs:
-                    self.logger("   ⚠️ No <p> tags found. Falling back to basic HTML cleaning for the whole block.")
-                    text_with_br = re.sub(r'<br\s*/?>', '\n', raw_text_content, flags=re.IGNORECASE)
-                    cleaned_text = re.sub(r'<.*?>', '', text_with_br)
-                else:
-                    cleaned_paragraphs_list = []
-                    for p_content in html_paragraphs:
-                        p_with_br = re.sub(r'<br\s*/?>', '\n', p_content, flags=re.IGNORECASE)
-                        p_cleaned = re.sub(r'<.*?>', '', p_with_br)
-                        p_final = html.unescape(p_cleaned).strip()
-                        if p_final:
-                            cleaned_paragraphs_list.append(p_final)
-                    cleaned_text = '\n\n'.join(cleaned_paragraphs_list)
-                cleaned_text = cleaned_text.replace('…', '...')
-
                 if self.single_pdf_mode:
-                    if not cleaned_text:
-                        result_tuple = (0, 0, [], [], [], None, None)
-                        return result_tuple
                     content_data = {
                         'title': post_title,
-                        'content': cleaned_text,
                         'published': self.post.get('published') or self.post.get('added')
                     }
+                    if self.text_only_scope == 'comments':
+                        if not comments_data: return (0, 0, [], [], [], None, None)
+                        content_data['comments'] = comments_data
+                    else:
+                        if not cleaned_text.strip(): return (0, 0, [], [], [], None, None)
+                        content_data['content'] = cleaned_text
+
                     temp_dir = os.path.join(self.app_base_dir, "appdata")
                     os.makedirs(temp_dir, exist_ok=True)
                     temp_filename = f"tmp_{post_id}_{uuid.uuid4().hex[:8]}.json"
@@ -1107,13 +1103,11 @@ class PostProcessorWorker:
                     try:
                         with open(temp_filepath, 'w', encoding='utf-8') as f:
                             json.dump(content_data, f, indent=2)
-                        self.logger(f"   Saved temporary text for '{post_title}' for single PDF compilation.")
-                        result_tuple = (0, 0, [], [], [], None, temp_filepath)
-                        return result_tuple
+                        self.logger(f"   Saved temporary data for '{post_title}' for single PDF compilation.")
+                        return (0, 0, [], [], [], None, temp_filepath)
                     except Exception as e:
                         self.logger(f"   ❌ Failed to write temporary file for single PDF: {e}")
-                        result_tuple = (0, 0, [], [], [], None, None)
-                        return result_tuple
+                        return (0, 0, [], [], [], None, None)
                 else:
                     file_extension = self.text_export_format
                     txt_filename = clean_filename(post_title) + f".{file_extension}"
@@ -1125,27 +1119,63 @@ class PostProcessorWorker:
                         while os.path.exists(final_save_path):
                             final_save_path = f"{base}_{counter}{ext}"
                             counter += 1
+
                         if file_extension == 'pdf':
                             if FPDF:
-                                self.logger(f"   Converting to PDF...")
+                                self.logger(f"   Creating formatted PDF for {'comments' if self.text_only_scope == 'comments' else 'content'}...")
                                 pdf = PDF()
                                 font_path = ""
+                                bold_font_path = ""
                                 if self.project_root_dir:
                                     font_path = os.path.join(self.project_root_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+                                    bold_font_path = os.path.join(self.project_root_dir, 'data', 'dejavu-sans', 'DejaVuSans-Bold.ttf')
+
                                 try:
                                     if not os.path.exists(font_path): raise RuntimeError(f"Font file not found: {font_path}")
+                                    if not os.path.exists(bold_font_path): raise RuntimeError(f"Bold font file not found: {bold_font_path}")
                                     pdf.add_font('DejaVu', '', font_path, uni=True)
-                                    pdf.set_font('DejaVu', '', 12)
+                                    pdf.add_font('DejaVu', 'B', bold_font_path, uni=True)
+                                    default_font_family = 'DejaVu'
                                 except Exception as font_error:
                                     self.logger(f"   ⚠️ Could not load DejaVu font: {font_error}. Falling back to Arial.")
-                                    pdf.set_font('Arial', '', 12)
+                                    default_font_family = 'Arial'
+
                                 pdf.add_page()
-                                pdf.multi_cell(0, 5, cleaned_text)
+                                pdf.set_font(default_font_family, 'B', 16)
+                                pdf.multi_cell(0, 10, post_title)
+                                pdf.ln(10)
+
+                                if self.text_only_scope == 'comments':
+                                    if not comments_data:
+                                        self.logger("   -> Skip PDF Creation: No comments to process.")
+                                        return (0, num_potential_files_in_post, [], [], [], None, None)
+                                    for i, comment in enumerate(comments_data):
+                                        user = comment.get('commenter_name', 'Unknown User')
+                                        timestamp = comment.get('published', 'No Date')
+                                        body = strip_html_tags(comment.get('content', ''))
+                                        pdf.set_font(default_font_family, '', 10)
+                                        pdf.write(8, "Comment by: ")
+                                        pdf.set_font(default_font_family, 'B', 10)
+                                        pdf.write(8, user)
+                                        pdf.set_font(default_font_family, '', 10)
+                                        pdf.write(8, f" on {timestamp}")
+                                        pdf.ln(10)
+                                        pdf.set_font(default_font_family, '', 11)
+                                        pdf.multi_cell(0, 7, body)
+                                        if i < len(comments_data) - 1:
+                                            pdf.ln(5)
+                                            pdf.cell(0, 0, '', border='T')
+                                            pdf.ln(5)
+                                else:
+                                    pdf.set_font(default_font_family, '', 12)
+                                    pdf.multi_cell(0, 7, cleaned_text)
+
                                 pdf.output(final_save_path)
                             else:
                                 self.logger(f"   ⚠️ Cannot create PDF: 'fpdf2' library not installed. Saving as .txt.")
                                 final_save_path = os.path.splitext(final_save_path)[0] + ".txt"
                                 with open(final_save_path, 'w', encoding='utf-8') as f: f.write(cleaned_text)
+                        
                         elif file_extension == 'docx':
                             if Document:
                                 self.logger(f"   Converting to DOCX...")
@@ -1156,12 +1186,15 @@ class PostProcessorWorker:
                                 self.logger(f"   ⚠️ Cannot create DOCX: 'python-docx' library not installed. Saving as .txt.")
                                 final_save_path = os.path.splitext(final_save_path)[0] + ".txt"
                                 with open(final_save_path, 'w', encoding='utf-8') as f: f.write(cleaned_text)
-                        else:
+                        
+                        else: # TXT file
                             with open(final_save_path, 'w', encoding='utf-8') as f:
                                 f.write(cleaned_text)
+                        
                         self.logger(f"✅ Saved Text: '{os.path.basename(final_save_path)}' in '{os.path.basename(determined_post_save_path_for_history)}'")
                         result_tuple = (1, num_potential_files_in_post, [], [], [], history_data_for_this_post, None)
                         return result_tuple
+                        
                     except Exception as e:
                         self.logger(f"   ❌ Critical error saving text file '{txt_filename}': {e}")
                         result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
@@ -1263,7 +1296,6 @@ class PostProcessorWorker:
             if self.keep_duplicates_mode == DUPLICATE_HANDLING_HASH:
                 unique_files_by_url = {}
                 for file_info in all_files_from_post_api:
-                    # Use the file URL as a unique key to avoid processing the same file multiple times
                     file_url = file_info.get('url')
                     if file_url and file_url not in unique_files_by_url:
                         unique_files_by_url[file_url] = file_info
@@ -1734,7 +1766,6 @@ class DownloadThread(QThread):
 
         worker_signals_obj = PostProcessorSignals()
         try:
-            # Connect signals
             worker_signals_obj.progress_signal.connect(self.progress_signal)
             worker_signals_obj.file_download_status_signal.connect(self.file_download_status_signal)
             worker_signals_obj.file_progress_signal.connect(self.file_progress_signal)
@@ -1771,8 +1802,6 @@ class DownloadThread(QThread):
                         was_process_cancelled = True
                         break
 
-                    # --- START OF FIX: Explicitly build the arguments dictionary ---
-                    # This robustly maps all thread attributes to the correct worker parameters.
                     worker_args = {
                         'post_data': individual_post_data,
                         'emitter': worker_signals_obj,
@@ -1833,7 +1862,6 @@ class DownloadThread(QThread):
                         'single_pdf_mode': self.single_pdf_mode,
                         'project_root_dir': self.project_root_dir,
                     }
-                    # --- END OF FIX ---
 
                     post_processing_worker = PostProcessorWorker(**worker_args)
 
@@ -1859,6 +1887,7 @@ class DownloadThread(QThread):
             
             if not was_process_cancelled and not self.isInterruptionRequested():
                 self.logger("✅ All posts processed or end of content reached by DownloadThread.")
+
 
         except Exception as main_thread_err:
             self.logger(f"\n❌ Critical error within DownloadThread run loop: {main_thread_err}")

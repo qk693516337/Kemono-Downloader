@@ -1,16 +1,11 @@
-# --- Standard Library Imports ---
 import os
 import sys
-
-# --- PyQt5 Imports ---
 from PyQt5.QtCore import QUrl, QSize, Qt
 from PyQt5.QtGui import QIcon, QDesktopServices
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QStackedWidget, QScrollArea, QFrame, QWidget
 )
-
-# --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
 from ...utils.resolution import get_dark_theme

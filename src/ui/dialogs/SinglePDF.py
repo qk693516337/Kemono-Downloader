@@ -1,34 +1,33 @@
-# SinglePDF.py
-
 import os
+import re
 try:
     from fpdf import FPDF
     FPDF_AVAILABLE = True
 except ImportError:
     FPDF_AVAILABLE = False
 
+def strip_html_tags(text):
+    if not text:
+        return ""
+    clean = re.compile('<.*?>')
+    return re.sub(clean, '', text)
+
 class PDF(FPDF):
     """Custom PDF class to handle headers and footers."""
     def header(self):
-        # No header
-        pass
+        pass 
 
     def footer(self):
-        # Position at 1.5 cm from bottom
         self.set_y(-15)
-        self.set_font('DejaVu', '', 8)
-        # Page number
+        if self.font_family:
+             self.set_font(self.font_family, '', 8)
+        else:
+             self.set_font('Arial', '', 8)
         self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')
 
 def create_single_pdf_from_content(posts_data, output_filename, font_path, logger=print):
     """
-    Creates a single PDF from a list of post titles and content.
-
-    Args:
-        posts_data (list): A list of dictionaries, where each dict has 'title' and 'content' keys.
-        output_filename (str): The full path for the output PDF file.
-        font_path (str): Path to the DejaVuSans.ttf font file.
-        logger (function, optional): A function to log progress and errors. Defaults to print.
+    Creates a single, continuous PDF, correctly formatting both descriptions and comments.
     """
     if not FPDF_AVAILABLE:
         logger("❌ PDF Creation failed: 'fpdf2' library is not installed. Please run: pip install fpdf2")
@@ -39,34 +38,66 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, logge
         return False
 
     pdf = PDF()
+    default_font_family = 'DejaVu'
     
+    bold_font_path = ""
+    if font_path:
+        bold_font_path = font_path.replace("DejaVuSans.ttf", "DejaVuSans-Bold.ttf")
+
     try:
-        if not os.path.exists(font_path):
-            raise RuntimeError("Font file not found.")
-        pdf.add_font('DejaVu', '', font_path, uni=True)
-        pdf.add_font('DejaVu', 'B', font_path, uni=True) # Add Bold variant
-    except Exception as font_error:
-        logger(f"   ⚠️ Could not load DejaVu font: {font_error}")
-        logger("      PDF may not support all characters. Falling back to default Arial font.")
-        pdf.set_font('Arial', '', 12)
-        pdf.set_font('Arial', 'B', 16)
-
-    logger(f"   Starting PDF creation with content from {len(posts_data)} posts...")
-
-    for post in posts_data:
-        pdf.add_page()
-        # Post Title
-        pdf.set_font('DejaVu', 'B', 16)
-
-        # vvv THIS LINE IS CORRECTED vvv
-        # We explicitly set align='L' and remove the incorrect positional arguments.
-        pdf.multi_cell(w=0, h=10, text=post.get('title', 'Untitled Post'), align='L')
+        if not os.path.exists(font_path): raise RuntimeError(f"Font file not found: {font_path}")
+        if not os.path.exists(bold_font_path): raise RuntimeError(f"Bold font file not found: {bold_font_path}")
         
-        pdf.ln(5) # Add a little space after the title
+        pdf.add_font('DejaVu', '', font_path, uni=True)
+        pdf.add_font('DejaVu', 'B', bold_font_path, uni=True)
+    except Exception as font_error:
+        logger(f"   ⚠️ Could not load DejaVu font: {font_error}. Falling back to Arial.")
+        default_font_family = 'Arial'
+    
+    pdf.add_page()
 
-        # Post Content
-        pdf.set_font('DejaVu', '', 12)
-        pdf.multi_cell(w=0, h=7, text=post.get('content', 'No Content'))
+    logger(f"   Starting continuous PDF creation with content from {len(posts_data)} posts...")
+
+    for i, post in enumerate(posts_data):
+        if i > 0:
+            if 'content' in post:
+                pdf.add_page()
+            elif 'comments' in post:
+                pdf.ln(10)
+                pdf.cell(0, 0, '', border='T')
+                pdf.ln(10)
+
+        pdf.set_font(default_font_family, 'B', 16)
+        pdf.multi_cell(w=0, h=10, text=post.get('title', 'Untitled Post'), align='L')
+        pdf.ln(5)
+
+        if 'comments' in post and post['comments']:
+            comments_list = post['comments']
+            for comment_index, comment in enumerate(comments_list):
+                user = comment.get('commenter_name', 'Unknown User')
+                timestamp = comment.get('published', 'No Date')
+                body = strip_html_tags(comment.get('content', ''))
+
+                pdf.set_font(default_font_family, '', 10)
+                pdf.write(8, "Comment by: ")
+                if user is not None:
+                    pdf.set_font(default_font_family, 'B', 10)
+                    pdf.write(8, str(user))
+                
+                pdf.set_font(default_font_family, '', 10)
+                pdf.write(8, f" on {timestamp}")
+                pdf.ln(10)
+
+                pdf.set_font(default_font_family, '', 11)
+                pdf.multi_cell(0, 7, body)
+                
+                if comment_index < len(comments_list) - 1:
+                    pdf.ln(3)
+                    pdf.cell(w=0, h=0, border='T')
+                    pdf.ln(3)
+        elif 'content' in post:
+            pdf.set_font(default_font_family, '', 12)
+            pdf.multi_cell(w=0, h=7, text=post.get('content', 'No Content'))
     
     try:
         pdf.output(output_filename)

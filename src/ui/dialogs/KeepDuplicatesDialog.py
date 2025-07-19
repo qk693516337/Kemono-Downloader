@@ -1,13 +1,8 @@
-# KeepDuplicatesDialog.py
-
-# --- PyQt5 Imports ---
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QGroupBox, QRadioButton,
     QPushButton, QHBoxLayout, QButtonGroup, QLabel, QLineEdit
 )
 from PyQt5.QtGui import QIntValidator
-
-# --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ...config.constants import DUPLICATE_HANDLING_HASH, DUPLICATE_HANDLING_KEEP_ALL
 
@@ -25,8 +20,6 @@ class KeepDuplicatesDialog(QDialog):
 
         if self.parent_app and hasattr(self.parent_app, '_apply_theme_to_widget'):
             self.parent_app._apply_theme_to_widget(self)
-
-        # Set the initial state based on current settings
         if current_mode == DUPLICATE_HANDLING_KEEP_ALL:
             self.radio_keep_everything.setChecked(True)
             self.limit_input.setText(str(current_limit) if current_limit > 0 else "")
@@ -44,13 +37,9 @@ class KeepDuplicatesDialog(QDialog):
         options_group = QGroupBox()
         options_layout = QVBoxLayout(options_group)
         self.button_group = QButtonGroup(self)
-
-        # --- Skip by Hash Option ---
         self.radio_skip_by_hash = QRadioButton()
         self.button_group.addButton(self.radio_skip_by_hash)
         options_layout.addWidget(self.radio_skip_by_hash)
-
-        # --- Keep Everything Option with Limit Input ---
         keep_everything_layout = QHBoxLayout()
         self.radio_keep_everything = QRadioButton()
         self.button_group.addButton(self.radio_keep_everything)
@@ -66,8 +55,6 @@ class KeepDuplicatesDialog(QDialog):
         options_layout.addLayout(keep_everything_layout)
 
         main_layout.addWidget(options_group)
-
-        # --- OK and Cancel buttons ---
         button_layout = QHBoxLayout()
         self.ok_button = QPushButton()
         self.cancel_button = QPushButton()
@@ -75,8 +62,6 @@ class KeepDuplicatesDialog(QDialog):
         button_layout.addWidget(self.ok_button)
         button_layout.addWidget(self.cancel_button)
         main_layout.addLayout(button_layout)
-
-        # --- Connections ---
         self.ok_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         self.radio_keep_everything.toggled.connect(self.limit_input.setEnabled)

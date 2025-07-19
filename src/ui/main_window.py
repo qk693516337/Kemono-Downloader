@@ -1,4 +1,3 @@
-# --- Standard Library Imports ---
 import sys
 import os
 import time
@@ -16,8 +15,6 @@ from collections import deque, defaultdict
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor ,CancelledError
 from urllib .parse import urlparse 
-
-# --- PyQt5 Imports ---
 from PyQt5.QtGui import QIcon, QIntValidator, QDesktopServices
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QLineEdit, QTextEdit, QPushButton,
@@ -27,8 +24,6 @@ from PyQt5.QtWidgets import (
     QMainWindow, QAction, QGridLayout, 
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QObject, QTimer, QSettings, QStandardPaths, QUrl, QSize, QProcess, QMutex, QMutexLocker, QCoreApplication
-
-# --- Local Application Imports ---
 from ..services.drive_downloader import download_mega_file as drive_download_mega_file ,download_gdrive_file ,download_dropbox_file 
 from ..core.workers import DownloadThread as BackendDownloadThread
 from ..core.workers import PostProcessorWorker  
@@ -137,8 +132,6 @@ class DownloaderApp (QWidget ):
         self.creator_name_cache = {}
         self.log_signal.emit(f"ℹ️ App base directory: {self.app_base_dir}")
         self.log_signal.emit(f"ℹ️ Persistent history file path set to: {self.persistent_history_file}")
-
-        # --- The rest of your __init__ method continues from here ---
         self.last_downloaded_files_details = deque(maxlen=3)
         self.download_history_candidates = deque(maxlen=8)
         self.final_download_history_entries = []
@@ -225,7 +218,7 @@ class DownloaderApp (QWidget ):
         self.text_export_format = 'pdf'
         self.single_pdf_setting = False
         self.keep_duplicates_mode = DUPLICATE_HANDLING_HASH
-        self.keep_duplicates_limit = 0  # 0 means no limit
+        self.keep_duplicates_limit = 0 
         self.downloaded_hash_counts = defaultdict(int)
         self.downloaded_hash_counts_lock = threading.Lock()
         self.session_temp_files = []
@@ -288,8 +281,6 @@ class DownloaderApp (QWidget ):
             self.setStyleSheet(get_dark_theme(scale))
         else:
             self.setStyleSheet("")
-
-        # Prompt for restart
         msg_box = QMessageBox(self)
         msg_box.setIcon(QMessageBox.Information)
         msg_box.setWindowTitle(self._tr("theme_change_title", "Theme Changed"))
@@ -447,14 +438,14 @@ class DownloaderApp (QWidget ):
         self._load_ui_from_settings_dict(settings)
         
         self.is_restore_pending = True
-        self._update_button_states_and_connections() # Update buttons for restore state, UI remains editable
+        self._update_button_states_and_connections()
 
     def _clear_session_and_reset_ui(self):
         """Clears the session file and resets the UI to its default state."""
         self._clear_session_file()
         self.interrupted_session_data = None
         self.is_restore_pending = False
-        self._update_button_states_and_connections() # Ensure buttons are updated to idle state
+        self._update_button_states_and_connections()
         self.reset_application_state()
 
     def _clear_session_file(self):
@@ -489,7 +480,6 @@ class DownloaderApp (QWidget ):
         Updates the text and click connections of the main action buttons
         based on the current application state (downloading, paused, restore pending, idle).
         """
-        # Disconnect all signals first to prevent multiple connections
         try: self.download_btn.clicked.disconnect()
         except TypeError: pass
         try: self.pause_btn.clicked.disconnect()
@@ -500,7 +490,6 @@ class DownloaderApp (QWidget ):
         is_download_active = self._is_download_active()
 
         if self.is_restore_pending:
-            # State: Restore Pending
             self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
@@ -511,14 +500,12 @@ class DownloaderApp (QWidget ):
             self.pause_btn.clicked.connect(self.restore_download)
             self.pause_btn.setToolTip(self._tr("restore_download_button_tooltip", "Click to restore the interrupted download."))
 
-            # --- START: CORRECTED CANCEL BUTTON LOGIC ---
             self.cancel_btn.setText(self._tr("discard_session_button_text", "🗑️ Discard Session"))
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self._clear_session_and_reset_ui)
             self.cancel_btn.setToolTip(self._tr("discard_session_tooltip", "Click to discard the interrupted session and reset the UI."))
 
         elif is_download_active:
-            # State: Downloading / Paused
             self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
             self.download_btn.setEnabled(False) # Cannot start new download while one is active
 
@@ -532,7 +519,6 @@ class DownloaderApp (QWidget ):
             self.cancel_btn.clicked.connect(self.cancel_download_button_action)
             self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
         else:
-            # State: Idle (No download, no restore pending)
             self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
@@ -870,7 +856,7 @@ class DownloaderApp (QWidget ):
                     self ._handle_actual_file_downloaded (payload [0 ]if payload else {})
                 elif signal_type =='file_successfully_downloaded':
                     self ._handle_file_successfully_downloaded (payload [0 ])
-                elif signal_type == 'worker_finished': # <-- ADD THIS ELIF BLOCK
+                elif signal_type == 'worker_finished':
                     self.actual_gui_signals.worker_finished_signal.emit(payload[0] if payload else tuple())
                 else:
                     self .log_signal .emit (f"⚠️ Unknown signal type from worker queue: {signal_type }")
@@ -1344,13 +1330,7 @@ class DownloaderApp (QWidget ):
 
     def _show_future_settings_dialog(self):
         """Shows the placeholder dialog for future settings."""
-        # --- DEBUGGING CODE TO FIND THE UNEXPECTED CALL ---
-        import traceback
-        print("--- DEBUG: _show_future_settings_dialog() was called. See stack trace below. ---")
-        traceback.print_stack()
-        print("--------------------------------------------------------------------------------")
         
-        # Correctly create the dialog instance once with the parent set to self.
         dialog = FutureSettingsDialog(self)
         dialog.exec_()
 
@@ -1364,7 +1344,6 @@ class DownloaderApp (QWidget ):
         Checks if the fetcher thread is done AND if all submitted tasks have been processed.
         If so, finalizes the download.
         """
-        # Conditions for being completely finished:
         fetcher_is_done = not self.is_fetcher_thread_running
         all_workers_are_done = (self.total_posts_to_process > 0 and self.processed_posts_count >= self.total_posts_to_process)
 
@@ -1643,24 +1622,15 @@ class DownloaderApp (QWidget ):
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
 
         if is_only_links_mode:
-            # Check if this is a new post title
             if post_title != self._current_link_post_title:
-                # Add a styled horizontal rule as a separator
                 if self._current_link_post_title is not None:
                     separator_html = f'{HTML_PREFIX}<hr style="border: 1px solid #444;">'
                     self.log_signal.emit(separator_html)
-                
-                # Display the new post title as a styled heading
                 title_html = f'{HTML_PREFIX}<h3 style="color: #87CEEB; margin-bottom: 5px; margin-top: 8px;">{html.escape(post_title)}</h3>'
                 self.log_signal.emit(title_html)
                 self._current_link_post_title = post_title
-
-            # Sanitize the link text for safe HTML display
             display_text = html.escape(link_text.strip() if link_text.strip() else link_url)
-
-            # Build the HTML for the link item for a cleaner look
             link_html_parts = [
-                # Use a div for indentation and a bullet point for list-like appearance
                 f'<div style="margin-left: 20px; margin-bottom: 4px;">'
                 f'• <a href="{link_url}" style="color: #A9D0F5; text-decoration: none;">{display_text}</a>'
                 f' <span style="color: #999;">({html.escape(platform)})</span>'
@@ -1668,7 +1638,6 @@ class DownloaderApp (QWidget ):
 
             if decryption_key:
                 link_html_parts.append(
-                    # Display key on a new line, indented, and in a different color
                     f'<br><span style="margin-left: 15px; color: #f0ad4e; font-size: 9pt;">'
                     f'Key: {html.escape(decryption_key)}</span>'
                 )
@@ -1677,8 +1646,6 @@ class DownloaderApp (QWidget ):
             
             final_link_html = f'{HTML_PREFIX}{"".join(link_html_parts)}'
             self.log_signal.emit(final_link_html)
-        
-        # This part handles the secondary log panel and remains the same
         elif self .show_external_links :
             separator ="-"*45 
             formatted_link_info = f"{link_text} - {link_url} - {platform}"
@@ -1818,22 +1785,13 @@ class DownloaderApp (QWidget ):
     def _handle_filter_mode_change(self, button, checked):
         if not button or not checked:
             return
-
-        # Define this variable early to ensure it's always available.
         is_only_links = (button == self.radio_only_links)
-
-        # Handle the automatic disabling of multithreading for link extraction
         if hasattr(self, 'use_multithreading_checkbox'):
             if is_only_links:
-                # Disable multithreading for "Only Links" to avoid the bug
                 self.use_multithreading_checkbox.setChecked(False)
                 self.use_multithreading_checkbox.setEnabled(False)
             else:
-                # Re-enable the multithreading option for other modes.
-                # Other logic will handle disabling it if needed (e.g., for Manga Date mode).
                 self.use_multithreading_checkbox.setEnabled(True)
-
-        # Reset the "More" button text if another button is selected
         if button != self.radio_more and checked:
             self.radio_more.setText("More")
             self.more_filter_scope = None
@@ -2257,8 +2215,6 @@ class DownloaderApp (QWidget ):
 
     def _handle_more_options_toggled(self, button, checked):
         """Shows the MoreOptionsDialog when the 'More' radio button is selected."""
-
-        # This block handles when the user clicks ON the "More" button.
         if button == self.radio_more and checked:
             current_scope = self.more_filter_scope or MoreOptionsDialog.SCOPE_CONTENT
             current_format = self.text_export_format or 'pdf'
@@ -2274,26 +2230,17 @@ class DownloaderApp (QWidget ):
                 self.more_filter_scope = dialog.get_selected_scope()
                 self.text_export_format = dialog.get_selected_format()
                 self.single_pdf_setting = dialog.get_single_pdf_state()
-
-                # Define the variable based on the dialog's result
                 is_any_pdf_mode = (self.text_export_format == 'pdf')
-
-                # Update the radio button text to reflect the choice
                 scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
                 format_display = f" ({self.text_export_format.upper()})"
                 if self.single_pdf_setting:
                     format_display = " (Single PDF)"
                 self.radio_more.setText(f"{scope_text}{format_display}")
-
-                # --- Logic to Disable/Enable Checkboxes ---
-                # Disable multithreading for ANY PDF export
                 if hasattr(self, 'use_multithreading_checkbox'):
                     self.use_multithreading_checkbox.setEnabled(not is_any_pdf_mode)
                     if is_any_pdf_mode:
                         self.use_multithreading_checkbox.setChecked(False)
                     self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
-
-                # Also disable subfolders for the "Single PDF" case, as it doesn't apply
                 if hasattr(self, 'use_subfolders_checkbox'):
                     self.use_subfolders_checkbox.setEnabled(not self.single_pdf_setting)
                     if self.single_pdf_setting:
@@ -2304,16 +2251,12 @@ class DownloaderApp (QWidget ):
                 if is_any_pdf_mode:
                     self.log_signal.emit("ℹ️ Multithreading automatically disabled for PDF export.")
             else:
-                # User cancelled the dialog, so revert to the 'All' option.
                 self.log_signal.emit("ℹ️ 'More' filter selection cancelled. Reverting to 'All'.")
                 self.radio_all.setChecked(True)
-
-        # This block handles when the user switches AWAY from "More" to another option.
         elif button != self.radio_more and checked:
             self.radio_more.setText("More")
             self.more_filter_scope = None
             self.single_pdf_setting = False
-            # Re-enable the checkboxes when switching to any non-PDF mode
             if hasattr(self, 'use_multithreading_checkbox'):
                 self.use_multithreading_checkbox.setEnabled(True)
                 self._update_multithreading_for_date_mode()
@@ -2383,7 +2326,6 @@ class DownloaderApp (QWidget ):
                 self .use_subfolder_per_post_checkbox .setChecked (False )
 
         if hasattr(self, 'date_prefix_checkbox'):
-            # The Date Prefix checkbox should only be enabled if "Subfolder per Post" is both enabled and checked
             can_enable_date_prefix = self.use_subfolder_per_post_checkbox.isEnabled() and self.use_subfolder_per_post_checkbox.isChecked()
             self.date_prefix_checkbox.setEnabled(can_enable_date_prefix)
             if not can_enable_date_prefix:
@@ -3435,7 +3377,6 @@ class DownloaderApp (QWidget ):
 
     def _load_ui_from_settings_dict(self, settings: dict):
         """Populates the UI with values from a settings dictionary."""
-        # Text inputs
         self.link_input.setText(settings.get('api_url', ''))
         self.dir_input.setText(settings.get('output_dir', ''))
         self.character_input.setText(settings.get('character_filter_text', ''))
@@ -3445,19 +3386,13 @@ class DownloaderApp (QWidget ):
         self.cookie_text_input.setText(settings.get('cookie_text', ''))
         if hasattr(self, 'manga_date_prefix_input'):
             self.manga_date_prefix_input.setText(settings.get('manga_date_prefix', ''))
-
-        # Numeric inputs
         self.thread_count_input.setText(str(settings.get('num_threads', 4)))
         self.start_page_input.setText(str(settings.get('start_page', '')) if settings.get('start_page') is not None else '')
         self.end_page_input.setText(str(settings.get('end_page', '')) if settings.get('end_page') is not None else '')
-        
-        # Checkboxes
         for checkbox_name, key in self.get_checkbox_map().items():
             checkbox = getattr(self, checkbox_name, None)
             if checkbox:
                 checkbox.setChecked(settings.get(key, False))
-
-        # Radio buttons
         if settings.get('only_links'): self.radio_only_links.setChecked(True)
         else:
             filter_mode = settings.get('filter_mode', 'all')
@@ -3469,17 +3404,12 @@ class DownloaderApp (QWidget ):
 
         self.keep_duplicates_mode = settings.get('keep_duplicates_mode', DUPLICATE_HANDLING_HASH)
         self.keep_duplicates_limit = settings.get('keep_duplicates_limit', 0)
-        # Visually update the checkbox based on the restored mode
         if hasattr(self, 'keep_duplicates_checkbox'):
             is_keep_mode = (self.keep_duplicates_mode == DUPLICATE_HANDLING_KEEP_ALL)
             self.keep_duplicates_checkbox.setChecked(is_keep_mode)
-
-        # Restore "More" dialog settings
         self.more_filter_scope = settings.get('more_filter_scope')
         self.text_export_format = settings.get('text_export_format', 'pdf')
         self.single_pdf_setting = settings.get('single_pdf_setting', False)
-        
-        # Visually update the "More" button's text to reflect the restored settings
         if self.radio_more.isChecked() and self.more_filter_scope:
             from .dialogs.MoreOptionsDialog import MoreOptionsDialog
             scope_text = "Comments" if self.more_filter_scope == MoreOptionsDialog.SCOPE_COMMENTS else "Description"
@@ -3487,14 +3417,10 @@ class DownloaderApp (QWidget ):
             if self.single_pdf_setting:
                 format_display = " (Single PDF)"
             self.radio_more.setText(f"{scope_text}{format_display}")
-
-        # Toggle button states
         self.skip_words_scope = settings.get('skip_words_scope', SKIP_SCOPE_POSTS)
         self.char_filter_scope = settings.get('char_filter_scope', CHAR_SCOPE_TITLE)
         self.manga_filename_style = settings.get('manga_filename_style', STYLE_POST_TITLE)
         self.allow_multipart_download_setting = settings.get('allow_multipart_download', False)
-        
-        # Update button texts after setting states
         self._update_skip_scope_button_text()
         self._update_char_filter_scope_button_text()
         self._update_manga_filename_style_button_text()
@@ -3541,17 +3467,15 @@ class DownloaderApp (QWidget ):
         in multi-threaded mode.
         """
         global PostProcessorWorker, download_from_api, requests, json, traceback, urlparse
-
-        # Unpack arguments from the dictionary passed by the thread
         api_url_input_for_fetcher = fetcher_args['api_url']
         worker_args_template = fetcher_args['worker_args_template']
         processed_post_ids_set = set(fetcher_args.get('processed_post_ids', []))
-        start_offset = fetcher_args.get('start_offset', 0)
+        start_page = worker_args_template.get('start_page')
+        end_page = worker_args_template.get('end_page')
         target_post_id = worker_args_template.get('target_post_id_from_initial_url') # Get the target post ID
         logger_func = lambda msg: self.log_signal.emit(f"[Fetcher] {msg}")
 
         try:
-            # Prepare common variables for the fetcher thread
             service = worker_args_template.get('service')
             user_id = worker_args_template.get('user_id')
             cancellation_event = self.cancellation_event
@@ -3582,8 +3506,6 @@ class DownloaderApp (QWidget ):
                     
                     if not isinstance(single_post_data, dict):
                         raise ValueError(f"Expected a dictionary for post data, but got {type(single_post_data)}")
-
-                    # Set total posts to 1 and submit the single job to the worker pool
                     self.total_posts_to_process = 1
                     self.overall_progress_signal.emit(1, 0)
                     
@@ -3600,14 +3522,22 @@ class DownloaderApp (QWidget ):
                     logger_func(f"❌ Failed to fetch single post directly: {e}. Aborting.")
                 
                 return
-            offset = start_offset
             page_size = 50
+            offset = 0
+            current_page_num = 1
+            if start_page and start_page > 1:
+                offset = (start_page - 1) * page_size
+                current_page_num = start_page
 
             while not cancellation_event.is_set():
                 while pause_event.is_set():
                     time.sleep(0.5)
                     if cancellation_event.is_set(): break
                 if cancellation_event.is_set(): break
+
+                if end_page and current_page_num > end_page:
+                    logger_func(f"✅ Reached specified end page ({end_page}) for creator feed. Stopping.")
+                    break
 
                 api_url = f"https://{parsed_api_url.netloc}/api/v1/{service}/user/{user_id}?o={offset}"
                 logger_func(f"Fetching post list: {api_url} (Page approx. {offset // page_size + 1})")
@@ -3617,7 +3547,8 @@ class DownloaderApp (QWidget ):
                     response.raise_for_status()
                     posts_batch_from_api = response.json()
                 except (requests.RequestException, json.JSONDecodeError) as e:
-                    logger_func(f"❌ API Error fetching posts: {e}. Stopping fetch.")
+                    logger_func(f"❌ API Error fetching posts: {e}. Aborting the entire download.")
+                    self.cancellation_event.set()                 
                     break
                 
                 if not posts_batch_from_api:
@@ -3656,7 +3587,8 @@ class DownloaderApp (QWidget ):
                         except (json.JSONDecodeError, KeyError, OSError) as e:
                             logger_func(f"⚠️ Could not update session offset: {e}")
                 
-                offset = next_offset
+                offset = offset + page_size
+                current_page_num += 1
 
         except Exception as e:
             logger_func(f"❌ Critical error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
@@ -3686,8 +3618,6 @@ class DownloaderApp (QWidget ):
             if permanent:
                 self.permanently_failed_files_for_dialog.extend(permanent)
                 self._update_error_button_count()
-
-            # Other result handling
             if history_data: self._add_to_history_candidates(history_data)
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
@@ -4023,7 +3953,7 @@ class DownloaderApp (QWidget ):
         self.is_finishing = True
         if not self .cancel_btn .isEnabled ()and not self .cancellation_event .is_set ():self .log_signal .emit ("ℹ️ No active download to cancel or already cancelling.");return 
         self .log_signal .emit ("⚠️ Requesting cancellation of download process (soft reset)...")
-
+        self._cleanup_temp_files()
         self._clear_session_file() # Clear session file on explicit cancel
         if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
             self .log_signal .emit ("    Cancelling active External Link download thread...")
@@ -4205,8 +4135,6 @@ class DownloaderApp (QWidget ):
                 self.log_signal.emit(f"ℹ️ Duplicate handling mode set to: '{self.keep_duplicates_mode}' {limit_text}.")
                 self.log_signal.emit(f"")
                 self.log_signal.emit(f"")
-
-                # Log warning only after the confirmation and only if the specific mode is selected
                 if self.keep_duplicates_mode == DUPLICATE_HANDLING_KEEP_ALL:
                     self._log_keep_everything_warning()
             else:
@@ -4394,14 +4322,11 @@ class DownloaderApp (QWidget ):
         if os.path.exists(self.session_file_path):
             try:
                 with self.session_lock:
-                    # Read the current session data
                     with open(self.session_file_path, 'r', encoding='utf-8') as f:
                         session_data = json.load(f)
                     
                     if 'download_state' in session_data:
                         session_data['download_state']['permanently_failed_files'] = self.permanently_failed_files_for_dialog
-                    
-                    # Save the updated session data back to the file
                     self._save_session_file(session_data)
                     self.log_signal.emit("ℹ️ Session file updated with retry results.")
 
@@ -4457,23 +4382,17 @@ class DownloaderApp (QWidget ):
                     self.log_signal.emit("   ⚠️ Download thread did not terminate gracefully.")
                 self.download_thread.deleteLater()
                 self.download_thread = None
-    
-            # Try to cancel thread pool
             if self.thread_pool:
                 self.log_signal.emit("   Shutting down thread pool for reset...")
                 self.thread_pool.shutdown(wait=True, cancel_futures=True)
                 self.thread_pool = None
                 self.active_futures = []
-    
-            # Try to cancel external link download thread
             if self.external_link_download_thread and self.external_link_download_thread.isRunning():
                 self.log_signal.emit("   Cancelling external link download thread for reset...")
                 self.external_link_download_thread.cancel()
                 self.external_link_download_thread.wait(3000)
                 self.external_link_download_thread.deleteLater()
                 self.external_link_download_thread = None
-    
-            # Try to cancel retry thread pool
             if hasattr(self, 'retry_thread_pool') and self.retry_thread_pool:
                 self.log_signal.emit("   Shutting down retry thread pool for reset...")
                 self.retry_thread_pool.shutdown(wait=True)
@@ -4494,9 +4413,6 @@ class DownloaderApp (QWidget ):
         self._load_saved_download_location()
         self.main_log_output.clear()
         self.external_log_output.clear()
-
-    
-        # --- Reset UI and all state ---
         self.log_signal.emit("🔄 Resetting application state to defaults...")
         self._reset_ui_to_defaults()
         self._load_saved_download_location()
@@ -4513,8 +4429,6 @@ class DownloaderApp (QWidget ):
         if self.log_verbosity_toggle_button:
             self.log_verbosity_toggle_button.setText(self.EYE_ICON)
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
-    
-        # Clear all download-related state
         self.external_link_queue.clear()
         self.extracted_links_cache = []
         self._is_processing_external_link_queue = False
@@ -4564,11 +4478,9 @@ class DownloaderApp (QWidget ):
         self.interrupted_session_data = None
         self.is_restore_pending = False
         self.last_link_input_text_for_queue_sync = ""    
-    # Replace your current reset_application_state with the above.
 
     def _reset_ui_to_defaults(self):
         """Resets all UI elements and relevant state to their default values."""
-        # Clear all text fields
         self.link_input.clear()
         self.custom_folder_input.clear()
         self.character_input.clear()
@@ -4582,8 +4494,6 @@ class DownloaderApp (QWidget ):
         self.thread_count_input.setText("4")
         if hasattr(self, 'manga_date_prefix_input'):
             self.manga_date_prefix_input.clear()
-    
-        # Set radio buttons and checkboxes to defaults
         self.radio_all.setChecked(True)
         self.skip_zip_checkbox.setChecked(True)
         self.download_thumbnails_checkbox.setChecked(False)
@@ -4605,8 +4515,6 @@ class DownloaderApp (QWidget ):
         self.selected_cookie_filepath = None
         if hasattr(self, 'cookie_text_input'):
             self.cookie_text_input.clear()
-    
-        # Reset log and progress displays
         if self.main_log_output:
             self.main_log_output.clear()
         if self.external_log_output:
@@ -4615,8 +4523,6 @@ class DownloaderApp (QWidget ):
             self.missed_character_log_output.clear()
         self.progress_label.setText(self._tr("progress_idle_text", "Progress: Idle"))
         self.file_progress_label.setText("")
-    
-        # Reset internal state
         self.missed_title_key_terms_count.clear()
         self.missed_title_key_terms_examples.clear()
         self.logged_summary_for_key_term.clear()
@@ -4647,8 +4553,6 @@ class DownloaderApp (QWidget ):
         self._current_link_post_title = None
         if self.download_extracted_links_button:
             self.download_extracted_links_button.setEnabled(False)
-    
-        # Reset favorite/queue/session state
         self.favorite_download_queue.clear()
         self.is_processing_favorites_queue = False
         self.current_processing_favorite_item_info = None
@@ -4656,14 +4560,11 @@ class DownloaderApp (QWidget ):
         self.is_restore_pending = False
         self.last_link_input_text_for_queue_sync = ""
         self._update_button_states_and_connections()
-        # Reset counters and progress
         self.total_posts_to_process = 0
         self.processed_posts_count = 0
         self.download_counter = 0
         self.skip_counter = 0
         self.all_kept_original_filenames = []
-    
-        # Reset log view and UI state
         if self.log_view_stack:
             self.log_view_stack.setCurrentIndex(0)
         if self.progress_log_label:
@@ -4671,27 +4572,19 @@ class DownloaderApp (QWidget ):
         if self.log_verbosity_toggle_button:
             self.log_verbosity_toggle_button.setText(self.EYE_ICON)
             self.log_verbosity_toggle_button.setToolTip("Current View: Progress Log. Click to switch to Missed Character Log.")
-    
-        # Reset character list filter
         self.filter_character_list("")
-    
-        # Update UI for manga mode and multithreading
         self._handle_multithreading_toggle(self.use_multithreading_checkbox.isChecked())
         self.update_ui_for_manga_mode(False)
         self.update_custom_folder_visibility(self.link_input.text())
         self.update_page_range_enabled_state()
         self._update_cookie_input_visibility(False)
         self._update_cookie_input_placeholders_and_tooltips()
-    
-        # Reset button states
         self.download_btn.setEnabled(True)
         self.cancel_btn.setEnabled(False)
         if self.reset_button:
             self.reset_button.setEnabled(True)
             self.reset_button.setText(self._tr("reset_button_text", "🔄 Reset"))
             self.reset_button.setToolTip(self._tr("reset_button_tooltip", "Reset all inputs and logs to default state (only when idle)."))
-    
-        # Reset favorite mode UI
         if hasattr(self, 'favorite_mode_checkbox'):
             self._handle_favorite_mode_toggle(False)
         if hasattr(self, 'scan_content_images_checkbox'):
@@ -4887,8 +4780,6 @@ class DownloaderApp (QWidget ):
                                     self._tr("restore_pending_message_creator_selection",
                                              "Please 'Restore Download' or 'Discard Session' before selecting new creators."))
             return
-
-        # Correctly create the dialog instance
         dialog = EmptyPopupDialog(self.app_base_dir, self)
         if dialog.exec_() == QDialog.Accepted:
             if hasattr(dialog, 'selected_creators_for_queue') and dialog.selected_creators_for_queue:

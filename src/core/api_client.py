@@ -3,8 +3,6 @@ import traceback
 from urllib.parse import urlparse
 import json # Ensure json is imported
 import requests
-
-# (Keep the rest of your imports)
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ..config.constants import (
     STYLE_DATE_POST_TITLE
@@ -25,9 +23,6 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
                 raise RuntimeError("Fetch operation cancelled by user while paused.")
             time.sleep(0.5)
         logger("   Post fetching resumed.")
-    
-    # --- MODIFICATION: Added `fields` to the URL to request only metadata ---
-    # This prevents the large 'content' field from being included in the list, avoiding timeouts.
     fields_to_request = "id,user,service,title,shared_file,added,published,edited,file,attachments,tags"
     paginated_url = f'{api_url_base}?o={offset}&fields={fields_to_request}'
     
@@ -44,7 +39,6 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         logger(log_message)
 
         try:
-            # We can now remove the streaming logic as the response will be small and fast.
             response = requests.get(paginated_url, headers=headers, timeout=(15, 60), cookies=cookies_dict)
             response.raise_for_status()
             return response.json()
@@ -80,7 +74,6 @@ def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logge
     post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}"
     logger(f"      Fetching full content for post ID {post_id}...")
     try:
-        # Use streaming here as a precaution for single posts that are still very large.
         with requests.get(post_api_url, headers=headers, timeout=(15, 300), cookies=cookies_dict, stream=True) as response:
             response.raise_for_status()
             response_body = b""
@@ -88,7 +81,6 @@ def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logge
                 response_body += chunk
             
             full_post_data = json.loads(response_body)
-            # The API sometimes wraps the post in a list, handle that.
             if isinstance(full_post_data, list) and full_post_data:
                 return full_post_data[0]
             return full_post_data
@@ -134,14 +126,10 @@ def download_from_api(
         'User-Agent': 'Mozilla/5.0',
         'Accept': 'application/json'
     }
-
-    # --- ADD THIS BLOCK ---
-    # Ensure processed_post_ids is a set for fast lookups
     if processed_post_ids is None:
         processed_post_ids = set()
     else:
         processed_post_ids = set(processed_post_ids)
-    # --- END OF ADDITION ---
 
     service, user_id, target_post_id = extract_post_info(api_url_input)
 
@@ -158,11 +146,9 @@ def download_from_api(
     if use_cookie and app_base_dir:
         cookies_for_api = prepare_cookies_for_request(use_cookie, cookie_text, selected_cookie_file, app_base_dir, logger, target_domain=api_domain)
     if target_post_id:
-        # --- ADD THIS CHECK FOR RESTORE ---
         if target_post_id in processed_post_ids:
             logger(f"   Skipping already processed target post ID: {target_post_id}")
             return
-        # --- END OF ADDITION ---
         direct_post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{target_post_id}"
         logger(f"   Attempting direct fetch for target post: {direct_post_api_url}")
         try:
@@ -248,14 +234,12 @@ def download_from_api(
                 break
         if cancellation_event and cancellation_event.is_set(): return
         if all_posts_for_manga_mode:
-            # --- ADD THIS BLOCK TO FILTER POSTS IN MANGA MODE ---
             if processed_post_ids:
                 original_count = len(all_posts_for_manga_mode)
                 all_posts_for_manga_mode = [post for post in all_posts_for_manga_mode if post.get('id') not in processed_post_ids]
                 skipped_count = original_count - len(all_posts_for_manga_mode)
                 if skipped_count > 0:
                     logger(f"   Manga Mode: Skipped {skipped_count} already processed post(s) before sorting.")
-            # --- END OF ADDITION ---
 
             logger(f"   Manga Mode: Fetched {len(all_posts_for_manga_mode)} total posts. Sorting by publication date (oldest first)...")
             def sort_key_tuple(post):
@@ -326,15 +310,12 @@ def download_from_api(
             logger(f"❌ Unexpected error fetching page {current_page_num} (offset {current_offset}): {e}")
             traceback.print_exc()
             break
-        
-        # --- ADD THIS BLOCK TO FILTER POSTS IN STANDARD MODE ---
         if processed_post_ids:
             original_count = len(posts_batch)
             posts_batch = [post for post in posts_batch if post.get('id') not in processed_post_ids]
             skipped_count = original_count - len(posts_batch)
             if skipped_count > 0:
                 logger(f"   Skipped {skipped_count} already processed post(s) from page {current_page_num}.")
-        # --- END OF ADDITION ---
         
         if not posts_batch:
             if target_post_id and not processed_target_post_flag:

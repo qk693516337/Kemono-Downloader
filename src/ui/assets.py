@@ -1,8 +1,5 @@
-# --- Standard Library Imports ---
 import os
 import sys
-
-# --- PyQt5 Imports ---
 from PyQt5.QtGui import QIcon
 
 _app_icon_cache = None

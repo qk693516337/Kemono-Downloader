@@ -1,14 +1,9 @@
-# --- Standard Library Imports ---
 from collections import defaultdict
-
-# --- PyQt5 Imports ---
 from PyQt5.QtCore import pyqtSignal, Qt
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QListWidget, QListWidgetItem,
     QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView
 )
-
-# --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
 from ...utils.resolution import get_dark_theme
@@ -18,8 +13,6 @@ class DownloadExtractedLinksDialog(QDialog):
     A dialog to select and initiate the download for extracted, supported links
     from external cloud services like Mega, Google Drive, and Dropbox.
     """
-
-    # Signal emitted with a list of selected link information dictionaries
     download_requested = pyqtSignal(list)
 
     def __init__(self, links_data, parent_app, parent=None):
@@ -34,23 +27,13 @@ class DownloadExtractedLinksDialog(QDialog):
         super().__init__(parent)
         self.links_data = links_data
         self.parent_app = parent_app
-
-        # --- Basic Window Setup ---
         app_icon = get_app_icon_object()
         if not app_icon.isNull():
             self.setWindowIcon(app_icon)
-
-        # --- START OF FIX ---
-        # Get the user-defined scale factor from the parent application.
         scale_factor = getattr(self.parent_app, 'scale_factor', 1.0)
-
-        # Define base dimensions and apply the correct scale factor.
         base_width, base_height = 600, 450
         self.setMinimumSize(int(base_width * scale_factor), int(base_height * scale_factor))
         self.resize(int(base_width * scale_factor * 1.1), int(base_height * scale_factor * 1.1))
-        # --- END OF FIX ---
-
-        # --- Initialize UI and Apply Theming ---
         self._init_ui()
         self._retranslate_ui()
         self._apply_theme()
@@ -68,8 +51,6 @@ class DownloadExtractedLinksDialog(QDialog):
         self.links_list_widget.setSelectionMode(QAbstractItemView.NoSelection)
         self._populate_list()
         layout.addWidget(self.links_list_widget)
-
-        # --- Control Buttons ---
         button_layout = QHBoxLayout()
         self.select_all_button = QPushButton()
         self.select_all_button.clicked.connect(lambda: self._set_all_items_checked(Qt.Checked))
@@ -100,7 +81,6 @@ class DownloadExtractedLinksDialog(QDialog):
         sorted_post_titles = sorted(grouped_links.keys(), key=lambda x: x.lower())
 
         for post_title_key in sorted_post_titles:
-            # Add a non-selectable header for each post
             header_item = QListWidgetItem(f"{post_title_key}")
             header_item.setFlags(Qt.NoItemFlags)
             font = header_item.font()
@@ -108,8 +88,6 @@ class DownloadExtractedLinksDialog(QDialog):
             font.setPointSize(font.pointSize() + 1)
             header_item.setFont(font)
             self.links_list_widget.addItem(header_item)
-
-            # Add checkable items for each link within that post
             for link_info_data in grouped_links[post_title_key]:
                 platform_display = link_info_data.get('platform', 'unknown').upper()
                 display_text = f"  [{platform_display}] {link_info_data['link_text']} ({link_info_data['url']})"
@@ -139,19 +117,13 @@ class DownloadExtractedLinksDialog(QDialog):
         is_dark_theme = self.parent_app and self.parent_app.current_theme == "dark"
 
         if is_dark_theme:
-            # Get the scale factor from the parent app
             scale = getattr(self.parent_app, 'scale_factor', 1)
-            # Call the imported function with the correct scale
             self.setStyleSheet(get_dark_theme(scale))
         else:
-            # Explicitly set a blank stylesheet for light mode
             self.setStyleSheet("")
-
-        # Set header text color based on theme
         header_color = Qt.cyan if is_dark_theme else Qt.blue
         for i in range(self.links_list_widget.count()):
             item = self.links_list_widget.item(i)
-            # Headers are not checkable (they have no checkable flag)
             if not item.flags() & Qt.ItemIsUserCheckable:
                 item.setForeground(header_color)
 

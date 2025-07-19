@@ -1,15 +1,10 @@
-# --- Standard Library Imports ---
 import os
 import sys
-
-# --- PyQt5 Imports ---
 from PyQt5.QtCore import pyqtSignal, Qt, QSettings, QCoreApplication
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
     QStackedWidget, QScrollArea, QFrame, QWidget, QCheckBox
 )
-
-# --- Local Application Imports ---
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
 from ...utils.resolution import get_dark_theme
@@ -58,8 +53,6 @@ class TourDialog(QDialog):
     """
     tour_finished_normally = pyqtSignal()
     tour_skipped = pyqtSignal()
-
-    # Constants for QSettings
     CONFIG_APP_NAME_TOUR = "ApplicationTour"
     TOUR_SHOWN_KEY = "neverShowTourAgainV19"
 
@@ -98,8 +91,6 @@ class TourDialog(QDialog):
 
         self.stacked_widget = QStackedWidget()
         main_layout.addWidget(self.stacked_widget, 1)
-
-        # Load content for each step
         steps_content = [
             ("tour_dialog_step1_title", "tour_dialog_step1_content"),
             ("tour_dialog_step2_title", "tour_dialog_step2_content"),
@@ -120,8 +111,6 @@ class TourDialog(QDialog):
             self.stacked_widget.addWidget(step_widget)
 
         self.setWindowTitle(self._tr("tour_dialog_title", "Welcome to Kemono Downloader!"))
-
-        # --- Bottom Controls ---
         bottom_controls_layout = QVBoxLayout()
         bottom_controls_layout.setContentsMargins(15, 10, 15, 15)
         bottom_controls_layout.setSpacing(12)
