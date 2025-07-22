@@ -41,6 +41,9 @@ class DownloadManager:
         self.total_downloads = 0
         self.total_skips = 0
         self.all_kept_original_filenames = []
+        self.creator_profiles_dir = None
+        self.current_creator_name_for_profile = None
+        self.current_creator_profile_path = None
 
     def _log(self, message):
         """Puts a progress message into the queue for the UI."""
@@ -58,6 +61,13 @@ class DownloadManager:
         if self.is_running:
             self._log("❌ Cannot start a new session: A session is already in progress.")
             return
+        
+        creator_profile_data = self._setup_creator_profile(config)
+        creator_profile_data['settings'] = config
+        creator_profile_data.setdefault('processed_post_ids', [])
+        self._save_creator_profile(creator_profile_data)
+        self._log(f"✅ Loaded/created profile for '{self.current_creator_name_for_profile}'. Settings saved.")
+
         self.is_running = True
         self.cancellation_event.clear()
         self.pause_event.clear()
@@ -72,11 +82,11 @@ class DownloadManager:
         is_manga_sequential = config.get('manga_mode_active') and config.get('manga_filename_style') in [STYLE_DATE_BASED, STYLE_POST_TITLE_GLOBAL_NUMBERING]
 
         should_use_multithreading_for_posts = use_multithreading and not is_single_post and not is_manga_sequential
-
+        
         if should_use_multithreading_for_posts:
             fetcher_thread = threading.Thread(
                 target=self._fetch_and_queue_posts_for_pool,
-                args=(config, restore_data),
+                args=(config, restore_data, creator_profile_data), # Add argument here
                 daemon=True
             )
             fetcher_thread.start()
@@ -112,6 +122,11 @@ class DownloadManager:
         try:
             num_workers = min(config.get('num_threads', 4), MAX_THREADS)
             self.thread_pool = ThreadPoolExecutor(max_workers=num_workers, thread_name_prefix='PostWorker_')
+
+            session_processed_ids = set(restore_data['processed_post_ids']) if restore_data else set()
+            profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
+            processed_ids = session_processed_ids.union(profile_processed_ids)
+
             if restore_data:
                 all_posts = restore_data['all_posts_data']
                 processed_ids = set(restore_data['processed_post_ids'])
@@ -196,11 +211,51 @@ class DownloadManager:
                         self.progress_queue.put({'type': 'permanent_failure', 'payload': (permanent,)})
                     if history:
                         self.progress_queue.put({'type': 'post_processed_history', 'payload': (history,)})
+                        post_id = history.get('post_id')
+                        if post_id and self.current_creator_profile_path:
+                            profile_data = self._setup_creator_profile({'creator_name_for_profile': self.current_creator_name_for_profile, 'session_file_path': self.session_file_path})
+                            if post_id not in profile_data.get('processed_post_ids', []):
+                                profile_data.setdefault('processed_post_ids', []).append(post_id)
+                                self._save_creator_profile(profile_data)
 
             except Exception as e:
                 self._log(f"❌ Worker task resulted in an exception: {e}")
                 self.total_skips += 1 # Count errored posts as skipped
             self.progress_queue.put({'type': 'overall_progress', 'payload': (self.total_posts, self.processed_posts)})
+
+    def _setup_creator_profile(self, config):
+        """Prepares the path and loads data for the current creator's profile."""
+        self.current_creator_name_for_profile = config.get('creator_name_for_profile')
+        if not self.current_creator_name_for_profile:
+            self._log("⚠️ Cannot create creator profile: Name not provided in config.")
+            return {}
+
+        appdata_dir = os.path.dirname(config.get('session_file_path', '.'))
+        self.creator_profiles_dir = os.path.join(appdata_dir, "creator_profiles")
+        os.makedirs(self.creator_profiles_dir, exist_ok=True)
+
+        safe_filename = clean_folder_name(self.current_creator_name_for_profile) + ".json"
+        self.current_creator_profile_path = os.path.join(self.creator_profiles_dir, safe_filename)
+
+        if os.path.exists(self.current_creator_profile_path):
+            try:
+                with open(self.current_creator_profile_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                self._log(f"❌ Error loading creator profile '{safe_filename}': {e}. Starting fresh.")
+        return {}
+
+    def _save_creator_profile(self, data):
+        """Saves the provided data to the current creator's profile file."""
+        if not self.current_creator_profile_path:
+            return
+        try:
+            temp_path = self.current_creator_profile_path + ".tmp"
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            os.replace(temp_path, self.current_creator_profile_path)
+        except OSError as e:
+            self._log(f"❌ Error saving creator profile to '{self.current_creator_profile_path}': {e}")
 
     def cancel_session(self):
         """Cancels the current running session."""

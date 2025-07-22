@@ -6,7 +6,7 @@ import json
 from PyQt5.QtCore import Qt, QStandardPaths
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
-    QGroupBox, QComboBox, QMessageBox, QGridLayout
+    QGroupBox, QComboBox, QMessageBox, QGridLayout, QCheckBox
 )
 
 # --- Local Application Imports ---
@@ -15,7 +15,7 @@ from ...utils.resolution import get_dark_theme
 from ..main_window import get_app_icon_object
 from ...config.constants import (
     THEME_KEY, LANGUAGE_KEY, DOWNLOAD_LOCATION_KEY,
-    RESOLUTION_KEY, UI_SCALE_KEY
+    RESOLUTION_KEY, UI_SCALE_KEY, SAVE_CREATOR_JSON_KEY 
 )
 
 
@@ -35,7 +35,7 @@ class FutureSettingsDialog(QDialog):
 
         screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 800
         scale_factor = screen_height / 800.0
-        base_min_w, base_min_h = 420, 320 # Adjusted height for new layout
+        base_min_w, base_min_h = 420, 360 # Adjusted height for new layout
         scaled_min_w = int(base_min_w * scale_factor)
         scaled_min_h = int(base_min_h * scale_factor)
         self.setMinimumSize(scaled_min_w, scaled_min_h)
@@ -93,6 +93,11 @@ class FutureSettingsDialog(QDialog):
         download_window_layout.addWidget(self.default_path_label, 1, 0)
         download_window_layout.addWidget(self.save_path_button, 1, 1)
 
+        # Save Creator.json Checkbox
+        self.save_creator_json_checkbox = QCheckBox()
+        self.save_creator_json_checkbox.stateChanged.connect(self._creator_json_setting_changed) 
+        download_window_layout.addWidget(self.save_creator_json_checkbox, 2, 0, 1, 2)
+
         main_layout.addWidget(self.download_window_group_box)
 
         main_layout.addStretch(1)
@@ -101,6 +106,20 @@ class FutureSettingsDialog(QDialog):
         self.ok_button = QPushButton()
         self.ok_button.clicked.connect(self.accept)
         main_layout.addWidget(self.ok_button, 0, Qt.AlignRight | Qt.AlignBottom)
+
+    def _load_checkbox_states(self):
+        """Loads the initial state for all checkboxes from settings."""
+        self.save_creator_json_checkbox.blockSignals(True)
+        # Default to True so the feature is on by default for users
+        should_save = self.parent_app.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
+        self.save_creator_json_checkbox.setChecked(should_save)
+        self.save_creator_json_checkbox.blockSignals(False)
+
+    def _creator_json_setting_changed(self, state):
+        """Saves the state of the 'Save Creator.json' checkbox."""
+        is_checked = state == Qt.Checked
+        self.parent_app.settings.setValue(SAVE_CREATOR_JSON_KEY, is_checked)
+        self.parent_app.settings.sync()
 
     def _tr(self, key, default_text=""):
         if callable(get_translation) and self.parent_app:
@@ -122,6 +141,7 @@ class FutureSettingsDialog(QDialog):
         # Download & Window Group Labels
         self.window_size_label.setText(self._tr("window_size_label", "Window Size:"))
         self.default_path_label.setText(self._tr("default_path_label", "Default Path:"))
+        self.save_creator_json_checkbox.setText(self._tr("save_creator_json_label", "Save Creator.json file"))
         
         # Buttons and Controls
         self._update_theme_toggle_button_text()
@@ -132,6 +152,7 @@ class FutureSettingsDialog(QDialog):
         # Populate dropdowns
         self._populate_display_combo_boxes()
         self._populate_language_combo_box()
+        self._load_checkbox_states()
 
     def _apply_theme(self):
         if self.parent_app and self.parent_app.current_theme == "dark":

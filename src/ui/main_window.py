@@ -97,6 +97,8 @@ class DownloaderApp (QWidget ):
     def __init__(self):
         super().__init__()
         self.settings = QSettings(CONFIG_ORGANIZATION_NAME, CONFIG_APP_NAME_MAIN)
+        self.active_update_profile = None
+        self.new_posts_for_update = []
         self.is_finishing = False 
 
         saved_res = self.settings.value(RESOLUTION_KEY, "Auto")
@@ -113,9 +115,13 @@ class DownloaderApp (QWidget ):
         else:
             self.app_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 
-        self.config_file = os.path.join(self.app_base_dir, "appdata", "Known.txt")
-        self.session_file_path = os.path.join(self.app_base_dir, "appdata", "session.json")
-        self.persistent_history_file = os.path.join(self.app_base_dir, "appdata", "download_history.json")
+        executable_dir = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else self.app_base_dir
+        user_data_path = os.path.join(executable_dir, "appdata")
+        os.makedirs(user_data_path, exist_ok=True) 
+
+        self.config_file = os.path.join(user_data_path, "Known.txt")
+        self.session_file_path = os.path.join(user_data_path, "session.json")
+        self.persistent_history_file = os.path.join(user_data_path, "download_history.json")
 
         self.download_thread = None
         self.thread_pool = None
@@ -222,6 +228,7 @@ class DownloaderApp (QWidget ):
         self.downloaded_hash_counts = defaultdict(int)
         self.downloaded_hash_counts_lock = threading.Lock()
         self.session_temp_files = []
+        self.save_creator_json_enabled_this_session = True 
         
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
@@ -253,7 +260,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.1.0")
+        self.setWindowTitle("Kemono Downloader v6.2.0")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -293,6 +300,45 @@ class DownloaderApp (QWidget ):
 
         if msg_box.clickedButton() == restart_button:
             self._request_restart_application()
+
+    def _setup_creator_profile(self, creator_name, session_file_path):
+        """Prepares the path and loads data for the current creator's profile."""
+        if not creator_name:
+            self.log_signal.emit("⚠️ Cannot create creator profile: Name not provided.")
+            return {}
+
+        appdata_dir = os.path.dirname(session_file_path)
+        creator_profiles_dir = os.path.join(appdata_dir, "creator_profiles")
+        os.makedirs(creator_profiles_dir, exist_ok=True)
+
+        safe_filename = clean_folder_name(creator_name) + ".json"
+        profile_path = os.path.join(creator_profiles_dir, safe_filename)
+
+        if os.path.exists(profile_path):
+            try:
+                with open(profile_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                self.log_signal.emit(f"❌ Error loading creator profile '{safe_filename}': {e}. Starting fresh.")
+        return {}
+
+    def _save_creator_profile(self, creator_name, data, session_file_path):
+        """Saves the provided data to the current creator's profile file."""
+        if not creator_name:
+            return
+        
+        appdata_dir = os.path.dirname(session_file_path)
+        creator_profiles_dir = os.path.join(appdata_dir, "creator_profiles")
+        safe_filename = clean_folder_name(creator_name) + ".json"
+        profile_path = os.path.join(creator_profiles_dir, safe_filename)
+
+        try:
+            temp_path = profile_path + ".tmp"
+            with open(temp_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, indent=2)
+            os.replace(temp_path, profile_path)
+        except OSError as e:
+            self.log_signal.emit(f"❌ Error saving creator profile to '{profile_path}': {e}")
 
     def _create_initial_session_file(self, api_url_for_session, override_output_dir_for_session, remaining_queue=None):
         """Creates the initial session file at the start of a new download."""
@@ -478,7 +524,7 @@ class DownloaderApp (QWidget ):
     def _update_button_states_and_connections(self):
         """
         Updates the text and click connections of the main action buttons
-        based on the current application state (downloading, paused, restore pending, idle).
+        based on the current application state.
         """
         try: self.download_btn.clicked.disconnect()
         except TypeError: pass
@@ -489,7 +535,38 @@ class DownloaderApp (QWidget ):
 
         is_download_active = self._is_download_active()
 
-        if self.is_restore_pending:
+        if self.active_update_profile and self.new_posts_for_update and not is_download_active:
+            # State: Update confirmation (new posts found, waiting for user to start)
+            num_new = len(self.new_posts_for_update)
+            self.download_btn.setText(self._tr("start_download_new_button_text", f"⬇️ Start Download ({num_new} new)"))
+            self.download_btn.setEnabled(True)
+            self.download_btn.clicked.connect(self.start_download)
+            self.download_btn.setToolTip(self._tr("start_download_new_tooltip", "Click to download the new posts found."))
+
+            self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setEnabled(False)
+
+            self.cancel_btn.setText(self._tr("clear_selection_button_text", "🗑️ Clear Selection"))
+            self.cancel_btn.setEnabled(True)
+            self.cancel_btn.clicked.connect(self._clear_update_selection)
+            self.cancel_btn.setToolTip(self._tr("clear_selection_tooltip", "Click to cancel the update and clear the selection."))
+
+        elif self.active_update_profile and not is_download_active:
+            # State: Update check (profile loaded, waiting for user to check)
+            self.download_btn.setText(self._tr("check_for_updates_button_text", "🔄 Check For Updates"))
+            self.download_btn.setEnabled(True)
+            self.download_btn.clicked.connect(self.start_download)
+            self.download_btn.setToolTip(self._tr("check_for_updates_tooltip", "Click to check for new posts from this creator."))
+
+            self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
+            self.pause_btn.setEnabled(False)
+
+            self.cancel_btn.setText(self._tr("clear_selection_button_text", "🗑️ Clear Selection"))
+            self.cancel_btn.setEnabled(True)
+            self.cancel_btn.clicked.connect(self._clear_update_selection)
+            self.cancel_btn.setToolTip(self._tr("clear_selection_tooltip", "Click to clear the loaded creator profile and return to normal mode."))
+
+        elif self.is_restore_pending:
             self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
@@ -507,7 +584,7 @@ class DownloaderApp (QWidget ):
 
         elif is_download_active:
             self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
-            self.download_btn.setEnabled(False) # Cannot start new download while one is active
+            self.download_btn.setEnabled(False)
 
             self.pause_btn.setText(self._tr("resume_download_button_text", "▶️ Resume Download") if self.is_paused else self._tr("pause_download_button_text", "⏸️ Pause Download"))
             self.pause_btn.setEnabled(True)
@@ -524,13 +601,19 @@ class DownloaderApp (QWidget ):
             self.download_btn.clicked.connect(self.start_download)
 
             self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
-            self.pause_btn.setEnabled(False) # No active download to pause
+            self.pause_btn.setEnabled(False)
             self.pause_btn.setToolTip(self._tr("pause_download_button_tooltip", "Click to pause the ongoing download process."))
 
             self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
-            self.cancel_btn.setEnabled(False) # No active download to cancel
+            self.cancel_btn.setEnabled(False)
             self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
 
+    def _clear_update_selection(self):
+        """Clears the loaded creator profile and fully resets the UI to its default state."""
+        self.log_signal.emit("ℹ️ Update selection cleared. Resetting UI to defaults.")
+        self.active_update_profile = None
+        self.new_posts_for_update = []
+        self._reset_ui_to_defaults()
 
     def _retranslate_main_ui (self ):
         """Retranslates static text elements in the main UI."""
@@ -1618,42 +1701,75 @@ class DownloaderApp (QWidget ):
 
 
     def _display_and_schedule_next (self ,link_data ):
-        post_title ,link_text ,link_url ,platform ,decryption_key =link_data 
+        post_title ,link_text ,link_url ,platform ,decryption_key =link_data
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
 
-        if is_only_links_mode:
+        # --- FONT STYLE DEFINITION ---
+        # Use a clean, widely available sans-serif font family for a modern look.
+        font_style = "font-family: 'Segoe UI', Helvetica, Arial, sans-serif;"
+
+        if is_only_links_mode :
             if post_title != self._current_link_post_title:
                 if self._current_link_post_title is not None:
                     separator_html = f'{HTML_PREFIX}<hr style="border: 1px solid #444;">'
                     self.log_signal.emit(separator_html)
-                title_html = f'{HTML_PREFIX}<h3 style="color: #87CEEB; margin-bottom: 5px; margin-top: 8px;">{html.escape(post_title)}</h3>'
-                self.log_signal.emit(title_html)
+
+                # Apply font style to the title
+                title_html = f'<p style="{font_style} font-size: 11pt; color: #87CEEB; margin-top: 2px; margin-bottom: 2px;"><b>{html.escape(post_title)}</b></p>'
+                self.log_signal.emit(HTML_PREFIX + title_html)
                 self._current_link_post_title = post_title
-            display_text = html.escape(link_text.strip() if link_text.strip() else link_url)
-            link_html_parts = [
-                f'<div style="margin-left: 20px; margin-bottom: 4px;">'
-                f'• <a href="{link_url}" style="color: #A9D0F5; text-decoration: none;">{display_text}</a>'
-                f' <span style="color: #999;">({html.escape(platform)})</span>'
-            ]
+
+            # Use the "smarter" logic to decide what text to show for the link
+            cleaned_link_text = link_text.strip()
+            display_text = ""
+            if cleaned_link_text and cleaned_link_text.lower() != platform.lower() and cleaned_link_text != link_url:
+                display_text = cleaned_link_text
+            else:
+                try:
+                    path = urlparse(link_url).path
+                    filename = os.path.basename(path)
+                    if filename:
+                        display_text = filename
+                except Exception:
+                    pass
+            if not display_text:
+                display_text = link_url
+
+            # Truncate long display text
+            if len(display_text) > 50:
+                display_text = display_text[:50].strip() + "..."
+
+            # Format the output as requested
+            platform_display = platform.capitalize()
+            
+            # Escape parts that will be displayed as text
+            escaped_url = html.escape(link_url)
+            escaped_display_text = html.escape(f"({display_text})")
+
+            # Apply font style to the link information and wrap in a paragraph tag
+            link_html_line = (
+                f'<p style="{font_style} font-size: 9.5pt; margin-left: 10px; margin-top: 1px; margin-bottom: 1px;">'
+                f"  <span style='color: #E0E0E0;'>{platform_display} - {escaped_url} - {escaped_display_text}</span>"
+            )
 
             if decryption_key:
-                link_html_parts.append(
-                    f'<br><span style="margin-left: 15px; color: #f0ad4e; font-size: 9pt;">'
-                    f'Key: {html.escape(decryption_key)}</span>'
-                )
+                escaped_key = html.escape(f"(Decryption Key: {decryption_key})")
+                link_html_line += f" <span style='color: #f0ad4e;'>{escaped_key}</span>"
             
-            link_html_parts.append('</div>')
-            
-            final_link_html = f'{HTML_PREFIX}{"".join(link_html_parts)}'
-            self.log_signal.emit(final_link_html)
+            link_html_line += '</p>'
+
+            # Emit the entire line as a single HTML signal
+            self.log_signal.emit(HTML_PREFIX + link_html_line)
+
         elif self .show_external_links :
-            separator ="-"*45 
+            # This part for the secondary log remains unchanged
+            separator ="-"*45
             formatted_link_info = f"{link_text} - {link_url} - {platform}"
             if decryption_key:
                 formatted_link_info += f" (Decryption Key: {decryption_key})"
             self._append_to_external_log(formatted_link_info, separator)
 
-        self ._is_processing_external_link_queue =False 
+        self ._is_processing_external_link_queue =False
         self ._try_process_next_external_link ()
 
 
@@ -1912,70 +2028,97 @@ class DownloaderApp (QWidget ):
 
 
     def _filter_links_log (self ):
-        if not (self .radio_only_links and self .radio_only_links .isChecked ()):return 
+        if not (self .radio_only_links and self .radio_only_links .isChecked ()):return
 
         search_term =self .link_search_input .text ().lower ().strip ()if self .link_search_input else ""
 
+        # This block handles the "Download Progress" view for Mega/Drive links and should be kept
         if self .mega_download_log_preserved_once and self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
-
-
-            self .log_signal .emit ("INTERNAL: _filter_links_log - Preserving Mega log (due to mega_download_log_preserved_once).")
+            self .log_signal .emit ("INTERNAL: _filter_links_log - Preserving Mega log.")
+            return
         elif self .only_links_log_display_mode ==LOG_DISPLAY_DOWNLOAD_PROGRESS :
-
-
-
-            self .log_signal .emit ("INTERNAL: _filter_links_log - In Progress View. Clearing for placeholder.")
             if self .main_log_output :self .main_log_output .clear ()
-            self .log_signal .emit ("INTERNAL: _filter_links_log - Cleared for progress placeholder.")
             self .log_signal .emit ("ℹ️ Switched to Mega download progress view. Extracted links are hidden.\n"
             "   Perform a Mega download to see its progress here, or switch back to 🔗 view.")
-            self .log_signal .emit ("INTERNAL: _filter_links_log - Placeholder message emitted.")
+            return
 
-        else :
+        # Simplified logic: Clear the log and re-trigger the display process
+        # The main display logic is now fully handled by _display_and_schedule_next
+        if self .main_log_output :self .main_log_output .clear ()
+        self._current_link_post_title = None # Reset the title tracking for the new display pass
 
-            self .log_signal .emit ("INTERNAL: _filter_links_log - In links view branch. About to clear.")
-            if self .main_log_output :self .main_log_output .clear ()
-            self .log_signal .emit ("INTERNAL: _filter_links_log - Cleared for links view.")
+        # Create a new temporary queue containing only the links that match the search term
+        filtered_link_queue = deque()
+        for post_title ,link_text ,link_url ,platform ,decryption_key in self .extracted_links_cache :
+            matches_search =(not search_term or
+            search_term in link_text .lower ()or
+            search_term in link_url .lower ()or
+            search_term in platform .lower ()or
+            (decryption_key and search_term in decryption_key .lower ()))
+            if matches_search :
+                filtered_link_queue.append((post_title, link_text, link_url, platform, decryption_key))
 
-            current_title_for_display =None 
-            any_links_displayed_this_call =False 
-            separator_html ="<br>"+"-"*45 +"<br>"
-
-            for post_title ,link_text ,link_url ,platform ,decryption_key in self .extracted_links_cache :
-                matches_search =(not search_term or 
-                search_term in link_text .lower ()or 
-                search_term in link_url .lower ()or 
-                search_term in platform .lower ()or 
-                (decryption_key and search_term in decryption_key .lower ()))
-                if not matches_search :
-                    continue 
-
-                any_links_displayed_this_call =True 
-                if post_title !=current_title_for_display :
-                    if current_title_for_display is not None :
-                        if self .main_log_output :self .main_log_output .insertHtml (separator_html )
-
-                    title_html =f'<b style="color: #87CEEB;">{html .escape (post_title )}</b><br>'
-                    if self .main_log_output :self .main_log_output .insertHtml (title_html )
-                    current_title_for_display =post_title 
-
-                max_link_text_len =50 
-                display_text =(link_text [:max_link_text_len ].strip ()+"..."if len (link_text )>max_link_text_len else link_text .strip ())
-
-                plain_link_info_line =f"{display_text } - {link_url } - {platform }"
-                if decryption_key :
-                    plain_link_info_line +=f" (Decryption Key: {decryption_key })"
-                if self .main_log_output :
-                    self .main_log_output .append (plain_link_info_line )
-
-            if any_links_displayed_this_call :
-                if self .main_log_output :self .main_log_output .append ("")
-            elif not search_term and self .main_log_output :
-                 self .log_signal .emit ("   (No links extracted yet or all filtered out in links view)")
-
+        if not filtered_link_queue:
+             self .log_signal .emit ("   (No links extracted yet or all filtered out in links view)")
+        else:
+            self.external_link_queue.clear()
+            self.external_link_queue.extend(filtered_link_queue)
+            self._try_process_next_external_link()
 
         if self .main_log_output :self .main_log_output .verticalScrollBar ().setValue (self .main_log_output .verticalScrollBar ().maximum ())
 
+    def _display_and_schedule_next (self ,link_data ):
+        post_title ,link_text ,link_url ,platform ,decryption_key =link_data
+        is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
+
+        if is_only_links_mode :
+            if post_title != self._current_link_post_title:
+                if self._current_link_post_title is not None:
+                    separator_html = f'{HTML_PREFIX}<hr style="border: 1px solid #444;">'
+                    self.log_signal.emit(separator_html)
+
+                title_html = f'<p style="font-size: 11pt; color: #87CEEB; margin-top: 2px; margin-bottom: 2px;"><b>{html.escape(post_title)}</b></p>'
+                self.log_signal.emit(HTML_PREFIX + title_html)
+                self._current_link_post_title = post_title
+
+            # Use the "smarter" logic to decide what text to show for the link
+            cleaned_link_text = link_text.strip()
+            display_text = ""
+            if cleaned_link_text and cleaned_link_text.lower() != platform.lower() and cleaned_link_text != link_url:
+                display_text = cleaned_link_text
+            else:
+                try:
+                    path = urlparse(link_url).path
+                    filename = os.path.basename(path)
+                    if filename:
+                        display_text = filename
+                except Exception:
+                    pass
+            if not display_text:
+                display_text = link_url
+
+            # Truncate long display text
+            if len(display_text) > 50:
+                display_text = display_text[:50].strip() + "..."
+
+            # --- NEW: Format the output as requested ---
+            platform_display = platform.capitalize()
+            plain_link_info_line = f"  {platform_display} - {link_url} - ({display_text})"
+            if decryption_key:
+                plain_link_info_line += f" (Decryption Key: {decryption_key})"
+
+            self.main_log_output.append(plain_link_info_line)
+
+        elif self .show_external_links :
+            # This part for the secondary log remains unchanged
+            separator ="-"*45
+            formatted_link_info = f"{link_text} - {link_url} - {platform}"
+            if decryption_key:
+                formatted_link_info += f" (Decryption Key: {decryption_key})"
+            self._append_to_external_log(formatted_link_info, separator)
+
+        self ._is_processing_external_link_queue =False
+        self ._try_process_next_external_link ()
 
     def _export_links_to_file (self ):
         if not (self .radio_only_links and self .radio_only_links .isChecked ()):
@@ -2295,7 +2438,10 @@ class DownloaderApp (QWidget ):
         _ ,_ ,post_id =extract_post_info (url_text .strip ())
 
         is_single_post_url =bool (post_id )
-        subfolders_enabled =self .use_subfolders_checkbox .isChecked ()if self .use_subfolders_checkbox else False 
+        
+        subfolders_by_known_txt_enabled = getattr(self, 'use_subfolders_checkbox', None) and self.use_subfolders_checkbox.isChecked()
+        subfolder_per_post_enabled = getattr(self, 'use_subfolder_per_post_checkbox', None) and self.use_subfolder_per_post_checkbox.isChecked()
+        any_subfolder_option_enabled = subfolders_by_known_txt_enabled or subfolder_per_post_enabled
 
         not_only_links_or_archives_mode =not (
         (self .radio_only_links and self .radio_only_links .isChecked ())or 
@@ -2303,7 +2449,7 @@ class DownloaderApp (QWidget ):
         (hasattr (self ,'radio_only_audio')and self .radio_only_audio .isChecked ())
         )
 
-        should_show_custom_folder =is_single_post_url and subfolders_enabled and not_only_links_or_archives_mode 
+        should_show_custom_folder =is_single_post_url and any_subfolder_option_enabled and not_only_links_or_archives_mode 
 
         if self .custom_folder_widget :
             self .custom_folder_widget .setVisible (should_show_custom_folder )
@@ -2383,7 +2529,7 @@ class DownloaderApp (QWidget ):
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_post_title_text","Name: Post Title"))
 
             elif self .manga_filename_style ==STYLE_ORIGINAL_NAME :
-                self .manga_rename_toggle_button .setText (self ._tr ("manga_style_original_file_text","Name: Original File"))
+                self .manga_rename_toggle_button .setText (self ._tr ("manga_style_date_original_text","Date + Original"))
 
             elif self .manga_filename_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_title_global_num_text","Name: Title+G.Num"))
@@ -2399,7 +2545,6 @@ class DownloaderApp (QWidget ):
 
             else :
                 self .manga_rename_toggle_button .setText (self ._tr ("manga_style_unknown_text","Name: Unknown Style"))
-
 
             self .manga_rename_toggle_button .setToolTip ("Click to cycle Manga Filename Style (when Manga Mode is active for a creator feed).")
 
@@ -2516,8 +2661,7 @@ class DownloaderApp (QWidget ):
 
         show_date_prefix_input =(
         manga_mode_effectively_on and 
-        (current_filename_style ==STYLE_DATE_BASED or 
-        current_filename_style ==STYLE_ORIGINAL_NAME )and 
+        (current_filename_style ==STYLE_DATE_BASED) and 
         not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode )
         )
         if hasattr (self ,'manga_date_prefix_input'):
@@ -2607,6 +2751,12 @@ class DownloaderApp (QWidget ):
             self .file_progress_label .setText ("")
 
     def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False, is_continuation=False):
+        if self.active_update_profile:
+            if not self.new_posts_for_update:
+                return self._check_for_updates()
+            else:
+                return self._start_confirmed_update_download()
+
         self.is_finishing = False
         self.downloaded_hash_counts.clear()
         global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
@@ -2724,6 +2874,52 @@ class DownloaderApp (QWidget ):
             return True
 
         self.cancellation_message_logged_this_session = False
+        
+        service, user_id, post_id_from_url = extract_post_info(api_url)
+        if not service or not user_id:
+            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
+            return False
+
+        # Read the setting at the start of the download
+        self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
+
+        profile_processed_ids = set() # Default to an empty set
+                        
+        if self.save_creator_json_enabled_this_session:
+            # --- CREATOR PROFILE LOGIC ---
+            creator_name_for_profile = None
+            if self.is_processing_favorites_queue and self.current_processing_favorite_item_info:
+                creator_name_for_profile = self.current_processing_favorite_item_info.get('name_for_folder')
+            else:
+                creator_key = (service.lower(), str(user_id))
+                creator_name_for_profile = self.creator_name_cache.get(creator_key)
+
+            if not creator_name_for_profile:
+                creator_name_for_profile = f"{service}_{user_id}"
+                self.log_signal.emit(f"⚠️ Creator name not in cache. Using '{creator_name_for_profile}' for profile file.")
+
+            creator_profile_data = self._setup_creator_profile(creator_name_for_profile, self.session_file_path)
+        
+        # Get all current UI settings and add them to the profile
+            current_settings = self._get_current_ui_settings_as_dict(api_url_override=api_url, output_dir_override=effective_output_dir_for_run)
+            creator_profile_data['settings'] = current_settings
+        
+            creator_profile_data.setdefault('creator_url', [])
+            if api_url not in creator_profile_data['creator_url']:
+                creator_profile_data['creator_url'].append(api_url)
+
+            creator_profile_data.setdefault('processed_post_ids', [])
+            self._save_creator_profile(creator_name_for_profile, creator_profile_data, self.session_file_path)
+            self.log_signal.emit(f"✅ Profile for '{creator_name_for_profile}' loaded/created. Settings saved.")
+        
+            profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
+            # --- END OF PROFILE LOGIC ---
+
+        # The rest of this logic runs regardless, but uses the profile data if it was loaded
+        session_processed_ids = set(processed_post_ids_for_restore)
+        combined_processed_ids = session_processed_ids.union(profile_processed_ids)
+        processed_post_ids_for_this_run = list(combined_processed_ids)
+
         use_subfolders = self.use_subfolders_checkbox.isChecked()
         use_post_subfolders = self.use_subfolder_per_post_checkbox.isChecked()
         compress_images = self.compress_images_checkbox.isChecked()
@@ -2830,15 +3026,6 @@ class DownloaderApp (QWidget ):
             effective_skip_zip = self.skip_zip_checkbox.isChecked()
             if backend_filter_mode == 'audio':
                 effective_skip_zip = self.skip_zip_checkbox.isChecked()
-
-        if not api_url:
-            QMessageBox.critical(self, "Input Error", "URL is required.")
-            return False
-
-        service, user_id, post_id_from_url = extract_post_info(api_url)
-        if not service or not user_id:
-            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
-            return False
 
         creator_folder_ignore_words_for_run = None
         is_full_creator_download = not post_id_from_url
@@ -3187,7 +3374,7 @@ class DownloaderApp (QWidget ):
             'downloaded_hash_counts': self.downloaded_hash_counts,
             'downloaded_hash_counts_lock': self.downloaded_hash_counts_lock,
             'skip_current_file_flag': None,
-            'processed_post_ids': processed_post_ids_for_restore,
+            'processed_post_ids': processed_post_ids_for_this_run,
             'start_offset': start_offset_for_restore, 
         }
 
@@ -3231,6 +3418,7 @@ class DownloaderApp (QWidget ):
             if self.pause_event: self.pause_event.clear()
             self.is_paused = False
         return True
+
 
     def restore_download(self):
         """Initiates the download restoration process."""
@@ -3618,7 +3806,10 @@ class DownloaderApp (QWidget ):
             if permanent:
                 self.permanently_failed_files_for_dialog.extend(permanent)
                 self._update_error_button_count()
-            if history_data: self._add_to_history_candidates(history_data)
+            
+            if history_data: 
+                # This single call now correctly handles both history and profile saving.
+                self._add_to_history_candidates(history_data)
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
@@ -3667,13 +3858,28 @@ class DownloaderApp (QWidget ):
         create_single_pdf_from_content(sorted_content, filepath, font_path, logger=self.log_signal.emit)
         self.log_signal.emit("="*40)
 
-    def _add_to_history_candidates (self ,history_data ):
-        """Adds processed post data to the history candidates list."""
-        if history_data and len (self .download_history_candidates )<8 :
-            history_data ['download_date_timestamp']=time .time ()
-            creator_key =(history_data .get ('service','').lower (),str (history_data .get ('user_id','')))
-            history_data ['creator_name']=self .creator_name_cache .get (creator_key ,history_data .get ('user_id','Unknown'))
-            self .download_history_candidates .append (history_data )
+    def _add_to_history_candidates(self, history_data):
+        """Adds processed post data to the history candidates list and updates the creator profile."""
+        if self.save_creator_json_enabled_this_session:
+            post_id = history_data.get('post_id')
+            service = history_data.get('service')
+            user_id = history_data.get('user_id')
+            if post_id and service and user_id:
+                creator_key = (service.lower(), str(user_id))
+                creator_name = self.creator_name_cache.get(creator_key, f"{service}_{user_id}")
+                
+                # Load the profile data before using it to prevent NameError
+                profile_data = self._setup_creator_profile(creator_name, self.session_file_path)
+                
+                if post_id not in profile_data.get('processed_post_ids', []):
+                    profile_data.setdefault('processed_post_ids', []).append(post_id)
+                    self._save_creator_profile(creator_name, profile_data, self.session_file_path)
+
+        if history_data and len(self.download_history_candidates) < 8:
+            history_data['download_date_timestamp'] = time.time()
+            creator_key = (history_data.get('service','').lower(), str(history_data.get('user_id','')))
+            history_data['creator_name'] = self.creator_name_cache.get(creator_key, history_data.get('user_id','Unknown'))
+            self.download_history_candidates.append(history_data)
 
     def _finalize_download_history (self ):
         """Processes candidates and selects the final 3 history entries.
@@ -3864,8 +4070,8 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'remove_from_filename_input'):self .remove_from_filename_input .clear ()
         self .character_search_input .clear ();self .thread_count_input .setText ("4");self .radio_all .setChecked (True );
         self .skip_zip_checkbox .setChecked (True );self .download_thumbnails_checkbox .setChecked (False );
-        self .compress_images_checkbox .setChecked (False );self .use_subfolders_checkbox .setChecked (True );
-        self .use_subfolder_per_post_checkbox .setChecked (False );self .use_multithreading_checkbox .setChecked (True );
+        self .compress_images_checkbox .setChecked (False );self .use_subfolders_checkbox .setChecked (False );
+        self .use_subfolder_per_post_checkbox .setChecked (True );self .use_multithreading_checkbox .setChecked (True );
         if self .favorite_mode_checkbox :self .favorite_mode_checkbox .setChecked (False )
         if hasattr (self ,'scan_content_images_checkbox'):self .scan_content_images_checkbox .setChecked (False )
         self .external_links_checkbox .setChecked (False )
@@ -4121,6 +4327,7 @@ class DownloaderApp (QWidget ):
         self.set_ui_enabled(True)
         self._update_button_states_and_connections()
         self.cancellation_message_logged_this_session = False
+        self.active_update_profile = None 
 
     def _handle_keep_duplicates_toggled(self, checked):
         """Shows the duplicate handling dialog when the checkbox is checked."""
@@ -4372,55 +4579,40 @@ class DownloaderApp (QWidget ):
             if self .progress_log_label :self .progress_log_label .setText (self ._tr ("progress_log_label_text","📜 Progress Log:"))
 
     def reset_application_state(self):
-        if self._is_download_active():
-            if self.download_thread and self.download_thread.isRunning():
-                self.log_signal.emit("⚠️ Cancelling active download thread for reset...")
-                self.cancellation_event.set()
-                self.download_thread.requestInterruption()
-                self.download_thread.wait(3000)
-                if self.download_thread.isRunning():
-                    self.log_signal.emit("   ⚠️ Download thread did not terminate gracefully.")
-                self.download_thread.deleteLater()
-                self.download_thread = None
-            if self.thread_pool:
-                self.log_signal.emit("   Shutting down thread pool for reset...")
-                self.thread_pool.shutdown(wait=True, cancel_futures=True)
-                self.thread_pool = None
-                self.active_futures = []
-            if self.external_link_download_thread and self.external_link_download_thread.isRunning():
-                self.log_signal.emit("   Cancelling external link download thread for reset...")
-                self.external_link_download_thread.cancel()
-                self.external_link_download_thread.wait(3000)
-                self.external_link_download_thread.deleteLater()
-                self.external_link_download_thread = None
-            if hasattr(self, 'retry_thread_pool') and self.retry_thread_pool:
-                self.log_signal.emit("   Shutting down retry thread pool for reset...")
-                self.retry_thread_pool.shutdown(wait=True)
-                self.retry_thread_pool = None
-                if hasattr(self, 'active_retry_futures'):
-                    self.active_retry_futures.clear()
-                if hasattr(self, 'active_retry_futures_map'):
-                    self.active_retry_futures_map.clear()
-    
-            self.cancellation_event.clear()
-            if self.pause_event:
-                self.pause_event.clear()
-            self.is_paused = False
+        self.log_signal.emit("🔄 Resetting application state to defaults...")
 
-        self.log_signal.emit("🔄 Resetting application state to defaults...")
+        # --- MODIFIED PART: Signal all threads to stop first, but do not wait ---
+        if self._is_download_active():
+            self.log_signal.emit("   Cancelling all active background tasks for reset...")
+            self.cancellation_event.set() # Signal all threads to stop
+
+            # Initiate non-blocking shutdowns
+            if self.download_thread and self.download_thread.isRunning():
+                self.download_thread.requestInterruption()
+            if self.thread_pool:
+                self.thread_pool.shutdown(wait=False, cancel_futures=True)
+                self.thread_pool = None
+            if self.external_link_download_thread and self.external_link_download_thread.isRunning():
+                self.external_link_download_thread.cancel()
+            if hasattr(self, 'retry_thread_pool') and self.retry_thread_pool:
+                self.retry_thread_pool.shutdown(wait=False, cancel_futures=True)
+                self.retry_thread_pool = None
+
+        self.cancellation_event.clear() # Reset the event for the next run
+        # --- END OF MODIFIED PART ---
+
+        if self.pause_event:
+            self.pause_event.clear()
+        self.is_paused = False
+
         self._clear_session_file()
-        self._reset_ui_to_defaults()
-        self._load_saved_download_location()
-        self.main_log_output.clear()
-        self.external_log_output.clear()
-        self.log_signal.emit("🔄 Resetting application state to defaults...")
         self._reset_ui_to_defaults()
         self._load_saved_download_location()
         self.main_log_output.clear()
         self.external_log_output.clear()
         if self.missed_character_log_output:
             self.missed_character_log_output.clear()
-    
+
         self.current_log_view = 'progress'
         if self.log_view_stack:
             self.log_view_stack.setCurrentIndex(0)
@@ -4448,7 +4640,7 @@ class DownloaderApp (QWidget ):
         self.only_links_log_display_mode = LOG_DISPLAY_LINKS
         self.mega_download_log_preserved_once = False
         self.permanently_failed_files_for_dialog.clear()
-        self._update_error_button_count()        
+        self._update_error_button_count()
         self.favorite_download_scope = FAVORITE_SCOPE_SELECTED_LOCATION
         self._update_favorite_scope_button_text()
         self.retryable_failed_files_info.clear()
@@ -4463,13 +4655,14 @@ class DownloaderApp (QWidget ):
         self.is_fetcher_thread_running = False
         self.interrupted_session_data = None
         self.is_restore_pending = False
-    
+
+        self.active_update_profile = None
         self.settings.setValue(MANGA_FILENAME_STYLE_KEY, self.manga_filename_style)
         self.settings.setValue(SKIP_WORDS_SCOPE_KEY, self.skip_words_scope)
         self.settings.sync()
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
-    
+
         self.set_ui_enabled(True)
         self.log_signal.emit("✅ Application fully reset. Ready for new download.")
         self.is_processing_favorites_queue = False
@@ -4477,7 +4670,7 @@ class DownloaderApp (QWidget ):
         self.favorite_download_queue.clear()
         self.interrupted_session_data = None
         self.is_restore_pending = False
-        self.last_link_input_text_for_queue_sync = ""    
+        self.last_link_input_text_for_queue_sync = ""
 
     def _reset_ui_to_defaults(self):
         """Resets all UI elements and relevant state to their default values."""
@@ -4498,8 +4691,8 @@ class DownloaderApp (QWidget ):
         self.skip_zip_checkbox.setChecked(True)
         self.download_thumbnails_checkbox.setChecked(False)
         self.compress_images_checkbox.setChecked(False)
-        self.use_subfolders_checkbox.setChecked(True)
-        self.use_subfolder_per_post_checkbox.setChecked(False)
+        self.use_subfolders_checkbox.setChecked(False)
+        self.use_subfolder_per_post_checkbox.setChecked(True)
         self.use_multithreading_checkbox.setChecked(True)
         if self.favorite_mode_checkbox:
             self.favorite_mode_checkbox.setChecked(False)
@@ -4773,6 +4966,144 @@ class DownloaderApp (QWidget ):
         self ._update_favorite_scope_button_text ()
         self .log_signal .emit (f"ℹ️ Favorite download scope changed to: '{self .favorite_download_scope }'")
 
+    def _check_for_updates(self):
+        """Phase 1 of Update: Fetches all posts, compares, and prompts the user for confirmation."""
+        self.log_signal.emit("🔄 Checking for updates...")
+        
+        update_url = self.active_update_profile['creator_url'][0]
+        processed_ids_from_profile = set(self.active_update_profile['processed_post_ids'])
+        self.log_signal.emit(f"   Checking URL: {update_url}")
+        
+        self.set_ui_enabled(False)
+        self.progress_label.setText(self._tr("progress_fetching_all_posts", "Progress: Fetching all post pages..."))
+        QCoreApplication.processEvents()
+
+        try:
+            post_generator = download_from_api(
+                api_url_input=update_url,
+                logger=lambda msg: None, # Suppress noisy logs during check
+                cancellation_event=self.cancellation_event,
+                pause_event=self.pause_event,
+                use_cookie=self.use_cookie_checkbox.isChecked(),
+                cookie_text=self.cookie_text_input.text(),
+                selected_cookie_file=self.selected_cookie_filepath,
+                app_base_dir=self.app_base_dir,
+                processed_post_ids=processed_ids_from_profile
+            )
+            all_posts_from_api = [post for batch in post_generator for post in batch]
+        except Exception as e:
+            self.log_signal.emit(f"❌ Failed to fetch posts during update check: {e}")
+            self.download_finished(0, 0, False, [])
+            return
+
+        self.log_signal.emit(f"   Fetched a total of {len(all_posts_from_api)} posts from the server.")
+        
+        self.new_posts_for_update = [post for post in all_posts_from_api if post.get('id') not in processed_ids_from_profile]
+        
+        if not self.new_posts_for_update:
+            self.log_signal.emit("✅ Creator is up to date! No new posts found.")
+            QMessageBox.information(self, "Up to Date", "No new posts were found for this creator.")
+            self._clear_update_selection()
+            self.set_ui_enabled(True)
+            self.progress_label.setText(self._tr("progress_idle_text", "Progress: Idle"))
+            return
+
+        self.log_signal.emit(f"   Found {len(self.new_posts_for_update)} new post(s). Waiting for user confirmation to download.")
+        self.progress_label.setText(f"Found {len(self.new_posts_for_update)} new post(s). Ready to download.")
+        self._update_button_states_and_connections() 
+
+    def _start_confirmed_update_download(self):
+        """Phase 2 of Update: Starts the download of posts found during the check."""
+        self.log_signal.emit(f"✅ User confirmed. Starting download for {len(self.new_posts_for_update)} new post(s).")
+        self.main_log_output.clear()
+        
+        from src.config.constants import FOLDER_NAME_STOP_WORDS
+        update_url = self.active_update_profile['creator_url'][0]
+        service, user_id, _ = extract_post_info(update_url)
+
+        # --- FIX: Use the BASE download path, not the creator-specific one ---
+        # Get the base path from the UI (e.g., "E:/Kemono"). The worker will create subfolders inside this.
+        base_download_dir_from_ui = self.dir_input.text().strip()
+        self.log_signal.emit(f"   Update session will save to base folder: {base_download_dir_from_ui}")
+        # --- END FIX ---
+
+        raw_character_filters_text = self.character_input.text().strip()
+        parsed_character_filter_objects = self._parse_character_filters(raw_character_filters_text)
+        
+        # --- FIX: Set paths to mimic a normal download, allowing the worker to create subfolders ---
+        # 'download_root' is the base directory.
+        # 'override_output_dir' is None, which allows the worker to use its own folder logic.
+        args_template = {
+            'api_url_input': update_url, 
+            'download_root': base_download_dir_from_ui, # Corrected: Use the BASE path
+            'override_output_dir': None, # Corrected: Set to None to allow subfolder logic
+            'known_names': list(KNOWN_NAMES), 
+            'filter_character_list': parsed_character_filter_objects,
+            'emitter': self.worker_to_gui_queue, 
+            'unwanted_keywords': FOLDER_NAME_STOP_WORDS,
+            'filter_mode': self.get_filter_mode(), 
+            'skip_zip': self.skip_zip_checkbox.isChecked(),
+            'use_subfolders': self.use_subfolders_checkbox.isChecked(),
+            'use_post_subfolders': self.use_subfolder_per_post_checkbox.isChecked(),
+            'target_post_id_from_initial_url': None, 
+            'custom_folder_name': self.custom_folder_input.text().strip(),
+            'compress_images': self.compress_images_checkbox.isChecked(),
+            'download_thumbnails': self.download_thumbnails_checkbox.isChecked(),
+            'service': service, 'user_id': user_id, 'pause_event': self.pause_event,
+            'cancellation_event': self.cancellation_event, 
+            'downloaded_files': self.downloaded_files,
+            'downloaded_file_hashes': self.downloaded_file_hashes,
+            'downloaded_files_lock': self.downloaded_files_lock,
+            'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
+            'dynamic_character_filter_holder': self.dynamic_character_filter_holder,
+            'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
+            'skip_words_scope': self.get_skip_words_scope(), 
+            'show_external_links': self.external_links_checkbox.isChecked(),
+            'extract_links_only': self.radio_only_links.isChecked(), 
+            'skip_current_file_flag': None,
+            'manga_mode_active': self.manga_mode_checkbox.isChecked(), 
+            'manga_filename_style': self.manga_filename_style,
+            'char_filter_scope': self.get_char_filter_scope(),
+            'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()],
+            'allow_multipart_download': self.allow_multipart_download_setting, 
+            'cookie_text': self.cookie_text_input.text(),
+            'use_cookie': self.use_cookie_checkbox.isChecked(),
+            'selected_cookie_file': self.selected_cookie_filepath, 
+            'app_base_dir': self.app_base_dir,
+            'manga_date_prefix': self.manga_date_prefix_input.text().strip(), 
+            'manga_date_file_counter_ref': None,
+            'scan_content_for_images': self.scan_content_images_checkbox.isChecked(),
+            'creator_download_folder_ignore_words': None, 
+            'manga_global_file_counter_ref': None,
+            'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked(),
+            'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked(),
+            'keep_duplicates_mode': self.keep_duplicates_mode, 
+            'keep_duplicates_limit': self.keep_duplicates_limit,
+            'downloaded_hash_counts': self.downloaded_hash_counts, 
+            'downloaded_hash_counts_lock': self.downloaded_hash_counts_lock,
+            'session_file_path': self.session_file_path, 
+            'session_lock': self.session_lock,
+            'text_only_scope': self.more_filter_scope, 
+            'text_export_format': self.text_export_format,
+            'single_pdf_mode': self.single_pdf_setting, 
+            'project_root_dir': self.app_base_dir,
+            'processed_post_ids': list(self.active_update_profile['processed_post_ids'])
+        }
+
+        num_threads = int(self.thread_count_input.text()) if self.use_multithreading_checkbox.isChecked() else 1
+        self.thread_pool = ThreadPoolExecutor(max_workers=num_threads, thread_name_prefix='UpdateWorker_')
+        self.total_posts_to_process = len(self.new_posts_for_update)
+        self.processed_posts_count = 0
+        self.overall_progress_signal.emit(self.total_posts_to_process, 0)
+        
+        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+        
+        for post_data in self.new_posts_for_update:
+            self._submit_post_to_worker_pool(
+                post_data, args_template, 1, self.worker_to_gui_queue, ppw_expected_keys, {}
+            )
+        return True
+
     def _show_empty_popup (self ):
         """Creates and shows the empty popup dialog."""
         if self.is_restore_pending:
@@ -4782,7 +5113,21 @@ class DownloaderApp (QWidget ):
             return
         dialog = EmptyPopupDialog(self.app_base_dir, self)
         if dialog.exec_() == QDialog.Accepted:
-            if hasattr(dialog, 'selected_creators_for_queue') and dialog.selected_creators_for_queue:
+            if dialog.update_profile_data:
+                self.active_update_profile = dialog.update_profile_data
+                self.link_input.setText(dialog.update_creator_name)
+                self.favorite_download_queue.clear()
+                
+                if 'settings' in self.active_update_profile:
+                    self.log_signal.emit(f"ℹ️ Applying saved settings from '{dialog.update_creator_name}' profile...")
+                    self._load_ui_from_settings_dict(self.active_update_profile['settings'])
+                    self.log_signal.emit("   Settings restored.")
+
+                self.log_signal.emit(f"ℹ️ Loaded profile for '{dialog.update_creator_name}'. Click 'Check For Updates' to continue.")
+                self._update_button_states_and_connections()
+          
+            elif hasattr(dialog, 'selected_creators_for_queue') and dialog.selected_creators_for_queue:
+                self.active_update_profile = None
                 self.favorite_download_queue.clear()
 
                 for creator_data in dialog.selected_creators_for_queue:

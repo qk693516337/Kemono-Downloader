@@ -13,7 +13,7 @@ from PyQt5.QtCore import pyqtSignal, QCoreApplication, QSize, QThread, QTimer, Q
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QAbstractItemView,
-    QSplitter, QProgressBar, QWidget
+    QSplitter, QProgressBar, QWidget, QFileDialog  
 )
 
 # --- Local Application Imports ---
@@ -151,6 +151,8 @@ class EmptyPopupDialog (QDialog ):
         app_icon =get_app_icon_object ()
         if app_icon and not app_icon .isNull ():
             self .setWindowIcon (app_icon )
+        self.update_profile_data = None
+        self.update_creator_name = None
         self .selected_creators_for_queue =[]
         self .globally_selected_creators ={}
         self .fetched_posts_data ={}
@@ -205,6 +207,9 @@ class EmptyPopupDialog (QDialog ):
         self .scope_button .clicked .connect (self ._toggle_scope_mode )
         left_bottom_buttons_layout .addWidget (self .scope_button )
         left_pane_layout .addLayout (left_bottom_buttons_layout )
+        self.update_button = QPushButton()
+        self.update_button.clicked.connect(self._handle_update_check) 
+        left_bottom_buttons_layout.addWidget(self.update_button)
 
 
         self .right_pane_widget =QWidget ()
@@ -315,6 +320,31 @@ class EmptyPopupDialog (QDialog ):
             except AttributeError :
                 pass 
 
+    def _handle_update_check(self):
+        """Opens a dialog to select a creator profile and loads it for an update session."""
+        appdata_dir = os.path.join(self.app_base_dir, "appdata")
+        profiles_dir = os.path.join(appdata_dir, "creator_profiles")
+        
+        if not os.path.isdir(profiles_dir):
+            QMessageBox.warning(self, "Directory Not Found", f"The creator profiles directory does not exist yet.\n\nPath: {profiles_dir}")
+            return
+
+        filepath, _ = QFileDialog.getOpenFileName(self, "Select Creator Profile for Update", profiles_dir, "JSON Files (*.json)")
+
+        if filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                if 'creator_url' not in data or 'processed_post_ids' not in data:
+                    raise ValueError("Invalid profile format.")
+
+                self.update_profile_data = data
+                self.update_creator_name = os.path.basename(filepath).replace('.json', '')
+                self.accept() # Close the dialog and signal success
+            except Exception as e:
+                QMessageBox.critical(self, "Error Loading Profile", f"Could not load or parse the selected profile file:\n\n{e}")
+
     def _handle_fetch_posts_click (self ):
         selected_creators =list (self .globally_selected_creators .values ())
         print(f"[DEBUG] Selected creators for fetch: {selected_creators}")
@@ -370,6 +400,7 @@ class EmptyPopupDialog (QDialog ):
         self .add_selected_button .setText (self ._tr ("creator_popup_add_selected_button","Add Selected"))
         self .fetch_posts_button .setText (self ._tr ("fetch_posts_button_text","Fetch Posts"))
         self ._update_scope_button_text_and_tooltip ()
+        self.update_button.setText(self._tr("check_for_updates_button", "Check for Updates"))
 
         self .posts_search_input .setPlaceholderText (self ._tr ("creator_popup_posts_search_placeholder","Search fetched posts by title..."))
 

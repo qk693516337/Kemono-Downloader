@@ -59,6 +59,7 @@ LANGUAGE_KEY = "currentLanguageV1"
 DOWNLOAD_LOCATION_KEY = "downloadLocationV1"
 RESOLUTION_KEY = "window_resolution"
 UI_SCALE_KEY = "ui_scale_factor"
+SAVE_CREATOR_JSON_KEY = "saveCreatorJsonProfile"
 
 # --- UI Constants and Identifiers ---
 HTML_PREFIX = "<!HTML!>"

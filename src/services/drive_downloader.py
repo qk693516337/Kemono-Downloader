@@ -15,9 +15,9 @@ except ImportError:
 
 try:
     import gdown
-    GDOWN_AVAILABLE = True
+    GDRIVE_AVAILABLE = True
 except ImportError:
-    GDOWN_AVAILABLE = False
+    GDRIVE_AVAILABLE = False
 
 # --- Helper Functions ---
 
@@ -46,75 +46,76 @@ def _get_filename_from_headers(headers):
 
 # --- Main Service Downloader Functions ---
 
-def download_mega_file(mega_link, download_path=".", logger_func=print):
+def download_mega_file(mega_url, download_path, logger_func=print):
     """
-    Downloads a file from a public Mega.nz link.
-
-    Args:
-        mega_link (str): The public Mega.nz link to the file.
-        download_path (str): The directory to save the downloaded file.
-        logger_func (callable): Function to use for logging.
+    Downloads a file from a Mega.nz URL.
+    Handles both public links and links that include a decryption key.
     """
     if not MEGA_AVAILABLE:
-        logger_func("❌ Error: mega.py library is not installed. Cannot download from Mega.")
-        logger_func("   Please install it: pip install mega.py")
-        raise ImportError("mega.py library not found.")
+        logger_func("❌ Mega download failed: 'mega.py' library is not installed.")
+        return
 
     logger_func(f"   [Mega] Initializing Mega client...")
     try:
-        mega_client = Mega()
-        m = mega_client.login()
-        logger_func(f"   [Mega] Attempting to download from: {mega_link}")
-        
-        if not os.path.exists(download_path):
-            os.makedirs(download_path, exist_ok=True)
-            logger_func(f"   [Mega] Created download directory: {download_path}")
-            
-        # The download_url method handles file info fetching and saving internally.
-        downloaded_file_path = m.download_url(mega_link, dest_path=download_path)
+        mega = Mega()
+        # Anonymous login is sufficient for public links
+        m = mega.login()
 
-        if downloaded_file_path and os.path.exists(downloaded_file_path):
-            logger_func(f"   [Mega] ✅ File downloaded successfully! Saved as: {downloaded_file_path}")
-        else:
-            raise Exception(f"Mega download failed or file not found. Returned: {downloaded_file_path}")
+        # --- MODIFIED PART: Added error handling for invalid links ---
+        try:
+            file_details = m.find(mega_url)
+            if file_details is None:
+                logger_func(f"   [Mega] ❌ Download failed. The link appears to be invalid or has been taken down: {mega_url}")
+                return
+        except (ValueError, json.JSONDecodeError) as e:
+            # This block catches the "Expecting value" error
+            logger_func(f"   [Mega] ❌ Download failed. The link is likely invalid or expired. Error: {e}")
+            return
+        except Exception as e:
+            # Catch other potential errors from the mega.py library
+            logger_func(f"   [Mega] ❌ An unexpected error occurred trying to access the link: {e}")
+            return
+        # --- END OF MODIFIED PART ---
+
+        filename = file_details[1]['a']['n']
+        logger_func(f"   [Mega] File found: '{filename}'. Starting download...")
+
+        # Sanitize filename before saving
+        safe_filename = "".join([c for c in filename if c.isalpha() or c.isdigit() or c in (' ', '.', '_', '-')]).rstrip()
+        final_path = os.path.join(download_path, safe_filename)
+
+        # Check if file already exists
+        if os.path.exists(final_path):
+            logger_func(f"   [Mega] ℹ️ File '{safe_filename}' already exists. Skipping download.")
+            return
+
+        # Start the download
+        m.download_url(mega_url, dest_path=download_path, dest_filename=safe_filename)
+        logger_func(f"   [Mega] ✅ Successfully downloaded '{safe_filename}' to '{download_path}'")
 
     except Exception as e:
-        logger_func(f"   [Mega] ❌ An unexpected error occurred during Mega download: {e}")
-        traceback.print_exc(limit=2)
-        raise  # Re-raise the exception to be handled by the calling worker
+        logger_func(f"   [Mega] ❌ An unexpected error occurred during the Mega download process: {e}")
 
-def download_gdrive_file(gdrive_link, download_path=".", logger_func=print):
-    """
-    Downloads a file from a public Google Drive link using the gdown library.
-
-    Args:
-        gdrive_link (str): The public Google Drive link to the file.
-        download_path (str): The directory to save the downloaded file.
-        logger_func (callable): Function to use for logging.
-    """
-    if not GDOWN_AVAILABLE:
-        logger_func("❌ Error: gdown library is not installed. Cannot download from Google Drive.")
-        logger_func("   Please install it: pip install gdown")
-        raise ImportError("gdown library not found.")
-
-    logger_func(f"   [GDrive] Attempting to download: {gdrive_link}")
+def download_gdrive_file(url, download_path, logger_func=print):
+    """Downloads a file from a Google Drive link."""
+    if not GDRIVE_AVAILABLE:
+        logger_func("❌ Google Drive download failed: 'gdown' library is not installed.")
+        return
     try:
-        if not os.path.exists(download_path):
-            os.makedirs(download_path, exist_ok=True)
-            logger_func(f"   [GDrive] Created download directory: {download_path}")
-
-        # gdown handles finding the file ID and downloading. 'fuzzy=True' helps with various URL formats.
-        output_file_path = gdown.download(gdrive_link, output=download_path, quiet=False, fuzzy=True)
-
-        if output_file_path and os.path.exists(output_file_path):
-            logger_func(f"   [GDrive] ✅ Google Drive file downloaded successfully: {output_file_path}")
+        logger_func(f"   [G-Drive] Starting download for: {url}")
+        # --- MODIFIED PART: Added a message and set quiet=True ---
+        logger_func("   [G-Drive] Download in progress... This may take some time. Please wait.")
+        
+        # By setting quiet=True, the progress bar will no longer be printed to the terminal.
+        output_path = gdown.download(url, output=download_path, quiet=True, fuzzy=True)
+        # --- END OF MODIFIED PART ---
+        
+        if output_path and os.path.exists(output_path):
+            logger_func(f"   [G-Drive] ✅ Successfully downloaded to '{output_path}'")
         else:
-            raise Exception(f"gdown download failed or file not found. Returned: {output_file_path}")
-
+            logger_func(f"   [G-Drive] ❌ Download failed. The file may have been moved, deleted, or is otherwise inaccessible.")
     except Exception as e:
-        logger_func(f"   [GDrive] ❌ An error occurred during Google Drive download: {e}")
-        traceback.print_exc(limit=2)
-        raise
+        logger_func(f"   [G-Drive] ❌ An unexpected error occurred: {e}")
 
 def download_dropbox_file(dropbox_link, download_path=".", logger_func=print):
     """

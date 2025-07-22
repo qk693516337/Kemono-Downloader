@@ -238,13 +238,24 @@ class PostProcessorWorker:
 
             if self.manga_mode_active:
                 if self.manga_filename_style == STYLE_ORIGINAL_NAME:
-                    filename_to_save_in_main_path = cleaned_original_api_filename
-                    if self.manga_date_prefix and self.manga_date_prefix.strip():
-                        cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
-                        if cleaned_prefix:
-                            filename_to_save_in_main_path = f"{cleaned_prefix} {filename_to_save_in_main_path}"
-                        else:
-                            self.logger(f"⚠️ Manga Original Name Mode: Provided prefix '{self.manga_date_prefix}' was empty after cleaning. Using original name only.")
+                    # Get the post's publication or added date
+                    published_date_str = self.post.get('published')
+                    added_date_str = self.post.get('added')
+                    formatted_date_str = "nodate"  # Fallback if no date is found
+
+                    date_to_use_str = published_date_str or added_date_str
+
+                    if date_to_use_str:
+                        try:
+                            # Extract just the YYYY-MM-DD part from the timestamp
+                            formatted_date_str = date_to_use_str.split('T')[0]
+                        except Exception:
+                            self.logger(f"     ⚠️ Could not parse date '{date_to_use_str}'. Using 'nodate' prefix.")
+                    else:
+                        self.logger(f"     ⚠️ Post ID {original_post_id_for_log} has no date. Using 'nodate' prefix.")
+
+                    # Combine the date with the cleaned original filename
+                    filename_to_save_in_main_path = f"{formatted_date_str}_{cleaned_original_api_filename}"
                     was_original_name_kept_flag = True
                 elif self.manga_filename_style == STYLE_POST_TITLE:
                     if post_title and post_title.strip():
@@ -1385,7 +1396,17 @@ class PostProcessorWorker:
 
             if not all_files_from_post_api:
                 self.logger(f"   No files found to download for post {post_id}.")
-                result_tuple = (0, 0, [], [], [], None, None)
+                history_data_for_no_files_post = {
+                    'post_title': post_title,
+                    'post_id': post_id,
+                    'service': self.service,
+                    'user_id': self.user_id,
+                    'top_file_name': "N/A (No Files)",
+                    'num_files': 0,
+                    'upload_date_str': post_data.get('published') or post_data.get('added') or "Unknown",
+                    'download_location': determined_post_save_path_for_history
+                }
+                result_tuple = (0, 0, [], [], [], history_data_for_no_files_post, None)
                 return result_tuple
 
             files_to_download_info_list = []

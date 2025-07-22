@@ -239,16 +239,23 @@ def setup_ui(main_app):
     checkboxes_group_layout.addWidget(advanced_settings_label)
     advanced_row1_layout = QHBoxLayout()
     advanced_row1_layout.setSpacing(10)
-    main_app.use_subfolders_checkbox = QCheckBox("Separate Folders by Known.txt")
-    main_app.use_subfolders_checkbox.setChecked(True)
-    main_app.use_subfolders_checkbox.toggled.connect(main_app.update_ui_for_subfolders)
-    advanced_row1_layout.addWidget(main_app.use_subfolders_checkbox)
+
+    # --- REORDERED CHECKBOXES ---
     main_app.use_subfolder_per_post_checkbox = QCheckBox("Subfolder per Post")
     main_app.use_subfolder_per_post_checkbox.toggled.connect(main_app.update_ui_for_subfolders)
+    main_app.use_subfolder_per_post_checkbox.setChecked(True)    
     advanced_row1_layout.addWidget(main_app.use_subfolder_per_post_checkbox)
+
     main_app.date_prefix_checkbox = QCheckBox("Date Prefix")
     main_app.date_prefix_checkbox.setToolTip("When 'Subfolder per Post' is active, prefix the folder name with the post's upload date.")
     advanced_row1_layout.addWidget(main_app.date_prefix_checkbox)
+    
+    main_app.use_subfolders_checkbox = QCheckBox("Separate Folders by Known.txt")
+    main_app.use_subfolders_checkbox.setChecked(False)
+    main_app.use_subfolders_checkbox.toggled.connect(main_app.update_ui_for_subfolders)
+    advanced_row1_layout.addWidget(main_app.use_subfolders_checkbox)
+    # --- END REORDER ---
+
     main_app.use_cookie_checkbox = QCheckBox("Use Cookie")
     main_app.use_cookie_checkbox.setChecked(main_app.use_cookie_setting)
     main_app.cookie_text_input = QLineEdit()
@@ -380,7 +387,7 @@ def setup_ui(main_app):
     main_app.link_search_input.setPlaceholderText("Search Links...")
     main_app.link_search_input.setVisible(False)
     log_title_layout.addWidget(main_app.link_search_input)
-    main_app.link_search_button = QPushButton("🔍")
+    main_app.link_search_button = QPushButton("�")
     main_app.link_search_button.setVisible(False)
     main_app.link_search_button.setFixedWidth(int(30 * scale))
     log_title_layout.addWidget(main_app.link_search_button)
