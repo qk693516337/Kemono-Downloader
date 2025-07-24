@@ -593,6 +593,33 @@ class PostProcessorWorker:
                         os.remove(downloaded_part_file_path)
                     except OSError: pass
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+            
+            if (self.compress_images and downloaded_part_file_path and
+                    is_image(api_original_filename) and
+                    os.path.getsize(downloaded_part_file_path) > 1.5 * 1024 * 1024):
+                
+                self.logger(f"   🔄 Compressing '{api_original_filename}' to WebP...")
+                try:
+                    with Image.open(downloaded_part_file_path) as img:
+                        # Convert to RGB to avoid issues with paletted images or alpha channels in WebP
+                        if img.mode not in ('RGB', 'RGBA'):
+                            img = img.convert('RGBA')
+                        
+                        # Use an in-memory buffer to save the compressed image
+                        output_buffer = BytesIO()
+                        img.save(output_buffer, format='WebP', quality=85)
+                        
+                        # This buffer now holds the compressed data
+                        data_to_write_io = output_buffer
+                        
+                        # Update the filename to use the .webp extension
+                        base, _ = os.path.splitext(filename_to_save_in_main_path)
+                        filename_to_save_in_main_path = f"{base}.webp"
+                        self.logger(f"   ✅ Compression successful. New size: {len(data_to_write_io.getvalue()) / (1024*1024):.2f} MB")
+
+                except Exception as e_compress:
+                    self.logger(f"   ⚠️ Failed to compress '{api_original_filename}': {e_compress}. Saving original file instead.")
+                    data_to_write_io = None # Ensure we fall back to saving the original
 
             effective_save_folder = target_folder_path
             base_name, extension = os.path.splitext(filename_to_save_in_main_path)
@@ -610,15 +637,17 @@ class PostProcessorWorker:
 
             try:
                 if data_to_write_io:
+                    # Write the compressed data from the in-memory buffer
                     with open(final_save_path, 'wb') as f_out:
-                        time.sleep(0.05)
                         f_out.write(data_to_write_io.getvalue())
+                    # Clean up the original downloaded part file
                     if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                         try:
                             os.remove(downloaded_part_file_path)
                         except OSError as e_rem:
                             self.logger(f"  -> Failed to remove .part after compression: {e_rem}")
                 else:
+                    # No compression was done, just rename the original file
                     if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                         time.sleep(0.1)
                         os.rename(downloaded_part_file_path, final_save_path)
@@ -690,7 +719,6 @@ class PostProcessorWorker:
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_PERMANENTLY_THIS_SESSION, details_for_failure
             else:
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, details_for_failure
-
 
     def process(self):
 
