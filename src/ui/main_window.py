@@ -233,6 +233,7 @@ class DownloaderApp (QWidget ):
         self.downloaded_hash_counts = defaultdict(int)
         self.downloaded_hash_counts_lock = threading.Lock()
         self.session_temp_files = []
+        self.single_pdf_mode = False
         self.save_creator_json_enabled_this_session = True 
         
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
@@ -1429,15 +1430,21 @@ class DownloaderApp (QWidget ):
 
     def _check_if_all_work_is_done(self):
         """
-        Checks if the fetcher thread is done AND if all submitted tasks have been processed.
-        If so, finalizes the download.
+        Checks if the fetcher thread is done AND if all submitted tasks have been processed OR if a cancellation was requested.
+        If so, finalizes the download. This is the central point for completion logic.
         """
         fetcher_is_done = not self.is_fetcher_thread_running
-        all_workers_are_done = (self.total_posts_to_process > 0 and self.processed_posts_count >= self.total_posts_to_process)
+        all_workers_are_done = (self.processed_posts_count >= self.total_posts_to_process)
+        is_cancelled = self.cancellation_event.is_set()
 
-        if fetcher_is_done and all_workers_are_done:
-            self.log_signal.emit("🏁 All fetcher and worker tasks complete.")
-            self.finished_signal.emit(self.download_counter, self.skip_counter, self.cancellation_event.is_set(), self.all_kept_original_filenames)
+        if fetcher_is_done and (all_workers_are_done or is_cancelled):
+            if not self.is_finishing:
+                if is_cancelled:
+                    self.log_signal.emit("🏁 Fetcher cancelled. Finalizing...")
+                else:
+                    self.log_signal.emit("🏁 All fetcher and worker tasks complete. Finalizing...")
+                
+                self.finished_signal.emit(self.download_counter, self.skip_counter, is_cancelled, self.all_kept_original_filenames)
 
     def _sync_queue_with_link_input (self ,current_text ):
         """
@@ -4160,49 +4167,34 @@ class DownloaderApp (QWidget ):
         self ._update_log_display_mode_button_text ()
         self ._filter_links_log ()
 
-    def cancel_download_button_action (self ):
-        self.is_finishing = True
-        if not self .cancel_btn .isEnabled ()and not self .cancellation_event .is_set ():self .log_signal .emit ("ℹ️ No active download to cancel or already cancelling.");return 
-        self .log_signal .emit ("⚠️ Requesting cancellation of download process (soft reset)...")
-        self._cleanup_temp_files()
-        self._clear_session_file() # Clear session file on explicit cancel
-        if self .external_link_download_thread and self .external_link_download_thread .isRunning ():
-            self .log_signal .emit ("    Cancelling active External Link download thread...")
-            self .external_link_download_thread .cancel ()
+    def cancel_download_button_action(self):
+        """
+        Signals all active download processes to cancel but DOES NOT reset the UI.
+        The UI reset is now handled by the 'download_finished' method.
+        """
+        if self.cancellation_event.is_set():
+            self.log_signal.emit("ℹ️ Cancellation is already in progress.")
+            return
 
-        current_url =self .link_input .text ()
-        current_dir =self .dir_input .text ()
+        self.log_signal.emit("⚠️ Requesting cancellation of download process...")
+        self.cancellation_event.set()
 
-        self .cancellation_event .set ()
-        self .is_fetcher_thread_running =False 
-        if self .download_thread and self .download_thread .isRunning ():self .download_thread .requestInterruption ();self .log_signal .emit ("    Signaled single download thread to interrupt.")
-        if self .thread_pool :
-            self .log_signal .emit ("    Initiating non-blocking shutdown and cancellation of worker pool tasks...")
-            self .thread_pool .shutdown (wait =False ,cancel_futures =True )
-            self .thread_pool =None 
-            self .active_futures =[]
+        # Update UI to "Cancelling" state
+        self.pause_btn.setEnabled(False)
+        self.cancel_btn.setEnabled(False)
+        self.progress_label.setText(self._tr("status_cancelling", "Cancelling... Please wait."))
 
-        self .external_link_queue .clear ();self ._is_processing_external_link_queue =False ;self ._current_link_post_title =None 
+        # Signal all active components to stop
+        if self.download_thread and self.download_thread.isRunning():
+            self.download_thread.requestInterruption()
+            self.log_signal.emit("    Signaled single download thread to interrupt.")
 
-        self ._perform_soft_ui_reset (preserve_url =current_url ,preserve_dir =current_dir )
-
-        self .progress_label .setText (f"{self ._tr ('status_cancelled_by_user','Cancelled by user')}. {self ._tr ('ready_for_new_task_text','Ready for new task.')}")
-        self .file_progress_label .setText ("")
-        if self .pause_event :self .pause_event .clear ()
-        self .log_signal .emit ("ℹ️ UI reset. Ready for new operation. Background tasks are being terminated.")
-        self .is_paused =False 
-        if hasattr (self ,'retryable_failed_files_info')and self .retryable_failed_files_info :
-            self .log_signal .emit (f"    Discarding {len (self .retryable_failed_files_info )} pending retryable file(s) due to cancellation.")
-            self .cancellation_message_logged_this_session =False 
-            self .retryable_failed_files_info .clear ()
-        self .favorite_download_queue .clear ()
-        self .permanently_failed_files_for_dialog .clear ()
-        self .is_processing_favorites_queue =False 
-        self .favorite_download_scope =FAVORITE_SCOPE_SELECTED_LOCATION 
-        self ._update_favorite_scope_button_text ()
-        if hasattr (self ,'link_input'):
-            self .last_link_input_text_for_queue_sync =self .link_input .text ()
-        self .cancellation_message_logged_this_session =False 
+        if self.thread_pool:
+            self.log_signal.emit("    Signaling worker pool to cancel futures...")
+        
+        if self.external_link_download_thread and self.external_link_download_thread.isRunning():
+            self.log_signal.emit("    Cancelling active External Link download thread...")
+            self.external_link_download_thread.cancel()
 
     def _get_domain_for_service (self ,service_name :str )->str :
         """Determines the base domain for a given service."""
@@ -4220,119 +4212,129 @@ class DownloaderApp (QWidget ):
             return
         self.is_finishing = True
 
-        self.log_signal.emit("🏁 Download of current item complete.")
+        try:
+            if cancelled_by_user:
+                self.log_signal.emit("✅ Cancellation complete. Resetting UI.")
+                current_url = self.link_input.text()
+                current_dir = self.dir_input.text()
+                self._perform_soft_ui_reset(preserve_url=current_url, preserve_dir=current_dir)
+                self.progress_label.setText(f"{self._tr('status_cancelled_by_user', 'Cancelled by user')}. {self._tr('ready_for_new_task_text', 'Ready for new task.')}")
+                self.file_progress_label.setText("")
+                if self.pause_event: self.pause_event.clear()
+                self.is_paused = False
+                return # Exit after handling cancellation
 
-        if self.is_processing_favorites_queue and self.favorite_download_queue:
-            self.log_signal.emit("✅ Item finished. Processing next in queue...")
-            self._process_next_favorite_download()
-            return  
+            self.log_signal.emit("🏁 Download of current item complete.")
 
-        if self.is_processing_favorites_queue:
-            self.is_processing_favorites_queue = False
-            self.log_signal.emit("✅ All items from the download queue have been processed.")
+            if self.is_processing_favorites_queue and self.favorite_download_queue:
+                self.log_signal.emit("✅ Item finished. Processing next in queue...")
+                self.is_finishing = False # Allow the next item in queue to start
+                self._process_next_favorite_download()
+                return  
 
-        if not cancelled_by_user and not self.retryable_failed_files_info:
-            self._clear_session_file()
-            self.interrupted_session_data = None
-            self.is_restore_pending = False
+            if self.is_processing_favorites_queue:
+                self.is_processing_favorites_queue = False
+                self.log_signal.emit("✅ All items from the download queue have been processed.")
 
-        self._finalize_download_history()
-        status_message = self._tr("status_cancelled_by_user", "Cancelled by user") if cancelled_by_user else self._tr("status_completed", "Completed")
-        if cancelled_by_user and self.retryable_failed_files_info:
-            self.log_signal.emit(f"    Download cancelled, discarding {len(self.retryable_failed_files_info)} file(s) that were pending retry.")
-            self.retryable_failed_files_info.clear()
+            if not cancelled_by_user and not self.retryable_failed_files_info:
+                self._clear_session_file()
+                self.interrupted_session_data = None
+                self.is_restore_pending = False
 
-        summary_log = "=" * 40
-        summary_log += f"\n🏁 Download {status_message}!\n    Summary: Downloaded Files={total_downloaded}, Skipped Files={total_skipped}\n"
-        summary_log += "=" * 40
-        self.log_signal.emit(summary_log)
-        self.log_signal.emit("")
-        
-        if self.thread_pool:
-            self.log_signal.emit("    Shutting down worker thread pool...")
-            self.thread_pool.shutdown(wait=False)
-            self.thread_pool = None
-            self.log_signal.emit("    Thread pool shut down.")
+            self._finalize_download_history()
+            status_message = self._tr("status_completed", "Completed")
 
-        if self.single_pdf_setting and self.session_temp_files and not cancelled_by_user:
-            try:
-                self._trigger_single_pdf_creation()
-            finally:
+            summary_log = "=" * 40
+            summary_log += f"\n🏁 Download {status_message}!\n    Summary: Downloaded Files={total_downloaded}, Skipped Files={total_skipped}\n"
+            summary_log += "=" * 40
+            self.log_signal.emit(summary_log)
+            self.log_signal.emit("")
+            
+            if self.thread_pool:
+                self.thread_pool.shutdown(wait=False) 
+                self.thread_pool = None
+
+            if self.single_pdf_setting and self.session_temp_files:
+                try:
+                    self._trigger_single_pdf_creation()
+                finally:
+                    self._cleanup_temp_files()
+            else:
                 self._cleanup_temp_files()
                 self.single_pdf_setting = False
-        else:
-            self._cleanup_temp_files()
-            self.single_pdf_setting = False
 
-        if kept_original_names_list is None:
-            kept_original_names_list = list(self.all_kept_original_filenames) if hasattr(self, 'all_kept_original_filenames') else []
-        if kept_original_names_list is None:
-            kept_original_names_list = []
+            if kept_original_names_list is None:
+                kept_original_names_list = list(self.all_kept_original_filenames) if hasattr(self, 'all_kept_original_filenames') else []
+            if kept_original_names_list is None:
+                kept_original_names_list = []
 
-        if kept_original_names_list:
-            intro_msg = (
-                HTML_PREFIX +
-                "<p>ℹ️ The following files from multi-file manga posts "
-                "(after the first file) kept their <b>original names</b>:</p>"
+            if kept_original_names_list:
+                intro_msg = (
+                    HTML_PREFIX +
+                    "<p>ℹ️ The following files from multi-file manga posts "
+                    "(after the first file) kept their <b>original names</b>:</p>"
+                )
+                self.log_signal.emit(intro_msg)
+                html_list_items = "<ul>"
+                for name in kept_original_names_list:
+                    html_list_items += f"<li><b>{name}</b></li>"
+                html_list_items += "</ul>"
+                self.log_signal.emit(HTML_PREFIX + html_list_items)
+                self.log_signal.emit("=" * 40)
+
+            if self.download_thread:
+                try:
+                    if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
+                    if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
+                    if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
+                    if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
+                    if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
+                    if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
+                    if hasattr(self.download_thread, 'missed_character_post_signal'): self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
+                    if hasattr(self.download_thread, 'retryable_file_failed_signal'): self.download_thread.retryable_file_failed_signal.disconnect(self._handle_retryable_file_failure)
+                    if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): self.download_thread.file_successfully_downloaded_signal.disconnect(self._handle_actual_file_downloaded)
+                    if hasattr(self.download_thread, 'post_processed_for_history_signal'): self.download_thread.post_processed_for_history_signal.disconnect(self._add_to_history_candidates)
+                except (TypeError, RuntimeError) as e:
+                    self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
+
+                if not self.download_thread.isRunning():
+                    if self.download_thread:
+                        self.download_thread.deleteLater()
+                    self.download_thread = None
+
+            self.progress_label.setText(
+                f"{status_message}: "
+                f"{total_downloaded} {self._tr('files_downloaded_label', 'downloaded')}, "
+                f"{total_skipped} {self._tr('files_skipped_label', 'skipped')}."
             )
-            self.log_signal.emit(intro_msg)
-            html_list_items = "<ul>"
-            for name in kept_original_names_list:
-                html_list_items += f"<li><b>{name}</b></li>"
-            html_list_items += "</ul>"
-            self.log_signal.emit(HTML_PREFIX + html_list_items)
-            self.log_signal.emit("=" * 40)
+            self.file_progress_label.setText("")
 
-        if self.download_thread:
-            try:
-                if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
-                if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
-                if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
-                if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
-                if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
-                if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
-                if hasattr(self.download_thread, 'missed_character_post_signal'): self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
-                if hasattr(self.download_thread, 'retryable_file_failed_signal'): self.download_thread.retryable_file_failed_signal.disconnect(self._handle_retryable_file_failure)
-                if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): self.download_thread.file_successfully_downloaded_signal.disconnect(self._handle_actual_file_downloaded)
-                if hasattr(self.download_thread, 'post_processed_for_history_signal'): self.download_thread.post_processed_for_history_signal.disconnect(self._add_to_history_candidates)
-            except (TypeError, RuntimeError) as e:
-                self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
+            if not cancelled_by_user and self.retryable_failed_files_info:
+                num_failed = len(self.retryable_failed_files_info)
+                reply = QMessageBox.question(self, "Retry Failed Downloads?",
+                                             f"{num_failed} file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
+                                             "Would you like to attempt to download these failed files again?",
+                                             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+                if reply == QMessageBox.Yes:
+                    self.is_finishing = False # Allow retry session to start
+                    self._start_failed_files_retry_session()
+                    return # Exit to allow retry session to run
+                else:
+                    self.log_signal.emit("ℹ️ User chose not to retry failed files.")
+                    self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info)
+                    if self.permanently_failed_files_for_dialog:
+                        self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) can be viewed.")
+                    self.cancellation_message_logged_this_session = False
+                    self.retryable_failed_files_info.clear()
 
-            if not self.download_thread.isRunning():
-                if self.download_thread:
-                    self.download_thread.deleteLater()
-                self.download_thread = None
+            self.is_fetcher_thread_running = False
 
-        self.progress_label.setText(
-            f"{status_message}: "
-            f"{total_downloaded} {self._tr('files_downloaded_label', 'downloaded')}, "
-            f"{total_skipped} {self._tr('files_skipped_label', 'skipped')}."
-        )
-        self.file_progress_label.setText("")
-
-        if not cancelled_by_user and self.retryable_failed_files_info:
-            num_failed = len(self.retryable_failed_files_info)
-            reply = QMessageBox.question(self, "Retry Failed Downloads?",
-                                         f"{num_failed} file(s) failed with potentially recoverable errors (e.g., IncompleteRead).\n\n"
-                                         "Would you like to attempt to download these failed files again?",
-                                         QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
-            if reply == QMessageBox.Yes:
-                self._start_failed_files_retry_session()
-                return
-            else:
-                self.log_signal.emit("ℹ️ User chose not to retry failed files.")
-                self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info)
-                if self.permanently_failed_files_for_dialog:
-                    self.log_signal.emit(f"🆘 Error button enabled. {len(self.permanently_failed_files_for_dialog)} file(s) can be viewed.")
-                self.cancellation_message_logged_this_session = False
-                self.retryable_failed_files_info.clear()
-
-        self.is_fetcher_thread_running = False
-
-        self.set_ui_enabled(True)
-        self._update_button_states_and_connections()
-        self.cancellation_message_logged_this_session = False
-        self.active_update_profile = None 
+            self.set_ui_enabled(True)
+            self._update_button_states_and_connections()
+            self.cancellation_message_logged_this_session = False
+            self.active_update_profile = None 
+        finally:
+            self.is_finishing = False
 
     def _handle_keep_duplicates_toggled(self, checked):
         """Shows the duplicate handling dialog when the checkbox is checked."""

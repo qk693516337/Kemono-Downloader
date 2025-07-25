@@ -969,6 +969,9 @@ class EmptyPopupDialog (QDialog ):
                     self .parent_app .link_input .setPlaceholderText (
                     self .parent_app ._tr ("items_in_queue_placeholder","{count} items in queue from popup.").format (count =total_in_queue )
                     )
+            
+            self.selected_creators_for_queue.clear()
+            
             self .accept ()
         else :
             QMessageBox .information (self ,self ._tr ("no_selection_title","No Selection"),

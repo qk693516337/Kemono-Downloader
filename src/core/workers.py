@@ -887,17 +887,6 @@ class PostProcessorWorker:
                     result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
                     return result_tuple
 
-            if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
-                if self._check_pause(f"Skip words (post title) for post {post_id}"):
-                    result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
-                    return result_tuple
-                post_title_lower = post_title.lower()
-                for skip_word in self.skip_words_list:
-                    if skip_word.lower() in post_title_lower:
-                        self.logger(f"   -> Skip Post (Keyword in Title '{skip_word}'): '{post_title[:50]}...'. Scope: {self.skip_words_scope}")
-                        result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
-                        return result_tuple
-
             if not self.extract_links_only and self.manga_mode_active and current_character_filters and (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and not post_is_candidate_by_title_char_match:
                 self.logger(f"   -> Skip Post (Manga Mode with Title/Both Scope - No Title Char Match): Title '{post_title[:50]}' doesn't match filters.")
                 self._emit_signal('missed_character_post', post_title, "Manga Mode: No title match for character filter (Title/Both scope)")
@@ -908,6 +897,7 @@ class PostProcessorWorker:
                 self.logger(f"⚠️ Corrupt attachment data for post {post_id} (expected list, got {type(post_attachments)}). Skipping attachments.")
                 post_attachments = []
 
+            # CORRECTED LOGIC: Determine folder path BEFORE skip checks
             base_folder_names_for_post_content = []
             determined_post_save_path_for_history = self.override_output_dir if self.override_output_dir else self.download_root
             if not self.extract_links_only and self.use_subfolders:
@@ -1055,6 +1045,28 @@ class PostProcessorWorker:
                         final_post_subfolder_name = original_cleaned_post_title_for_sub
                         break
                 determined_post_save_path_for_history = os.path.join(base_path_for_post_subfolder, final_post_subfolder_name)
+
+            if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
+                if self._check_pause(f"Skip words (post title) for post {post_id}"):
+                    result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
+                    return result_tuple
+                post_title_lower = post_title.lower()
+                for skip_word in self.skip_words_list:
+                    if skip_word.lower() in post_title_lower:
+                        self.logger(f"   -> Skip Post (Keyword in Title '{skip_word}'): '{post_title[:50]}...'. Scope: {self.skip_words_scope}")
+                        # Create a history object for the skipped post to record its ID
+                        history_data_for_skipped_post = {
+                            'post_id': post_id,
+                            'service': self.service,
+                            'user_id': self.user_id,
+                            'post_title': post_title,
+                            'top_file_name': "N/A (Post Skipped)",
+                            'num_files': num_potential_files_in_post,
+                            'upload_date_str': post_data.get('published') or post_data.get('added') or "Unknown",
+                            'download_location': determined_post_save_path_for_history
+                        }
+                        result_tuple = (0, num_potential_files_in_post, [], [], [], history_data_for_skipped_post, None)
+                        return result_tuple
 
             if self.filter_mode == 'text_only' and not self.extract_links_only:
                 self.logger(f"   Mode: Text Only (Scope: {self.text_only_scope})")

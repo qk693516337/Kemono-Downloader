@@ -159,7 +159,7 @@ class DownloadManager:
             if self.thread_pool:
                 self.thread_pool.shutdown(wait=True)
             self.is_running = False
-            self._log("🏁 All processing tasks have completed.")
+            self._log("🏁 All processing tasks have completed or been cancelled.") 
             self.progress_queue.put({
                 'type': 'finished',
                 'payload': (self.total_downloads, self.total_skips, self.cancellation_event.is_set(), self.all_kept_original_filenames)
