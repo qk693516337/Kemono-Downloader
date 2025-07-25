@@ -1,192 +1,210 @@
-# Kemono Downloader - Feature Guide
-This guide provides a comprehensive overview of all user interface elements, input fields, buttons, popups, and functionalities available in the Kemono Downloader.
+# Kemono Downloader - Comprehensive Feature Guide
 
-## 1. Main Interface & Workflow
-These are the primary controls you'll interact with to initiate and manage downloads.
+This guide provides a detailed overview of all user interface elements, input fields, buttons, popups, and functionalities available in the application.
 
-### 1.1. Core Inputs
-**🔗 Creator/Post URL Input Field**  
-- **Purpose**: Paste the URL of the content you want to download.  
-- **Supported Sites**: Kemono.su, Coomer.party, Simpcity.su.  
-- **Supported URL Types**:  
-  - Creator pages (e.g., `https://kemono.su/patreon/user/12345`).  
-  - Individual posts (e.g., `https://kemono.su/patreon/user/12345/post/98765`).  
-- **Note**: When ⭐ Favorite Mode is active, this field is disabled. For Simpcity.su URLs, the "Use Cookie" option is mandatory and auto-enabled.
+---
 
-**🎨 Creator Selection Button**  
-- **Icon**: 🎨 (Artist Palette)  
-- **Purpose**: Opens the "Creator Selection" dialog to browse and queue downloads from known creators.  
-- **Dialog Features**:  
-  - Loads creators from `creators.json`.  
-  - **Search Bar**: Filter creators by name.  
-  - **Creator List**: Displays creators with their service (e.g., Patreon, Fanbox).  
-  - **Selection**: Checkboxes to select one or more creators.  
-  - **Download Scope**: Organize downloads by Characters or Creators.  
-  - **Add to Queue**: Adds selected creators or their posts to the download queue.
+## Main Window: Core Functionality
 
-**Page Range (Start to End) Input Fields**  
-- **Purpose**: Specify a range of pages to fetch for creator URLs.  
-- **Usage**: Enter the starting and ending page numbers.  
-- **Behavior**:  
-  - If blank, all pages are processed.  
-  - Disabled for single post URLs.
+The application is divided into a **configuration panel on the left** and a **status/log panel on the right**.
 
-**📁 Download Location Input Field & Browse Button**  
-- **Purpose**: Specify the main directory for downloaded files.  
-- **Usage**: Type the path or click "Browse..." to select a folder.  
-- **Requirement**: Mandatory for all download operations.
+### Primary Inputs (Top-Left)
 
-### 1.2. Action Buttons
-**⬇️ Start Download / 🔗 Extract Links Button**  
-- **Purpose**: Initiates downloading or link extraction.  
-- **Behavior**:  
-  - Shows "🔗 Extract Links" if "Only Links" is selected.  
-  - Otherwise, shows "⬇️ Start Download".  
-  - Supports single-threaded or multi-threaded downloads based on settings.
+- **URL Input Field**  
+  Starting point for most downloads. Paste a URL for a specific post or an entire creator's feed. The app adapts based on the URL type.
 
-**🔄 Restore Download Button**  
-- **Visibility**: Appears if an incomplete session is detected on startup.  
-- **Purpose**: Resumes a previously interrupted download session.
+- **🎨 Creator Selection Popup**  
+  Opens a dialog with all known creators.
+  - **Search and Queue:** Search and queue multiple creators for batch downloads.  
+  - **Check for Updates:** Select a single creator to enable update-only mode, downloading only new content.
 
-**⏸️ Pause / ▶️ Resume Download Button**  
-- **Purpose**: Pause or resume the ongoing download.  
-- **Behavior**: Toggles between "Pause" and "Resume". Some UI settings can be changed while paused.
+- **Download Location**  
+  The folder where all content is saved.  
+  - *Browse...* button to select from your computer.
 
-**❌ Cancel & Reset UI Button**  
-- **Purpose**: Stops the current operation and performs a "soft" reset.  
-- **Behavior**: Halts background threads, preserves URL and Download Location inputs, resets other settings.
+- **Page Range (Start/End)**  
+  *For creator feed URLs only.* Download a specific range of pages, e.g., pages 5–10 instead of the whole feed.
 
-**🔄 Reset Button (in the log area)**  
-- **Purpose**: Performs a "hard" reset when no operation is active.  
-- **Behavior**: Clears all inputs, resets options to default, and clears logs.
+---
 
-## 2. Filtering & Content Selection
-These options allow precise control over downloaded content.
+## Filtering & Naming (Left Panel)
 
-### 2.1. Content Filtering
-**🎯 Filter by Character(s) Input Field**  
-- **Purpose**: Download content related to specific characters or series.  
-- **Usage**: Enter comma-separated character names.  
-- **Advanced Syntax**:  
-  - `Nami`: Simple filter.  
-  - `(Vivi, Ulti)`: Grouped filter. Matches posts with "Vivi" OR "Ulti". Creates a shared folder like `Vivi Ulti` if subfolders are enabled.  
-  - `(Boa, Hancock)~`: Aliased filter. Treats "Boa" and "Hancock" as the same entity.
+Precise control over what gets downloaded and how it’s named/organized.
 
-**Filter: [Type] Button (Character Filter Scope)**  
-- **Purpose**: Defines where the character filter is applied. Cycles on click.  
-- **Options**:  
-  - **Filter: Title** (Default): Matches post titles.  
-  - **Filter: Files**: Matches filenames.  
-  - **Filter: Both**: Checks title first, then filenames.  
-  - **Filter: Comments (Beta)**: Checks filenames, then post comments.
+- **Filter by Character(s):**  
+  Download content featuring specific characters; enter multiple names separated by commas.
 
-**🚫 Skip with Words Input Field**  
-- **Purpose**: Exclude posts/files with specified keywords (e.g., `WIP`, `sketch`).
+- **Filter: [Scope] Button:**  
+  Changes how the character filter works:
+  - *Title:* Character name must be in post title.
+  - *Files:* Character name must be in filenames.
+  - *Both:* Combines Title and Files.
+  - *Comments (Beta):* Character name mentioned in comments.
 
-**Scope: [Type] Button (Skip Words Scope)**  
-- **Purpose**: Defines where skip words are applied. Cycles on click.  
-- **Options**:  
-  - **Scope: Posts** (Default): Skips posts if the title contains a skip word.  
-  - **Scope: Files**: Skips files if the filename contains a skip word.  
-  - **Scope: Both**: Applies both rules.
+- **Skip with Words:**  
+  Avoid unwanted content via keywords (e.g., WIP, sketch).
 
-**✂️ Remove Words from Name Input Field**  
-- **Purpose**: Remove unwanted text from filenames (e.g., `patreon`, `[HD]`).
+- **Scope: [Type] Button:**  
+  Changes how the skip filter works:
+  - *Posts:* Skip entire post if keyword is in title.
+  - *Files:* Skip individual files if keyword is in filename.
+  - *Both:* Both levels.
 
-### 2.2. File Type Filtering
-**Filter Files (Radio Buttons)**  
-- **Purpose**: Select file types to download.  
-- **Options**:  
-  - **All**: All file types.  
-  - **Images/GIFs**: Common image formats.  
-  - **Videos**: Common video formats.  
-  - **🎧 Only Audio**: Common audio formats.  
-  - **📦 Only Archives**: Only `.zip` and `.rar` files.  
-  - **🔗 Only Links**: Extracts external links without downloading files.
+- **Remove Words from name:**  
+  Cleans filenames by removing specified terms (e.g., "patreon", "HD").
 
-**Skip .zip / Skip .rar Checkboxes**  
-- **Purpose**: Skip downloading `.zip` or `.rar` files.  
-- **Behavior**: Disabled when "📦 Only Archives" is active.
+---
 
-## 3. Download Customization
-Options to refine the download process and output.
+## File Type Filter (Radio Buttons)
 
-- **Download Thumbnails Only**: Downloads small preview images instead of full-resolution files.  
-- **Scan Content for Images**: Scans post HTML for `<img>` tags, crucial for images in descriptions.  
-- **Compress to WebP**: Converts images to WebP format (requires Pillow library).
-- **Keep Duplicates**: Normally, if a post contains multiple files with the same name, only the first is downloaded. Checking this option will download all of them, renaming subsequent unique files with a numeric suffix (e.g., `image_1.jpg`).
-- **🗄️ Custom Folder Name (Single Post Only)**: Specify a custom folder name for a single post's content (appears if subfolders are enabled).
+Choose what kind of content to download:
 
-## 4. 📖 Manga/Comic Mode
-A mode for downloading creator feeds in chronological order, ideal for sequential content.
+- **All**  
+- **Images/GIFs**  
+- **Videos**  
+- **🎧 Only Audio**  
+- **📦 Only Archives**  
+- **🔗 Only Links:**  
+  Scans descriptions for external links (Mega, Google Drive, etc.) and logs them—does *not* download files.
 
-- **Activation**: Active when downloading a creator's entire feed (not a single post).  
-- **Core Behavior**: Fetches all posts, processing from oldest to newest.  
-- **Filename Style Toggle Button (in the log area)**:  
-  - **Purpose**: Controls file naming in Manga Mode. Cycles on click.  
-  - **Options**:  
-    - **Name: Post Title**: First file named after post title; others keep original names.  
-    - **Name: Original File**: Files keep server-provided names, with optional prefix.  
-    - **Name: Title+G.Num**: Global numbering with post title prefix (e.g., `Chapter 1_001.jpg`).  
-    - **Name: Date Based**: Sequential naming by post date (e.g., `001.jpg`), with optional prefix.  
-    - **Name: Post ID**: Files named after post ID to avoid clashes.  
-    - **Name: Date + Title**: Combines post date and title for filenames.
+- **More...**  
+  Opens a dialog for text-only downloads.  
+  - Save post descriptions or comments as **PDF, DOCX, or TXT**.  
+  - **Single PDF**: Combine all downloaded posts' text into one sorted PDF.
 
-## 5. Folder Organization & Known.txt
-Controls for structuring downloaded content.
+---
 
-- **Separate Folders by Name/Title Checkbox**: Enables automatic subfolder creation.  
-- **Subfolder per Post Checkbox**: Creates subfolders for each post, named after the post title.  
-- **Date Prefix for Post Subfolders Checkbox**: When used with "Subfolder per Post," this option prefixes the folder name with the post's upload date (e.g., `2025-07-11 Post Title`), allowing for chronological sorting.
-- **Known.txt Management UI (Bottom Left)**:  
-  - **Purpose**: Manages a local `Known.txt` file for series, characters, or terms used in folder creation.  
-  - **List Display**: Shows primary names from `Known.txt`.  
-  - **➕ Add Button**: Adds names or groups (e.g., `(Character A, Alias B)~`).  
-  - **⤵️ Add to Filter Button**: Select names from `Known.txt` for the character filter.  
-  - **🗑️ Delete Selected Button**: Removes selected names from `Known.txt`.  
-  - **Open Known.txt Button**: Opens the file in the default text editor.  
-  - **❓ Help Button**: Opens this feature guide.  
-  - **📜 History Button**: Views recent download history.
+## Download Options & Advanced Settings (Checkboxes)
 
-## 6. ⭐ Favorite Mode (Kemono.su Only)
-Download from favorited artists/posts on Kemono.su.
+- **Skip .zip:** Ignore archive files (.zip) during downloads.
+- **Download Thumbnails Only:** Fetch only preview images, not full-resolution files.
+- **Scan Content for Images:** Ensures all embedded images in post text are downloaded.
+- **Compress to WebP:** Converts large images to efficient WebP format to save space.
+- **Keep Duplicates:**  
+  Dialog to control handling of duplicate files:
+  - Default: skip duplicates
+  - Option: keep all duplicates
+  - Limit: e.g., keep up to 2 copies
+- **Subfolder per Post:** Organizes by making a folder per post, named after the post title.
+- **Date Prefix:** Adds date to folder name (e.g., `2025-07-25 Post Title`) when *Subfolder per Post* is enabled.
+- **Separate Folders by Known.txt:** Organizes based on your Known Names list.
+- **Use Cookie:**  
+  Access paywalled content using browser cookies. Paste a cookie string or select a `cookies.txt` file.
+- **Use Multithreading:**  
+  Speeds up feed downloads by processing posts in parallel. Set configurable thread count.
+- **Show External Links in Log:**  
+  Displays a secondary log panel for external links.
 
-- **Enable Checkbox ("⭐ Favorite Mode")**:  
-  - Switches to Favorite Mode.  
-  - Disables the main URL input.  
-  - Changes action buttons to "Favorite Artists" and "Favorite Posts".  
-  - Requires cookies.  
-- **🖼️ Favorite Artists Button**: Select and download from favorited artists.  
-- **📄 Favorite Posts Button**: Select and download specific favorited posts.  
-- **Favorite Download Scope Button**:  
-  - **Scope: Selected Location**: Downloads favorites to the main directory.  
-  - **Scope: Artist Folders**: Creates subfolders per artist.
+---
 
-## 7. Advanced Settings & Performance
-- **🍪 Cookie Management**:  
-  - **Use Cookie Checkbox**: Enables cookies for restricted content.  
-  - **Cookie Text Field**: Paste cookie string.  
-  - **Browse... Button**: Select a `cookies.txt` file (Netscape format).  
-- **Use Multithreading Checkbox & Threads Input**:  
-  - **Purpose**: Configures simultaneous operations.  
-  - **Behavior**: Sets concurrent post processing (creator feeds) or file downloads (single posts).  
-- **Multi-part Download Toggle Button**:  
-  - **Purpose**: Enables/disables multi-segment downloading for large files.  
-  - **Note**: Best for large files; less efficient for small files.
+## Known Names Management (Bottom-Left)
 
-## 8. Logging, Monitoring & Error Handling
-- **📜 Progress Log Area**: Displays messages, progress, and errors.  
-- **👁️ / 🙈 Log View Toggle Button**: Switches between Progress Log and Missed Character Log (skipped posts).  
-- **Show External Links in Log**: Displays external links (e.g., Mega, Google Drive) in a secondary panel.  
-- **Export Links Button**: Saves extracted links to a `.txt` file in "Only Links" mode.  
-- **Download Extracted Links Button**: Downloads files from supported external links in "Only Links" mode.  
-- **🆘 Error Button & Dialog**:  
-  - **Purpose**: Active if files fail to download. The button will display a live count of failed files (e.g., **(3) Error**).  
-  - **Dialog Features**:  
-    - Lists failed files.  
-    - Retry failed downloads.  
-    - Export failed URLs to a text file.
+Automates creation of organized, named folders.
 
-## 9. Application Settings (⚙️)
-- **Appearance**: Switch between Light and Dark themes.  
-- **Language**: Change UI language (restart required).
+- **Known Shows/Characters List:**  
+  Displays all saved names/groups.
+- **Search...:** Filter the list to find names quickly.
+- **Open Known.txt:** Edit the source file directly.
+- **Add New Name:**
+  - *Single Name:*  
+    Typing `Tifa Lockhart` + ➕ Add = entry matching "Tifa Lockhart"
+  - *Group:*  
+    Typing `(Boa, Hancock, Snake Princess)~` + ➕ Add = one entry matching "Boa", "Hancock", or "Snake Princess"... all saved in a combined folder.
+- **⤵️ Add to Filter:**  
+  Select multiple Known Names and add them all to "Filter by Character(s)" at once.
+- **🗑️ Delete Selected:**  
+  Remove highlighted entries from your list.
+
+---
+
+## Action Buttons & Status Controls
+
+- **⬇️ Start Download / 🔗 Extract Links:**  
+  Main action button:
+  - *Normal Mode:* Starts downloads as per current settings.
+  - *Update Mode:* After selecting a creator, changes to 🔄 *Check for Updates*.
+  - *Update Confirmation:* After new posts are found, changes to ⬇️ *Start Download (X new)*.
+  - *Link Extraction Mode:* Changes text to 🔗 *Extract Links*.
+  
+- **⏸️ Pause / ▶️ Resume Download:**  
+  Temporarily halt/resume downloads. Some settings (like filters) can be changed during pause.
+
+- **❌ Cancel & Reset UI:**  
+  Stops downloads, resets UI to clean state. Retains URL & Download Location.
+
+- **Error Button:**  
+  Shows number of files that failed to download. Opens a dialog to:
+    - Retry selected failed files
+    - Export failed URLs as `.txt`
+
+- **🔄 Reset (Top-Right):**  
+  Hard reset; clears logs and returns UI to default.
+
+- **⚙️ (Settings):**  
+  Opens main settings.
+
+- **📜 (History):**  
+  Opens download history.
+
+- **? (Help):**  
+  Opens user guide.
+
+- **❤️ Support:**  
+  Info on how to support the developer.
+
+---
+
+## Specialized Modes & Features
+
+### ⭐ Favorite Mode
+
+Transforms the UI for collection management.
+
+- URL input is **disabled**
+- Main buttons replaced with:
+  - **🖼️ Favorite Artists:** Browse/queue favorite creators.
+  - **📄 Favorite Posts:** Browse/queue favorite posts.
+
+- **Scope: [Location] Button:**  
+  Toggle favorite content saving location:
+  - *Selected Location*: All in main folder
+  - *Artist Folders*: Creates subfolder for each artist
+
+### 📖 Manga/Comic Mode
+
+Designed for sequential content.
+
+- **Reverse Download Order:**  
+  Fetches/downloads oldest → newest.
+- **Enables Special Naming:**  
+  *Name: [Style]* button lets you pick naming conventions:
+  - By Post Title
+  - By Date
+  - Sequential numbers (001, 002, 003...)
+- **Disables Multithreading** (certain styles):  
+  For perfect sequential order, multithreading is off for some naming modes.
+
+---
+
+## Session & Error Management
+
+- **Session Restore:**  
+  On abrupt closure, detects incomplete sessions. UI shows 🔄 *Restore Download* to resume or discard session.
+
+- **Update Checking:**  
+  Select creator via 🎨 Creator Selection Popup to compare server posts with local history. Prompts for new-only downloads.
+
+---
+
+## Logging & Monitoring
+
+- **Progress Log:**  
+  Real-time status of downloads, saves, skips, and errors.
+
+- **👁️ Log View Toggle:**  
+  Switch views:
+    - *Progress Log:* Standard log
+    - *Missed Character Log:* Shows possible new character names from skipped posts—useful for expanding your filters.
+
+---
+
