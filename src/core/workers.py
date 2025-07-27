@@ -790,8 +790,8 @@ class PostProcessorWorker:
 
             all_files_from_post_api_for_char_check = []
             api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
-            if not api_file_domain_for_char_check or not any(d in api_file_domain_for_char_check.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
-                api_file_domain_for_char_check = "kemono.su" if "kemono" in self.service.lower() else "coomer.party"
+            if not api_file_domain_for_char_check or not any(d in api_file_domain_for_char_check.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
+                api_file_domain_for_char_check = "kemono.su" if "kemono" in self.service.lower() else "coomer.st"
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 original_api_name = post_main_file_info.get('name') or os.path.basename(post_main_file_info['path'].lstrip('/'))
                 if original_api_name:
@@ -1320,9 +1320,8 @@ class PostProcessorWorker:
 
             all_files_from_post_api = []
             api_file_domain = urlparse(self.api_url_input).netloc
-            if not api_file_domain or not any(d in api_file_domain.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
-                api_file_domain = "kemono.su" if "kemono" in self.service.lower() else "coomer.party"
-
+            if not api_file_domain or not any(d in api_file_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
+                api_file_domain = "kemono.su" if "kemono" in self.service.lower() else "coomer.st"
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 file_path = post_main_file_info['path'].lstrip('/')
                 original_api_name = post_main_file_info.get('name') or os.path.basename(file_path)
