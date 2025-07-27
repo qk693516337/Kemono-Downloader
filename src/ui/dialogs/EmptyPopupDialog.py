@@ -994,8 +994,8 @@ class EmptyPopupDialog (QDialog ):
         """Determines the base domain for a given service."""
         service_lower =service_name .lower ()
         if service_lower in ['onlyfans','fansly']:
-            return "coomer.st" 
-        return "kemono.cr"     
+            return "coomer.su"
+        return "kemono.su"
 
     def _handle_add_selected (self ):
         """Gathers globally selected creators and processes them."""

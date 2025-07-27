@@ -139,18 +139,13 @@ def download_from_api(
 
     parsed_input_url_for_domain = urlparse(api_url_input)
     api_domain = parsed_input_url_for_domain.netloc
-    fallback_api_domain = None
-
-    # --- START: MODIFIED DOMAIN LOGIC WITH FALLBACK ---
-    if 'kemono.cr' in api_domain.lower():
-        fallback_api_domain = 'kemono.su'
-    elif 'coomer.st' in api_domain.lower():
-        fallback_api_domain = 'coomer.su'
-    elif not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
-        logger(f"⚠️ Unrecognized domain '{api_domain}'. Defaulting to kemono.cr with fallback to kemono.su.")
-        api_domain = "kemono.cr"
-        fallback_api_domain = "kemono.su"
-    # --- END: MODIFIED DOMAIN LOGIC WITH FALLBACK ---
+    
+    # --- START: MODIFIED LOGIC ---
+    # This list is updated to include the new .cr and .st mirrors for validation.
+    if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
+        logger(f"⚠️ Unrecognized domain '{api_domain}' from input URL. Defaulting to kemono.su for API calls.")
+        api_domain = "kemono.su"
+    # --- END: MODIFIED LOGIC ---
         
     cookies_for_api = None
     if use_cookie and app_base_dir:
@@ -188,6 +183,7 @@ def download_from_api(
         logger("⚠️ Page range (start/end page) is ignored when a specific post URL is provided (searching all pages for the post).")
 
     is_manga_mode_fetch_all_and_sort_oldest_first = manga_mode and (manga_filename_style_for_sort_check != STYLE_DATE_POST_TITLE) and not target_post_id
+    api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
     page_size = 50
     if is_manga_mode_fetch_all_and_sort_oldest_first:
         logger(f"   Manga Mode (Style: {manga_filename_style_for_sort_check if manga_filename_style_for_sort_check else 'Default'} - Oldest First Sort Active): Fetching all posts to sort by date...")
@@ -200,12 +196,6 @@ def download_from_api(
             logger(f"   Manga Mode: Starting fetch from page 1 (offset 0).")
         if end_page:
             logger(f"   Manga Mode: Will fetch up to page {end_page}.")
-
-        # --- START: MANGA MODE FALLBACK LOGIC ---
-        is_first_page_attempt_manga = True
-        api_base_url_manga = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
-        # --- END: MANGA MODE FALLBACK LOGIC ---
-
         while True:
             if pause_event and pause_event.is_set():
                 logger("   Manga mode post fetching paused...")
@@ -223,10 +213,7 @@ def download_from_api(
                 logger(f"   Manga Mode: Reached specified end page ({end_page}). Stopping post fetch.")
                 break
             try:
-                # --- START: MANGA MODE FALLBACK EXECUTION ---
-                posts_batch_manga = fetch_posts_paginated(api_base_url_manga, headers, current_offset_manga, logger, cancellation_event, pause_event, cookies_dict=cookies_for_api)
-                is_first_page_attempt_manga = False # Success, no need to fallback
-                # --- END: MANGA MODE FALLBACK EXECUTION ---
+                posts_batch_manga = fetch_posts_paginated(api_base_url, headers, current_offset_manga, logger, cancellation_event, pause_event, cookies_dict=cookies_for_api)
                 if not isinstance(posts_batch_manga, list):
                     logger(f"❌ API Error (Manga Mode): Expected list of posts, got {type(posts_batch_manga)}.")
                     break
@@ -244,15 +231,6 @@ def download_from_api(
                 current_offset_manga += page_size
                 time.sleep(0.6)
             except RuntimeError as e:
-                # --- START: MANGA MODE FALLBACK HANDLING ---
-                if is_first_page_attempt_manga and fallback_api_domain:
-                    logger(f"   ⚠️ Initial API fetch (Manga Mode) from '{api_domain}' failed: {e}")
-                    logger(f"   ↪️ Falling back to old domain: '{fallback_api_domain}'")
-                    api_domain = fallback_api_domain
-                    api_base_url_manga = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
-                    is_first_page_attempt_manga = False
-                    continue # Retry the same offset with the new domain
-                # --- END: MANGA MODE FALLBACK HANDLING ---
                 if "cancelled by user" in str(e).lower():
                     logger(f"ℹ️ Manga mode pagination stopped due to cancellation: {e}")
                 else:
@@ -313,12 +291,6 @@ def download_from_api(
         current_offset = (start_page - 1) * page_size
         current_page_num = start_page
         logger(f"   Starting from page {current_page_num} (calculated offset {current_offset}).")
-    
-    # --- START: STANDARD PAGINATION FALLBACK LOGIC ---
-    is_first_page_attempt = True
-    api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
-    # --- END: STANDARD PAGINATION FALLBACK LOGIC ---
-    
     while True:
         if pause_event and pause_event.is_set():
             logger("   Post fetching loop paused...")
@@ -337,23 +309,11 @@ def download_from_api(
             logger(f"✅ Reached specified end page ({end_page}) for creator feed. Stopping.")
             break
         try:
-            # --- START: STANDARD PAGINATION FALLBACK EXECUTION ---
             posts_batch = fetch_posts_paginated(api_base_url, headers, current_offset, logger, cancellation_event, pause_event, cookies_dict=cookies_for_api)
-            is_first_page_attempt = False # Success, no more fallbacks needed
-            # --- END: STANDARD PAGINATION FALLBACK EXECUTION ---
             if not isinstance(posts_batch, list):
                 logger(f"❌ API Error: Expected list of posts, got {type(posts_batch)} at page {current_page_num} (offset {current_offset}).")
                 break
         except RuntimeError as e:
-            # --- START: STANDARD PAGINATION FALLBACK HANDLING ---
-            if is_first_page_attempt and fallback_api_domain:
-                logger(f"   ⚠️ Initial API fetch from '{api_domain}' failed: {e}")
-                logger(f"   ↪️ Falling back to old domain: '{fallback_api_domain}'")
-                api_domain = fallback_api_domain
-                api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
-                is_first_page_attempt = False
-                continue # Retry the same offset with the new domain
-            # --- END: STANDARD PAGINATION FALLBACK HANDLING ---
             if "cancelled by user" in str(e).lower():
                 logger(f"ℹ️ Pagination stopped due to cancellation: {e}")
             else:
