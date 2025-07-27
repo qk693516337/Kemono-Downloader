@@ -960,15 +960,16 @@ class EmptyPopupDialog (QDialog ):
 
                 self .parent_app .log_signal .emit (f"ℹ️ Added {num_just_added_posts } selected posts to the download queue. Total in queue: {total_in_queue }.")
 
+                # --- START: MODIFIED LOGIC ---
+                # Removed the blockSignals(True/False) calls to allow the main window's UI to update correctly.
                 if self .parent_app .link_input :
-                    self .parent_app .link_input .blockSignals (True )
                     self .parent_app .link_input .setText (
                     self .parent_app ._tr ("popup_posts_selected_text","Posts - {count} selected").format (count =num_just_added_posts )
                     )
-                    self .parent_app .link_input .blockSignals (False )
                     self .parent_app .link_input .setPlaceholderText (
                     self .parent_app ._tr ("items_in_queue_placeholder","{count} items in queue from popup.").format (count =total_in_queue )
                     )
+                # --- END: MODIFIED LOGIC ---
             
             self.selected_creators_for_queue.clear()
             
@@ -989,15 +990,12 @@ class EmptyPopupDialog (QDialog ):
         self .add_selected_button .setEnabled (True )
         self .setWindowTitle (self ._tr ("creator_popup_title","Creator Selection"))
 
-
-
-
     def _get_domain_for_service (self ,service_name ):
         """Determines the base domain for a given service."""
         service_lower =service_name .lower ()
         if service_lower in ['onlyfans','fansly']:
-            return "coomer.su"
-        return "kemono.su"
+            return "coomer.st" 
+        return "kemono.cr"     
 
     def _handle_add_selected (self ):
         """Gathers globally selected creators and processes them."""

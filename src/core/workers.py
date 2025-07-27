@@ -1,4 +1,5 @@
 import os
+import sys
 import queue
 import re
 import threading
@@ -1175,11 +1176,18 @@ class PostProcessorWorker:
                             if FPDF:
                                 self.logger(f"   Creating formatted PDF for {'comments' if self.text_only_scope == 'comments' else 'content'}...")
                                 pdf = PDF()
+                                if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+                                    # If the application is run as a bundled exe, _MEIPASS is the temp folder
+                                    base_path = sys._MEIPASS
+                                else:
+                                    # If running as a normal .py script, use the project_root_dir
+                                    base_path = self.project_root_dir
+
                                 font_path = ""
                                 bold_font_path = ""
-                                if self.project_root_dir:
-                                    font_path = os.path.join(self.project_root_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
-                                    bold_font_path = os.path.join(self.project_root_dir, 'data', 'dejavu-sans', 'DejaVuSans-Bold.ttf')
+                                if base_path:
+                                    font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+                                    bold_font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans-Bold.ttf')
 
                                 try:
                                     if not os.path.exists(font_path): raise RuntimeError(f"Font file not found: {font_path}")
@@ -1666,10 +1674,12 @@ class PostProcessorWorker:
             if not self.extract_links_only and self.use_post_subfolders and total_downloaded_this_post == 0:
                 path_to_check_for_emptiness = determined_post_save_path_for_history
                 try:
+                    # Check if the path is a directory and if it's empty
                     if os.path.isdir(path_to_check_for_emptiness) and not os.listdir(path_to_check_for_emptiness):
                         self.logger(f"   🗑️ Removing empty post-specific subfolder: '{path_to_check_for_emptiness}'")
                         os.rmdir(path_to_check_for_emptiness)
                 except OSError as e_rmdir:
+                    # Log if removal fails for any reason (e.g., permissions)
                     self.logger(f"   ⚠️ Could not remove empty post-specific subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
 
             result_tuple = (total_downloaded_this_post, total_skipped_this_post,
@@ -1678,6 +1688,15 @@ class PostProcessorWorker:
                             None)
 
         finally:
+            if not self.extract_links_only and self.use_post_subfolders and total_downloaded_this_post == 0:
+                path_to_check_for_emptiness = determined_post_save_path_for_history
+                try:
+                    if os.path.isdir(path_to_check_for_emptiness) and not os.listdir(path_to_check_for_emptiness):
+                        self.logger(f"   🗑️ Removing empty post-specific subfolder: '{path_to_check_for_emptiness}'")
+                        os.rmdir(path_to_check_for_emptiness)
+                except OSError as e_rmdir:
+                    self.logger(f"   ⚠️ Could not remove potentially empty subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
+
             self._emit_signal('worker_finished', result_tuple)
         
         return result_tuple

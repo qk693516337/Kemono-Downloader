@@ -15,7 +15,8 @@ from ...utils.resolution import get_dark_theme
 from ..main_window import get_app_icon_object
 from ...config.constants import (
     THEME_KEY, LANGUAGE_KEY, DOWNLOAD_LOCATION_KEY,
-    RESOLUTION_KEY, UI_SCALE_KEY, SAVE_CREATOR_JSON_KEY 
+    RESOLUTION_KEY, UI_SCALE_KEY, SAVE_CREATOR_JSON_KEY,
+    COOKIE_TEXT_KEY, USE_COOKIE_KEY
 )
 
 
@@ -89,7 +90,9 @@ class FutureSettingsDialog(QDialog):
         # Default Path
         self.default_path_label = QLabel()
         self.save_path_button = QPushButton()
-        self.save_path_button.clicked.connect(self._save_download_path)
+        # --- START: MODIFIED LOGIC ---
+        self.save_path_button.clicked.connect(self._save_cookie_and_path)
+        # --- END: MODIFIED LOGIC ---
         download_window_layout.addWidget(self.default_path_label, 1, 0)
         download_window_layout.addWidget(self.save_path_button, 1, 1)
 
@@ -143,11 +146,13 @@ class FutureSettingsDialog(QDialog):
         self.default_path_label.setText(self._tr("default_path_label", "Default Path:"))
         self.save_creator_json_checkbox.setText(self._tr("save_creator_json_label", "Save Creator.json file"))
         
+        # --- START: MODIFIED LOGIC ---
         # Buttons and Controls
         self._update_theme_toggle_button_text()
-        self.save_path_button.setText(self._tr("settings_save_path_button", "Save Current Download Path"))
-        self.save_path_button.setToolTip(self._tr("settings_save_path_tooltip", "Save the current 'Download Location' for future sessions."))
+        self.save_path_button.setText(self._tr("settings_save_cookie_path_button", "Save Cookie + Download Path"))
+        self.save_path_button.setToolTip(self._tr("settings_save_cookie_path_tooltip", "Save the current 'Download Location' and Cookie settings for future sessions."))
         self.ok_button.setText(self._tr("ok_button", "OK"))
+        # --- END: MODIFIED LOGIC ---
 
         # Populate dropdowns
         self._populate_display_combo_boxes()
@@ -275,22 +280,43 @@ class FutureSettingsDialog(QDialog):
             if msg_box.clickedButton() == restart_button:
                 self.parent_app._request_restart_application()
 
-    def _save_download_path(self):
+    def _save_cookie_and_path(self):
+        """Saves the current download path and/or cookie settings from the main window."""
+        path_saved = False
+        cookie_saved = False
+        
+        # --- Save Download Path Logic ---
         if hasattr(self.parent_app, 'dir_input') and self.parent_app.dir_input:
             current_path = self.parent_app.dir_input.text().strip()
             if current_path and os.path.isdir(current_path):
                 self.parent_app.settings.setValue(DOWNLOAD_LOCATION_KEY, current_path)
-                self.parent_app.settings.sync()
-                QMessageBox.information(self,
-                    self._tr("settings_save_path_success_title", "Path Saved"),
-                    self._tr("settings_save_path_success_message", "Download location '{path}' saved.").format(path=current_path))
-            elif not current_path:
-                 QMessageBox.warning(self,
-                    self._tr("settings_save_path_empty_title", "Empty Path"),
-                    self._tr("settings_save_path_empty_message", "Download location cannot be empty."))
-            else:
-                QMessageBox.warning(self,
-                    self._tr("settings_save_path_invalid_title", "Invalid Path"),
-                    self._tr("settings_save_path_invalid_message", "The path '{path}' is not a valid directory.").format(path=current_path))
+                path_saved = True
+        
+        # --- Save Cookie Logic ---
+        if hasattr(self.parent_app, 'use_cookie_checkbox'):
+            use_cookie = self.parent_app.use_cookie_checkbox.isChecked()
+            cookie_content = self.parent_app.cookie_text_input.text().strip()
+            
+            if use_cookie and cookie_content:
+                self.parent_app.settings.setValue(USE_COOKIE_KEY, True)
+                self.parent_app.settings.setValue(COOKIE_TEXT_KEY, cookie_content)
+                cookie_saved = True
+            else: # Also save the 'off' state
+                self.parent_app.settings.setValue(USE_COOKIE_KEY, False)
+                self.parent_app.settings.setValue(COOKIE_TEXT_KEY, "")
+
+        self.parent_app.settings.sync()
+
+        # --- User Feedback ---
+        if path_saved and cookie_saved:
+            message = self._tr("settings_save_both_success", "Download location and cookie settings saved.")
+        elif path_saved:
+            message = self._tr("settings_save_path_only_success", "Download location saved. No cookie settings were active to save.")
+        elif cookie_saved:
+            message = self._tr("settings_save_cookie_only_success", "Cookie settings saved. Download location was not set.")
         else:
-            QMessageBox.critical(self, "Error", "Could not access download path input from main application.")
+            QMessageBox.warning(self, self._tr("settings_save_nothing_title", "Nothing to Save"),
+                                self._tr("settings_save_nothing_message", "The download location is not a valid directory and no cookie was active."))
+            return
+
+        QMessageBox.information(self, self._tr("settings_save_success_title", "Settings Saved"), message)

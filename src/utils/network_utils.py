@@ -196,10 +196,9 @@ def get_link_platform(url):
         if 'twitter.com' in domain or 'x.com' in domain: return 'twitter/x'
         if 'discord.gg' in domain or 'discord.com/invite' in domain: return 'discord invite'
         if 'pixiv.net' in domain: return 'pixiv'
-        if 'kemono.su' in domain or 'kemono.party' in domain: return 'kemono'
-        if 'coomer.su' in domain or 'coomer.party' in domain: return 'coomer'
+        if 'kemono.su' in domain or 'kemono.party' in domain or 'kemono.cr' in domain: return 'kemono'
+        if 'coomer.su' in domain or 'coomer.party' in domain or 'coomer.st' in domain: return 'coomer'
         
-        # Fallback to a generic name for other domains
         parts = domain.split('.')
         if len(parts) >= 2:
             return parts[-2]

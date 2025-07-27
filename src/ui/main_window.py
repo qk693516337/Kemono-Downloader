@@ -105,6 +105,7 @@ class DownloaderApp (QWidget ):
         self.active_update_profile = None
         self.new_posts_for_update = []
         self.is_finishing = False 
+        self.finish_lock = threading.Lock() 
 
         saved_res = self.settings.value(RESOLUTION_KEY, "Auto")
         if saved_res != "Auto":
@@ -266,7 +267,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.2.0")
+        self.setWindowTitle("Kemono Downloader v6.2.1")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -284,6 +285,7 @@ class DownloaderApp (QWidget ):
         self._retranslate_main_ui()
         self._load_persistent_history()
         self._load_saved_download_location()
+        self._load_saved_cookie_settings() 
         self._update_button_states_and_connections()
         self._check_for_interrupted_session()
 
@@ -1570,6 +1572,31 @@ class DownloaderApp (QWidget ):
             QMessageBox .critical (self ,"Dialog Error",f"An unexpected error occurred with the folder selection dialog: {e }")
 
     def handle_main_log(self, message):
+        if isinstance(message, str) and message.startswith("MANGA_FETCH_PROGRESS:"):
+            try:
+                parts = message.split(":")
+                fetched_count = int(parts[1])
+                page_num = int(parts[2])
+                self.progress_label.setText(self._tr("progress_fetching_manga_pages", "Progress: Fetching Page {page} ({count} posts found)...").format(page=page_num, count=fetched_count))
+                QCoreApplication.processEvents() 
+            except (ValueError, IndexError):
+                try:
+                    fetched_count = int(message.split(":")[1])
+                    self.progress_label.setText(self._tr("progress_fetching_manga_posts", "Progress: Fetching Manga Posts ({count})...").format(count=fetched_count))
+                    QCoreApplication.processEvents()
+                except (ValueError, IndexError):
+                    pass 
+            return 
+        elif isinstance(message, str) and message.startswith("MANGA_FETCH_COMPLETE:"):
+            try:
+                total_posts = int(message.split(":")[1])
+                self.total_posts_to_process = total_posts
+                self.processed_posts_count = 0
+                self.update_progress_display(self.total_posts_to_process, self.processed_posts_count)
+            except (ValueError, IndexError):
+                pass
+            return 
+
         if message.startswith("TEMP_FILE_PATH:"):
             filepath = message.split(":", 1)[1]
             if self.single_pdf_setting:
@@ -2561,23 +2588,42 @@ class DownloaderApp (QWidget ):
             self .manga_rename_toggle_button .setToolTip ("Click to cycle Manga Filename Style (when Manga Mode is active for a creator feed).")
 
     def _toggle_manga_filename_style (self ):
-        current_style =self .manga_filename_style 
-        new_style =""
-        if current_style ==STYLE_POST_TITLE :
-            new_style =STYLE_ORIGINAL_NAME 
-        elif current_style ==STYLE_ORIGINAL_NAME :
-            new_style =STYLE_DATE_POST_TITLE 
-        elif current_style ==STYLE_DATE_POST_TITLE :
-            new_style =STYLE_POST_TITLE_GLOBAL_NUMBERING 
-        elif current_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
-            new_style =STYLE_DATE_BASED 
-        elif current_style ==STYLE_DATE_BASED :
-            new_style =STYLE_POST_ID # Change this line
-        elif current_style ==STYLE_POST_ID: # Add this block
-            new_style =STYLE_POST_TITLE
-        else :
-            self .log_signal .emit (f"⚠️ Unknown current manga filename style: {current_style }. Resetting to default ('{STYLE_POST_TITLE }').")
-            new_style =STYLE_POST_TITLE 
+        url_text = self.link_input.text().strip() if self.link_input else ""
+        _, _, post_id = extract_post_info(url_text)
+        is_single_post = bool(post_id)
+
+        current_style = self.manga_filename_style
+        new_style = ""
+
+        if is_single_post:
+            # Cycle through a limited set of styles suitable for single posts
+            if current_style == STYLE_POST_TITLE:
+                new_style = STYLE_DATE_POST_TITLE
+            elif current_style == STYLE_DATE_POST_TITLE:
+                new_style = STYLE_ORIGINAL_NAME
+            elif current_style == STYLE_ORIGINAL_NAME:
+                new_style = STYLE_POST_ID
+            elif current_style == STYLE_POST_ID:
+                new_style = STYLE_POST_TITLE
+            else: # Fallback for any other style
+                new_style = STYLE_POST_TITLE
+        else:
+            # Original cycling logic for creator feeds
+            if current_style ==STYLE_POST_TITLE :
+                new_style =STYLE_ORIGINAL_NAME 
+            elif current_style ==STYLE_ORIGINAL_NAME :
+                new_style =STYLE_DATE_POST_TITLE 
+            elif current_style ==STYLE_DATE_POST_TITLE :
+                new_style =STYLE_POST_TITLE_GLOBAL_NUMBERING 
+            elif current_style ==STYLE_POST_TITLE_GLOBAL_NUMBERING :
+                new_style =STYLE_DATE_BASED 
+            elif current_style ==STYLE_DATE_BASED :
+                new_style =STYLE_POST_ID 
+            elif current_style ==STYLE_POST_ID: 
+                new_style =STYLE_POST_TITLE
+            else :
+                self .log_signal .emit (f"⚠️ Unknown current manga filename style: {current_style }. Resetting to default ('{STYLE_POST_TITLE }').")
+                new_style =STYLE_POST_TITLE 
 
         self .manga_filename_style =new_style 
         self .settings .setValue (MANGA_FILENAME_STYLE_KEY ,self .manga_filename_style )
@@ -2643,16 +2689,32 @@ class DownloaderApp (QWidget ):
         url_text =self .link_input .text ().strip ()if self .link_input else ""
         _ ,_ ,post_id =extract_post_info (url_text )
 
+        # --- START: MODIFIED LOGIC ---
         is_creator_feed =not post_id if url_text else False 
+        is_single_post = bool(post_id)
         is_favorite_mode_on =self .favorite_mode_checkbox .isChecked ()if self .favorite_mode_checkbox else False 
 
+        # If the download queue contains items selected from the popup, treat it as a single-post context for UI purposes.
+        if self.favorite_download_queue and all(item.get('type') == 'single_post_from_popup' for item in self.favorite_download_queue):
+            is_single_post = True
+
+        # Allow Manga Mode checkbox for any valid URL (creator or single post) or if single posts are queued.
+        can_enable_manga_checkbox = (is_creator_feed or is_single_post) and not is_favorite_mode_on
+        
         if self .manga_mode_checkbox :
-            self .manga_mode_checkbox .setEnabled (is_creator_feed and not is_favorite_mode_on )
-            if not is_creator_feed and self .manga_mode_checkbox .isChecked ():
+            self .manga_mode_checkbox .setEnabled (can_enable_manga_checkbox)
+            if not can_enable_manga_checkbox and self .manga_mode_checkbox .isChecked ():
                 self .manga_mode_checkbox .setChecked (False )
                 checked =self .manga_mode_checkbox .isChecked ()
 
-        manga_mode_effectively_on =is_creator_feed and checked 
+        manga_mode_effectively_on = can_enable_manga_checkbox and checked
+
+        # If it's a single post context, prevent sequential styles from being selected as they don't apply.
+        sequential_styles = [STYLE_DATE_BASED, STYLE_POST_TITLE_GLOBAL_NUMBERING]
+        if is_single_post and self.manga_filename_style in sequential_styles:
+            self.manga_filename_style = STYLE_POST_TITLE # Default to a safe, non-sequential style
+            self._update_manga_filename_style_button_text()
+        # --- END: MODIFIED LOGIC ---
 
         if self .manga_rename_toggle_button :
             self .manga_rename_toggle_button .setVisible (manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode ))
@@ -2762,7 +2824,9 @@ class DownloaderApp (QWidget ):
         if total_posts >0 or processed_posts >0 :
             self .file_progress_label .setText ("")
 
-    def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False, is_continuation=False):
+    def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False, is_continuation=False, item_type_from_queue=None):
+        self.finish_lock = threading.Lock() 
+        self.is_finishing = False                  
         if self.active_update_profile:
             if not self.new_posts_for_update:
                 return self._check_for_updates()
@@ -2888,17 +2952,30 @@ class DownloaderApp (QWidget ):
         self.cancellation_message_logged_this_session = False
         
         service, user_id, post_id_from_url = extract_post_info(api_url)
+
+        # --- START: MODIFIED SECTION ---
+        # This check is now smarter. It only triggers the error if the item from the queue
+        # was supposed to be a post ('single_post_from_popup', etc.) but couldn't be parsed.
+        if direct_api_url and not post_id_from_url and item_type_from_queue and 'post' in item_type_from_queue:
+            self.log_signal.emit(f"❌ CRITICAL ERROR: Could not parse post ID from the queued POST URL: {api_url}")
+            self.log_signal.emit("   Skipping this item. This might be due to an unsupported URL format or a temporary issue.")
+            self.download_finished(
+                total_downloaded=0, 
+                total_skipped=1, 
+                cancelled_by_user=False, 
+                kept_original_names_list=[]
+            )
+            return False
+        # --- END: MODIFIED SECTION ---
+
         if not service or not user_id:
             QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
             return False
 
-        # Read the setting at the start of the download
         self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
 
-        profile_processed_ids = set() # Default to an empty set
-                        
+        creator_profile_data = {}
         if self.save_creator_json_enabled_this_session:
-            # --- CREATOR PROFILE LOGIC ---
             creator_name_for_profile = None
             if self.is_processing_favorites_queue and self.current_processing_favorite_item_info:
                 creator_name_for_profile = self.current_processing_favorite_item_info.get('name_for_folder')
@@ -2912,7 +2989,6 @@ class DownloaderApp (QWidget ):
 
             creator_profile_data = self._setup_creator_profile(creator_name_for_profile, self.session_file_path)
         
-        # Get all current UI settings and add them to the profile
             current_settings = self._get_current_ui_settings_as_dict(api_url_override=api_url, output_dir_override=effective_output_dir_for_run)
             creator_profile_data['settings'] = current_settings
         
@@ -2924,10 +3000,17 @@ class DownloaderApp (QWidget ):
             self._save_creator_profile(creator_name_for_profile, creator_profile_data, self.session_file_path)
             self.log_signal.emit(f"✅ Profile for '{creator_name_for_profile}' loaded/created. Settings saved.")
         
-            profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
-            # --- END OF PROFILE LOGIC ---
+        profile_processed_ids = set()
 
-        # The rest of this logic runs regardless, but uses the profile data if it was loaded
+        if self.active_update_profile:
+            self.log_signal.emit("   Update session active: Loading existing processed post IDs to find new content.")
+            profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
+        
+        elif not is_restore:
+            self.log_signal.emit("   Fresh download session: Clearing previous post history for this creator to re-download all.")
+            if 'processed_post_ids' in creator_profile_data:
+                creator_profile_data['processed_post_ids'] = []
+
         session_processed_ids = set(processed_post_ids_for_restore)
         combined_processed_ids = session_processed_ids.union(profile_processed_ids)
         processed_post_ids_for_this_run = list(combined_processed_ids)
@@ -3055,7 +3138,7 @@ class DownloaderApp (QWidget ):
         elif backend_filter_mode == 'audio': current_mode_log_text = "Audio Download"
 
         current_char_filter_scope = self.get_char_filter_scope()
-        manga_mode = manga_mode_is_checked and not post_id_from_url
+        manga_mode = manga_mode_is_checked
 
         manga_date_prefix_text = ""
         if manga_mode and (self.manga_filename_style == STYLE_DATE_BASED or self.manga_filename_style == STYLE_ORIGINAL_NAME) and hasattr(self, 'manga_date_prefix_input'):
@@ -3478,6 +3561,7 @@ class DownloaderApp (QWidget ):
             if hasattr (self .download_thread ,'file_progress_signal'):self .download_thread .file_progress_signal .connect (self .update_file_progress_display )
             if hasattr (self .download_thread ,'missed_character_post_signal'):
                 self .download_thread .missed_character_post_signal .connect (self .handle_missed_character_post )
+            if hasattr(self.download_thread, 'overall_progress_signal'): self.download_thread.overall_progress_signal.connect(self.update_progress_display)           
             if hasattr (self .download_thread ,'retryable_file_failed_signal'):
 
                 if hasattr (self .download_thread ,'file_successfully_downloaded_signal'):
@@ -3862,7 +3946,12 @@ class DownloaderApp (QWidget ):
         if not filepath.lower().endswith('.pdf'):
             filepath += '.pdf'
         
-        font_path = os.path.join(self.app_base_dir, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            base_path = sys._MEIPASS
+        else:
+            base_path = self.app_base_dir
+
+        font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
         
         self.log_signal.emit("   Sorting collected posts by date (oldest first)...")
         sorted_content = sorted(posts_content_data, key=lambda x: x.get('published', 'Z'))
@@ -4182,9 +4271,12 @@ class DownloaderApp (QWidget ):
         # Update UI to "Cancelling" state
         self.pause_btn.setEnabled(False)
         self.cancel_btn.setEnabled(False)
+        
+        if hasattr(self, 'reset_button'):
+            self.reset_button.setEnabled(False)
+
         self.progress_label.setText(self._tr("status_cancelling", "Cancelling... Please wait."))
 
-        # Signal all active components to stop
         if self.download_thread and self.download_thread.isRunning():
             self.download_thread.requestInterruption()
             self.log_signal.emit("    Signaled single download thread to interrupt.")
@@ -4199,22 +4291,27 @@ class DownloaderApp (QWidget ):
     def _get_domain_for_service (self ,service_name :str )->str :
         """Determines the base domain for a given service."""
         if not isinstance (service_name ,str ):
-            return "kemono.su"
+            return "kemono.cr"
         service_lower =service_name .lower ()
         coomer_primary_services ={'onlyfans','fansly','manyvids','candfans','gumroad','patreon','subscribestar','dlsite','discord','fantia','boosty','pixiv','fanbox'}
         if service_lower in coomer_primary_services and service_lower not in ['patreon','discord','fantia','boosty','pixiv','fanbox']:
-            return "coomer.su"
-        return "kemono.su"
-
+            return "coomer.st"
+        return "kemono.cr"
 
     def download_finished(self, total_downloaded, total_skipped, cancelled_by_user, kept_original_names_list=None):
-        if self.is_finishing:
+        if not self.finish_lock.acquire(blocking=False):
             return
-        self.is_finishing = True
 
         try:
+            if self.is_finishing:
+                return
+            self.is_finishing = True
+
             if cancelled_by_user:
                 self.log_signal.emit("✅ Cancellation complete. Resetting UI.")
+                self._clear_session_file()
+                self.interrupted_session_data = None
+                self.is_restore_pending = False
                 current_url = self.link_input.text()
                 current_dir = self.dir_input.text()
                 self._perform_soft_ui_reset(preserve_url=current_url, preserve_dir=current_dir)
@@ -4222,13 +4319,14 @@ class DownloaderApp (QWidget ):
                 self.file_progress_label.setText("")
                 if self.pause_event: self.pause_event.clear()
                 self.is_paused = False
-                return # Exit after handling cancellation
+                return
 
             self.log_signal.emit("🏁 Download of current item complete.")
 
             if self.is_processing_favorites_queue and self.favorite_download_queue:
                 self.log_signal.emit("✅ Item finished. Processing next in queue...")
-                self.is_finishing = False # Allow the next item in queue to start
+                self.is_finishing = False 
+                self.finish_lock.release() 
                 self._process_next_favorite_download()
                 return  
 
@@ -4317,6 +4415,7 @@ class DownloaderApp (QWidget ):
                                              QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
                 if reply == QMessageBox.Yes:
                     self.is_finishing = False # Allow retry session to start
+                    self.finish_lock.release() # Release lock for the retry session
                     self._start_failed_files_retry_session()
                     return # Exit to allow retry session to run
                 else:
@@ -4334,7 +4433,7 @@ class DownloaderApp (QWidget ):
             self.cancellation_message_logged_this_session = False
             self.active_update_profile = None 
         finally:
-            self.is_finishing = False
+            pass
 
     def _handle_keep_duplicates_toggled(self, checked):
         """Shows the duplicate handling dialog when the checkbox is checked."""
@@ -5164,6 +5263,31 @@ class DownloaderApp (QWidget ):
                     if hasattr(self, 'link_input'):
                         self.last_link_input_text_for_queue_sync = self.link_input.text()
 
+                # --- START: MODIFIED LOGIC ---
+                # Manually trigger the UI update now that the queue is populated and the dialog is closed.
+                self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
+                # --- END: MODIFIED LOGIC ---
+
+    def _load_saved_cookie_settings(self):
+        """Loads and applies saved cookie settings on startup."""
+        try:
+            use_cookie_saved = self.settings.value(USE_COOKIE_KEY, False, type=bool)
+            cookie_content_saved = self.settings.value(COOKIE_TEXT_KEY, "", type=str)
+
+            if use_cookie_saved and cookie_content_saved:
+                self.use_cookie_checkbox.setChecked(True)
+                self.cookie_text_input.setText(cookie_content_saved)
+                
+                # Check if the saved content is a file path and update UI accordingly
+                if os.path.exists(cookie_content_saved):
+                    self.selected_cookie_filepath = cookie_content_saved
+                    self.cookie_text_input.setReadOnly(True)
+                    self._update_cookie_input_placeholders_and_tooltips()
+                
+                self.log_signal.emit(f"ℹ️ Loaded saved cookie settings.")
+        except Exception as e:
+            self.log_signal.emit(f"⚠️ Could not load saved cookie settings: {e}")
+
     def _show_favorite_artists_dialog (self ):
         if self ._is_download_active ()or self .is_processing_favorites_queue :
             QMessageBox .warning (self ,"Busy","Another download operation is already in progress.")
@@ -5285,7 +5409,7 @@ class DownloaderApp (QWidget ):
         else :
             self .log_signal .emit ("ℹ️ Favorite posts selection cancelled.")
 
-    def _process_next_favorite_download (self ):
+    def _process_next_favorite_download(self):
 
         if self.favorite_download_queue and not self.is_processing_favorites_queue:
             manga_mode_is_checked = self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False
@@ -5330,33 +5454,43 @@ class DownloaderApp (QWidget ):
         next_url =self .current_processing_favorite_item_info ['url']
         item_display_name =self .current_processing_favorite_item_info .get ('name','Unknown Item')
 
-        item_type =self .current_processing_favorite_item_info .get ('type','artist')
-        self .log_signal .emit (f"▶️ Processing next favorite from queue: '{item_display_name }' ({next_url })")
+        # --- START: MODIFIED SECTION ---
+        # Get the type of item from the queue to help start_download make smarter decisions.
+        item_type = self.current_processing_favorite_item_info.get('type', 'artist')
+        self.log_signal.emit(f"▶️ Processing next favorite from queue ({item_type}): '{item_display_name}' ({next_url})")
 
-        override_dir =None 
-        item_scope =self .current_processing_favorite_item_info .get ('scope_from_popup')
-        if item_scope is None :
-            item_scope =self .favorite_download_scope 
+        override_dir = None
+        item_scope = self.current_processing_favorite_item_info.get('scope_from_popup')
+        if item_scope is None:
+            item_scope = self.favorite_download_scope
 
-        main_download_dir =self .dir_input .text ().strip ()
+        main_download_dir = self.dir_input.text().strip()
 
-        should_create_artist_folder =False 
-        if item_type =='creator_popup_selection'and item_scope ==EmptyPopupDialog .SCOPE_CREATORS :
-            should_create_artist_folder =True 
-        elif item_type !='creator_popup_selection'and self .favorite_download_scope ==FAVORITE_SCOPE_ARTIST_FOLDERS :
-            should_create_artist_folder =True 
+        should_create_artist_folder = False
+        if item_type == 'creator_popup_selection' and item_scope == EmptyPopupDialog.SCOPE_CREATORS:
+            should_create_artist_folder = True
+        elif item_type != 'creator_popup_selection' and self.favorite_download_scope == FAVORITE_SCOPE_ARTIST_FOLDERS:
+            should_create_artist_folder = True
 
-        if should_create_artist_folder and main_download_dir :
-            folder_name_key =self .current_processing_favorite_item_info .get ('name_for_folder','Unknown_Folder')
-            item_specific_folder_name =clean_folder_name (folder_name_key )
-            override_dir =os .path .normpath (os .path .join (main_download_dir ,item_specific_folder_name ))
-            self .log_signal .emit (f"    Scope requires artist folder. Target directory: '{override_dir }'")
+        if should_create_artist_folder and main_download_dir:
+            folder_name_key = self.current_processing_favorite_item_info.get('name_for_folder', 'Unknown_Folder')
+            item_specific_folder_name = clean_folder_name(folder_name_key)
+            override_dir = os.path.normpath(os.path.join(main_download_dir, item_specific_folder_name))
+            self.log_signal.emit(f"    Scope requires artist folder. Target directory: '{override_dir}'")
 
-        success_starting_download =self .start_download (direct_api_url =next_url ,override_output_dir =override_dir, is_continuation=True )
+        # Pass the item_type to the start_download function
+        success_starting_download = self.start_download(
+            direct_api_url=next_url,
+            override_output_dir=override_dir,
+            is_continuation=True,
+            item_type_from_queue=item_type
+        )
+        # --- END: MODIFIED SECTION ---
 
-        if not success_starting_download :
-            self .log_signal .emit (f"⚠️ Failed to initiate download for '{item_display_name }'. Skipping this item in queue.")
-            self .download_finished (total_downloaded =0 ,total_skipped =1 ,cancelled_by_user =True ,kept_original_names_list =[])
+        if not success_starting_download:
+            self.log_signal.emit(f"⚠️ Failed to initiate download for '{item_display_name}'. Skipping and moving to the next item in queue.")
+            # Use a QTimer to avoid deep recursion and correctly move to the next item.
+            QTimer.singleShot(100, self._process_next_favorite_download)
 
 class ExternalLinkDownloadThread (QThread ):
     """A QThread to handle downloading multiple external links sequentially."""
