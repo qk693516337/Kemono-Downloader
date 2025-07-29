@@ -4,7 +4,7 @@ from PyQt5.QtCore import QUrl, QSize, Qt
 from PyQt5.QtGui import QIcon, QDesktopServices
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout,
-    QStackedWidget, QScrollArea, QFrame, QWidget
+    QStackedWidget, QListWidget, QFrame, QWidget, QScrollArea
 )
 from ...i18n.translator import get_translation
 from ..main_window import get_app_icon_object
@@ -46,13 +46,12 @@ class TourStepWidget(QWidget):
         layout.addWidget(scroll_area, 1)
 
 
-class HelpGuideDialog (QDialog ):
-    """A multi-page dialog for displaying the feature guide."""
-    def __init__ (self ,steps_data ,parent_app ,parent =None ):
-        super ().__init__ (parent )
-        self .current_step =0 
-        self .steps_data =steps_data 
-        self .parent_app =parent_app 
+class HelpGuideDialog(QDialog):
+    """A multi-page dialog for displaying the feature guide with a navigation list."""
+    def __init__(self, steps_data, parent_app, parent=None):
+        super().__init__(parent)
+        self.steps_data = steps_data
+        self.parent_app = parent_app
 
         scale = self.parent_app.scale_factor if hasattr(self.parent_app, 'scale_factor') else 1.0
 
@@ -61,7 +60,7 @@ class HelpGuideDialog (QDialog ):
             self.setWindowIcon(app_icon)
 
         self.setModal(True)
-        self.resize(int(650 * scale), int(600 * scale))
+        self.resize(int(800 * scale), int(650 * scale))
 
         dialog_font_size = int(11 * scale)
         
@@ -69,6 +68,7 @@ class HelpGuideDialog (QDialog ):
         if hasattr(self.parent_app, 'current_theme') and self.parent_app.current_theme == "dark":
             current_theme_style = get_dark_theme(scale)
         else:
+            # Basic light theme fallback
             current_theme_style = f"""
                 QDialog {{ background-color: #F0F0F0; border: 1px solid #B0B0B0; }}
                 QLabel {{ color: #1E1E1E; }}
@@ -86,118 +86,107 @@ class HelpGuideDialog (QDialog ):
             """
 
         self.setStyleSheet(current_theme_style)
-        self ._init_ui ()
-        if self .parent_app :
-            self .move (self .parent_app .geometry ().center ()-self .rect ().center ())
+        self._init_ui()
+        if self.parent_app:
+            self.move(self.parent_app.geometry().center() - self.rect().center())
 
-    def _tr (self ,key ,default_text =""):
+    def _tr(self, key, default_text=""):
         """Helper to get translation based on current app language."""
-        if callable (get_translation )and self .parent_app :
-            return get_translation (self .parent_app .current_selected_language ,key ,default_text )
-        return default_text 
+        if callable(get_translation) and self.parent_app:
+            return get_translation(self.parent_app.current_selected_language, key, default_text)
+        return default_text
 
+    def _init_ui(self):
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(10)
 
-    def _init_ui (self ):
-        main_layout =QVBoxLayout (self )
-        main_layout .setContentsMargins (0 ,0 ,0 ,0 )
-        main_layout .setSpacing (0 )
+        # Title
+        title_label = QLabel(self._tr("help_guide_dialog_title", "Kemono Downloader - Feature Guide"))
+        scale = getattr(self.parent_app, 'scale_factor', 1.0)
+        title_font_size = int(16 * scale)
+        title_label.setStyleSheet(f"font-size: {title_font_size}pt; font-weight: bold; color: #E0E0E0;")
+        title_label.setAlignment(Qt.AlignCenter)
+        main_layout.addWidget(title_label)
 
-        self .stacked_widget =QStackedWidget ()
-        main_layout .addWidget (self .stacked_widget ,1 )
+        # Content Layout (Navigation + Stacked Pages)
+        content_layout = QHBoxLayout()
+        main_layout.addLayout(content_layout, 1)
 
-        self .tour_steps_widgets =[]
-        scale = self.parent_app.scale_factor if hasattr(self.parent_app, 'scale_factor') else 1.0
-        for title, content in self.steps_data:
-            step_widget = TourStepWidget(title, content, scale=scale) 
-            self.tour_steps_widgets.append(step_widget)
+        self.nav_list = QListWidget()
+        self.nav_list.setFixedWidth(int(220 * scale))
+        self.nav_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: #2E2E2E;
+                border: 1px solid #4A4A4A;
+                border-radius: 4px;
+                font-size: {int(11 * scale)}pt;
+            }}
+            QListWidget::item {{
+                padding: 10px;
+                border-bottom: 1px solid #4A4A4A;
+            }}
+            QListWidget::item:selected {{
+                background-color: #87CEEB;
+                color: #2E2E2E;
+                font-weight: bold;
+            }}
+        """)
+        content_layout.addWidget(self.nav_list)
+
+        self.stacked_widget = QStackedWidget()
+        content_layout.addWidget(self.stacked_widget)
+
+        for title_key, content_key in self.steps_data:
+            title = self._tr(title_key, title_key)
+            content = self._tr(content_key, f"Content for {content_key} not found.")
+            
+            self.nav_list.addItem(title)
+            
+            step_widget = TourStepWidget(title, content, scale=scale)
             self.stacked_widget.addWidget(step_widget)
 
-        self .setWindowTitle (self ._tr ("help_guide_dialog_title","Kemono Downloader - Feature Guide"))
+        self.nav_list.currentRowChanged.connect(self.stacked_widget.setCurrentIndex)
+        if self.nav_list.count() > 0:
+            self.nav_list.setCurrentRow(0)
 
-        buttons_layout =QHBoxLayout ()
-        buttons_layout .setContentsMargins (15 ,10 ,15 ,15 )
-        buttons_layout .setSpacing (10 )
+        # Footer Layout (Social links and Close button)
+        footer_layout = QHBoxLayout()
+        footer_layout.setContentsMargins(0, 10, 0, 0)
+        
+        # Social Media Icons
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            assets_base_dir = sys._MEIPASS
+        else:
+            assets_base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 
-        self .back_button =QPushButton (self ._tr ("tour_dialog_back_button","Back"))
-        self .back_button .clicked .connect (self ._previous_step )
-        self .back_button .setEnabled (False )
+        github_icon_path = os.path.join(assets_base_dir, "assets", "github.png")
+        instagram_icon_path = os.path.join(assets_base_dir, "assets", "instagram.png")
+        discord_icon_path = os.path.join(assets_base_dir, "assets", "discord.png")
 
-        if getattr (sys ,'frozen',False )and hasattr (sys ,'_MEIPASS'):
-            assets_base_dir =sys ._MEIPASS 
-        else :
-            assets_base_dir =os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
+        self.github_button = QPushButton(QIcon(github_icon_path), "")
+        self.instagram_button = QPushButton(QIcon(instagram_icon_path), "")
+        self.discord_button = QPushButton(QIcon(discord_icon_path), "")
 
-        github_icon_path =os .path .join (assets_base_dir ,"assets","github.png")
-        instagram_icon_path =os .path .join (assets_base_dir ,"assets","instagram.png")
-        discord_icon_path =os .path .join (assets_base_dir ,"assets","discord.png")
-
-        self .github_button =QPushButton (QIcon (github_icon_path ),"")
-        self .instagram_button =QPushButton (QIcon (instagram_icon_path ),"")
-        self .Discord_button =QPushButton (QIcon (discord_icon_path ),"")
-
-        scale = self.parent_app.scale_factor if hasattr(self.parent_app, 'scale_factor') else 1.0
         icon_dim = int(24 * scale)
         icon_size = QSize(icon_dim, icon_dim)
-        self .github_button .setIconSize (icon_size )
-        self .instagram_button .setIconSize (icon_size )
-        self .Discord_button .setIconSize (icon_size )
+        
+        for button, tooltip_key, url in [
+            (self.github_button, "help_guide_github_tooltip", "https://github.com/Yuvi9587"),
+            (self.instagram_button, "help_guide_instagram_tooltip", "https://www.instagram.com/uvi.arts/"),
+            (self.discord_button, "help_guide_discord_tooltip", "https://discord.gg/BqP64XTdJN")
+        ]:
+            button.setIconSize(icon_size)
+            button.setToolTip(self._tr(tooltip_key))
+            button.setFixedSize(icon_size.width() + 8, icon_size.height() + 8)
+            button.setStyleSheet("background-color: transparent; border: none;")
+            button.clicked.connect(lambda _, u=url: QDesktopServices.openUrl(QUrl(u)))
+            footer_layout.addWidget(button)
 
-        self .next_button =QPushButton (self ._tr ("tour_dialog_next_button","Next"))
-        self .next_button .clicked .connect (self ._next_step_action )
-        self .next_button .setDefault (True )
-        self .github_button .clicked .connect (self ._open_github_link )
-        self .instagram_button .clicked .connect (self ._open_instagram_link )
-        self .Discord_button .clicked .connect (self ._open_Discord_link )
-        self .github_button .setToolTip (self ._tr ("help_guide_github_tooltip","Visit project's GitHub page (Opens in browser)"))
-        self .instagram_button .setToolTip (self ._tr ("help_guide_instagram_tooltip","Visit our Instagram page (Opens in browser)"))
-        self .Discord_button .setToolTip (self ._tr ("help_guide_discord_tooltip","Visit our Discord community (Opens in browser)"))
+        footer_layout.addStretch(1)
 
+        self.finish_button = QPushButton(self._tr("tour_dialog_finish_button", "Finish"))
+        self.finish_button.clicked.connect(self.accept)
+        footer_layout.addWidget(self.finish_button)
 
-        social_layout =QHBoxLayout ()
-        social_layout .setSpacing (10 )
-        social_layout .addWidget (self .github_button )
-        social_layout .addWidget (self .instagram_button )
-        social_layout .addWidget (self .Discord_button )
-
-        while buttons_layout .count ():
-            item =buttons_layout .takeAt (0 )
-            if item .widget ():
-                item .widget ().setParent (None )
-            elif item .layout ():
-                pass 
-        buttons_layout .addLayout (social_layout )
-        buttons_layout .addStretch (1 )
-        buttons_layout .addWidget (self .back_button )
-        buttons_layout .addWidget (self .next_button )
-        main_layout .addLayout (buttons_layout )
-        self ._update_button_states ()
-
-    def _next_step_action (self ):
-        if self .current_step <len (self .tour_steps_widgets )-1 :
-            self .current_step +=1 
-            self .stacked_widget .setCurrentIndex (self .current_step )
-        else :
-            self .accept ()
-        self ._update_button_states ()
-
-    def _previous_step (self ):
-        if self .current_step >0 :
-            self .current_step -=1 
-            self .stacked_widget .setCurrentIndex (self .current_step )
-        self ._update_button_states ()
-
-    def _update_button_states (self ):
-        if self .current_step ==len (self .tour_steps_widgets )-1 :
-            self .next_button .setText (self ._tr ("tour_dialog_finish_button","Finish"))
-        else :
-            self .next_button .setText (self ._tr ("tour_dialog_next_button","Next"))
-        self .back_button .setEnabled (self .current_step >0 )
-
-    def _open_github_link (self ):
-        QDesktopServices .openUrl (QUrl ("https://github.com/Yuvi9587"))
-
-    def _open_instagram_link (self ):
-        QDesktopServices .openUrl (QUrl ("https://www.instagram.com/uvi.arts/"))
-
-    def _open_Discord_link (self ):
-        QDesktopServices .openUrl (QUrl ("https://discord.gg/BqP64XTdJN"))
+        main_layout.addLayout(footer_layout)

@@ -3,15 +3,19 @@ import os
 import re
 import traceback
 import json
+import base64
+import time
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 # --- Third-Party Library Imports ---
+# Make sure to install these: pip install requests pycryptodome gdown
 import requests
+
 try:
-    from mega import Mega
-    MEGA_AVAILABLE = True
+    from Crypto.Cipher import AES
+    PYCRYPTODOME_AVAILABLE = True
 except ImportError:
-    MEGA_AVAILABLE = False
+    PYCRYPTODOME_AVAILABLE = False
 
 try:
     import gdown
@@ -19,17 +23,15 @@ try:
 except ImportError:
     GDRIVE_AVAILABLE = False
 
-# --- Helper Functions ---
+# --- Constants ---
+MEGA_API_URL = "https://g.api.mega.co.nz"
+
+# --- Helper Functions (Original and New) ---
 
 def _get_filename_from_headers(headers):
     """
     Extracts a filename from the Content-Disposition header.
-
-    Args:
-        headers (dict): A dictionary of HTTP response headers.
-
-    Returns:
-        str or None: The extracted filename, or None if not found.
+    (This is from your original file and is kept for Dropbox downloads)
     """
     cd = headers.get('content-disposition')
     if not cd:
@@ -37,64 +39,180 @@ def _get_filename_from_headers(headers):
     
     fname_match = re.findall('filename="?([^"]+)"?', cd)
     if fname_match:
-        # Sanitize the filename to prevent directory traversal issues
-        # and remove invalid characters for most filesystems.
         sanitized_name = re.sub(r'[<>:"/\\|?*]', '_', fname_match[0].strip())
         return sanitized_name
         
     return None
 
-# --- Main Service Downloader Functions ---
+# --- NEW: Helper functions for Mega decryption ---
+
+def urlb64_to_b64(s):
+    """Converts a URL-safe base64 string to a standard base64 string."""
+    s = s.replace('-', '+').replace('_', '/')
+    s += '=' * (-len(s) % 4)
+    return s
+
+def b64_to_bytes(s):
+    """Decodes a URL-safe base64 string to bytes."""
+    return base64.b64decode(urlb64_to_b64(s))
+
+def bytes_to_hex(b):
+    """Converts bytes to a hex string."""
+    return b.hex()
+
+def hex_to_bytes(h):
+    """Converts a hex string to bytes."""
+    return bytes.fromhex(h)
+
+def hrk2hk(hex_raw_key):
+    """Derives the final AES key from the raw key components for Mega."""
+    key_part1 = int(hex_raw_key[0:16], 16)
+    key_part2 = int(hex_raw_key[16:32], 16)
+    key_part3 = int(hex_raw_key[32:48], 16)
+    key_part4 = int(hex_raw_key[48:64], 16)
+    
+    final_key_part1 = key_part1 ^ key_part3
+    final_key_part2 = key_part2 ^ key_part4
+    
+    return f'{final_key_part1:016x}{final_key_part2:016x}'
+
+def decrypt_at(at_b64, key_bytes):
+    """Decrypts the 'at' attribute to get file metadata."""
+    at_bytes = b64_to_bytes(at_b64)
+    iv = b'\0' * 16
+    cipher = AES.new(key_bytes, AES.MODE_CBC, iv)
+    decrypted_at = cipher.decrypt(at_bytes)
+    return decrypted_at.decode('utf-8').strip('\0').replace('MEGA', '')
+
+# --- NEW: Core Logic for Mega Downloads ---
+
+def get_mega_file_info(file_id, file_key, session, logger_func):
+    """Fetches file metadata and the temporary download URL from the Mega API."""
+    try:
+        hex_raw_key = bytes_to_hex(b64_to_bytes(file_key))
+        hex_key = hrk2hk(hex_raw_key)
+        key_bytes = hex_to_bytes(hex_key)
+
+        # Request file attributes
+        payload = [{"a": "g", "p": file_id}]
+        response = session.post(f"{MEGA_API_URL}/cs", json=payload, timeout=20)
+        response.raise_for_status()
+        res_json = response.json()
+
+        if isinstance(res_json, list) and isinstance(res_json[0], int) and res_json[0] < 0:
+            logger_func(f"   [Mega] ❌ API Error: {res_json[0]}. The link may be invalid or removed.")
+            return None
+
+        file_size = res_json[0]['s']
+        at_b64 = res_json[0]['at']
+
+        # Decrypt attributes to get the file name
+        at_dec_json_str = decrypt_at(at_b64, key_bytes)
+        at_dec_json = json.loads(at_dec_json_str)
+        file_name = at_dec_json['n']
+
+        # Request the temporary download URL
+        payload = [{"a": "g", "g": 1, "p": file_id}]
+        response = session.post(f"{MEGA_API_URL}/cs", json=payload, timeout=20)
+        response.raise_for_status()
+        res_json = response.json()
+        dl_temp_url = res_json[0]['g']
+
+        return {
+            'file_name': file_name,
+            'file_size': file_size,
+            'dl_url': dl_temp_url,
+            'hex_raw_key': hex_raw_key
+        }
+    except (requests.RequestException, json.JSONDecodeError, KeyError, ValueError) as e:
+        logger_func(f"   [Mega] ❌ Failed to get file info: {e}")
+        return None
+
+def download_and_decrypt_mega_file(info, download_path, logger_func):
+    """Downloads the file and decrypts it chunk by chunk, reporting progress."""
+    file_name = info['file_name']
+    file_size = info['file_size']
+    dl_url = info['dl_url']
+    hex_raw_key = info['hex_raw_key']
+
+    final_path = os.path.join(download_path, file_name)
+
+    if os.path.exists(final_path) and os.path.getsize(final_path) == file_size:
+        logger_func(f"   [Mega] ℹ️ File '{file_name}' already exists with the correct size. Skipping.")
+        return
+
+    # Prepare for decryption
+    key = hex_to_bytes(hrk2hk(hex_raw_key))
+    iv_hex = hex_raw_key[32:48] + '0000000000000000'
+    iv_bytes = hex_to_bytes(iv_hex)
+    cipher = AES.new(key, AES.MODE_CTR, initial_value=iv_bytes, nonce=b'')
+
+    try:
+        with requests.get(dl_url, stream=True, timeout=(15, 300)) as r:
+            r.raise_for_status()
+            downloaded_bytes = 0
+            last_log_time = time.time()
+            
+            with open(final_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if not chunk:
+                        continue
+                    decrypted_chunk = cipher.decrypt(chunk)
+                    f.write(decrypted_chunk)
+                    downloaded_bytes += len(chunk)
+                    
+                    # Log progress every second
+                    current_time = time.time()
+                    if current_time - last_log_time > 1:
+                        progress_percent = (downloaded_bytes / file_size) * 100 if file_size > 0 else 0
+                        logger_func(f"   [Mega] Downloading '{file_name}': {downloaded_bytes/1024/1024:.2f}MB / {file_size/1024/1024:.2f}MB ({progress_percent:.1f}%)")
+                        last_log_time = current_time
+        
+        logger_func(f"   [Mega] ✅ Successfully downloaded '{file_name}' to '{download_path}'")
+    except requests.RequestException as e:
+        logger_func(f"   [Mega] ❌ Download failed for '{file_name}': {e}")
+    except IOError as e:
+        logger_func(f"   [Mega] ❌ Could not write to file '{final_path}': {e}")
+    except Exception as e:
+        logger_func(f"   [Mega] ❌ An unexpected error occurred during download/decryption: {e}")
+
+
+# --- REPLACEMENT Main Service Downloader Function for Mega ---
 
 def download_mega_file(mega_url, download_path, logger_func=print):
     """
-    Downloads a file from a Mega.nz URL.
-    Handles both public links and links that include a decryption key.
+    Downloads a file from a Mega.nz URL using direct requests and decryption.
+    This replaces the old mega.py implementation.
     """
-    if not MEGA_AVAILABLE:
-        logger_func("❌ Mega download failed: 'mega.py' library is not installed.")
+    if not PYCRYPTODOME_AVAILABLE:
+        logger_func("❌ Mega download failed: 'pycryptodome' library is not installed. Please run: pip install pycryptodome")
         return
 
-    logger_func(f"   [Mega] Initializing Mega client...")
-    try:
-        mega = Mega()
-        # Anonymous login is sufficient for public links
-        m = mega.login()
+    logger_func(f"   [Mega] Initializing download for: {mega_url}")
+    
+    # Regex to capture file ID and key from both old and new URL formats
+    match = re.search(r'mega(?:\.co)?\.nz/(?:file/|#!)?([a-zA-Z0-9]+)(?:#|!)([a-zA-Z0-9_.-]+)', mega_url)
+    if not match:
+        logger_func(f"   [Mega] ❌ Error: Invalid Mega URL format.")
+        return
+        
+    file_id = match.group(1)
+    file_key = match.group(2)
 
-        # --- MODIFIED PART: Added error handling for invalid links ---
-        try:
-            file_details = m.find(mega_url)
-            if file_details is None:
-                logger_func(f"   [Mega] ❌ Download failed. The link appears to be invalid or has been taken down: {mega_url}")
-                return
-        except (ValueError, json.JSONDecodeError) as e:
-            # This block catches the "Expecting value" error
-            logger_func(f"   [Mega] ❌ Download failed. The link is likely invalid or expired. Error: {e}")
-            return
-        except Exception as e:
-            # Catch other potential errors from the mega.py library
-            logger_func(f"   [Mega] ❌ An unexpected error occurred trying to access the link: {e}")
-            return
-        # --- END OF MODIFIED PART ---
+    session = requests.Session()
+    session.headers.update({'User-Agent': 'Kemono-Downloader-PyQt/1.0'})
+    
+    file_info = get_mega_file_info(file_id, file_key, session, logger_func)
+    if not file_info:
+        logger_func(f"   [Mega] ❌ Failed to get file info. The link may be invalid or expired. Aborting.")
+        return
 
-        filename = file_details[1]['a']['n']
-        logger_func(f"   [Mega] File found: '{filename}'. Starting download...")
+    logger_func(f"   [Mega] File found: '{file_info['file_name']}' (Size: {file_info['file_size'] / 1024 / 1024:.2f} MB)")
+    
+    download_and_decrypt_mega_file(file_info, download_path, logger_func)
 
-        # Sanitize filename before saving
-        safe_filename = "".join([c for c in filename if c.isalpha() or c.isdigit() or c in (' ', '.', '_', '-')]).rstrip()
-        final_path = os.path.join(download_path, safe_filename)
 
-        # Check if file already exists
-        if os.path.exists(final_path):
-            logger_func(f"   [Mega] ℹ️ File '{safe_filename}' already exists. Skipping download.")
-            return
-
-        # Start the download
-        m.download_url(mega_url, dest_path=download_path, dest_filename=safe_filename)
-        logger_func(f"   [Mega] ✅ Successfully downloaded '{safe_filename}' to '{download_path}'")
-
-    except Exception as e:
-        logger_func(f"   [Mega] ❌ An unexpected error occurred during the Mega download process: {e}")
+# --- ORIGINAL Functions for Google Drive and Dropbox (Unchanged) ---
 
 def download_gdrive_file(url, download_path, logger_func=print):
     """Downloads a file from a Google Drive link."""
@@ -103,12 +221,9 @@ def download_gdrive_file(url, download_path, logger_func=print):
         return
     try:
         logger_func(f"   [G-Drive] Starting download for: {url}")
-        # --- MODIFIED PART: Added a message and set quiet=True ---
         logger_func("   [G-Drive] Download in progress... This may take some time. Please wait.")
         
-        # By setting quiet=True, the progress bar will no longer be printed to the terminal.
         output_path = gdown.download(url, output=download_path, quiet=True, fuzzy=True)
-        # --- END OF MODIFIED PART ---
         
         if output_path and os.path.exists(output_path):
             logger_func(f"   [G-Drive] ✅ Successfully downloaded to '{output_path}'")
@@ -120,15 +235,9 @@ def download_gdrive_file(url, download_path, logger_func=print):
 def download_dropbox_file(dropbox_link, download_path=".", logger_func=print):
     """
     Downloads a file from a public Dropbox link by modifying the URL for direct download.
-
-    Args:
-        dropbox_link (str): The public Dropbox link to the file.
-        download_path (str): The directory to save the downloaded file.
-        logger_func (callable): Function to use for logging.
     """
     logger_func(f"   [Dropbox] Attempting to download: {dropbox_link}")
     
-    # Modify the Dropbox URL to force a direct download instead of showing the preview page.
     parsed_url = urlparse(dropbox_link)
     query_params = parse_qs(parsed_url.query)
     query_params['dl'] = ['1']
@@ -145,13 +254,11 @@ def download_dropbox_file(dropbox_link, download_path=".", logger_func=print):
         with requests.get(direct_download_url, stream=True, allow_redirects=True, timeout=(10, 300)) as r:
             r.raise_for_status()
             
-            # Determine filename from headers or URL
             filename = _get_filename_from_headers(r.headers) or os.path.basename(parsed_url.path) or "dropbox_file"
             full_save_path = os.path.join(download_path, filename)
             
             logger_func(f"   [Dropbox] Starting download of '{filename}'...")
             
-            # Write file to disk in chunks
             with open(full_save_path, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     f.write(chunk)

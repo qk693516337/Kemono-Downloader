@@ -752,6 +752,17 @@ class PostProcessorWorker:
 
             effective_unwanted_keywords_for_folder_naming = self.unwanted_keywords.copy()
             is_full_creator_download_no_char_filter = not self.target_post_id_from_initial_url and not current_character_filters
+           
+            if (self.show_external_links or self.extract_links_only):
+                embed_data = post_data.get('embed')
+                if isinstance(embed_data, dict) and embed_data.get('url'):
+                    embed_url = embed_data['url']
+                    embed_subject = embed_data.get('subject', embed_url) # Use subject as link text, fallback to URL
+                    platform = get_link_platform(embed_url)
+                    
+                    self.logger(f"   🔗 Found embed link: {embed_url}")
+                    self._emit_signal('external_link', post_title, embed_subject, embed_url, platform, "")
+           
             if is_full_creator_download_no_char_filter and self.creator_download_folder_ignore_words:
                 self.logger(f"   Applying creator download specific folder ignore words ({len(self.creator_download_folder_ignore_words)} words).")
                 effective_unwanted_keywords_for_folder_naming.update(self.creator_download_folder_ignore_words)
