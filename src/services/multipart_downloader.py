@@ -2,6 +2,7 @@
 # --- Standard Library Imports ---
 import os
 import time
+import hashlib
 import http.client
 import traceback
 import threading
