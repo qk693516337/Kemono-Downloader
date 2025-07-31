@@ -34,28 +34,30 @@ class FavoritePostsFetcherThread (QThread ):
         self .target_domain_preference =target_domain_preference 
         self .cancellation_event =threading .Event ()
         self .error_key_map ={
-        "Kemono.su":"kemono_su",
-        "Coomer.su":"coomer_su"
+        "kemono.cr":"kemono_su",
+        "coomer.st":"coomer_su"
         }
 
     def _logger (self ,message ):
         self .parent_logger_func (f"[FavPostsFetcherThread] {message }")
 
-    def run (self ):
-        kemono_fav_posts_url ="https://kemono.su/api/v1/account/favorites?type=post"
-        coomer_fav_posts_url ="https://coomer.su/api/v1/account/favorites?type=post"
+    def run(self):
+        kemono_su_fav_posts_url = "https://kemono.su/api/v1/account/favorites?type=post"
+        coomer_su_fav_posts_url = "https://coomer.su/api/v1/account/favorites?type=post"
+        kemono_cr_fav_posts_url = "https://kemono.cr/api/v1/account/favorites?type=post"
+        coomer_st_fav_posts_url = "https://coomer.st/api/v1/account/favorites?type=post"
 
-        all_fetched_posts_temp =[]
-        error_messages_for_summary =[]
-        fetched_any_successfully =False 
-        any_cookies_loaded_successfully_for_any_source =False 
+        all_fetched_posts_temp = []
+        error_messages_for_summary = []
+        fetched_any_successfully = False
+        any_cookies_loaded_successfully_for_any_source = False
 
-        self .status_update .emit ("key_fetching_fav_post_list_init")
-        self .progress_bar_update .emit (0 ,0 )
+        self.status_update.emit("key_fetching_fav_post_list_init")
+        self.progress_bar_update.emit(0, 0)
 
-        api_sources =[
-        {"name":"Kemono.su","url":kemono_fav_posts_url ,"domain":"kemono.su"},
-        {"name":"Coomer.su","url":coomer_fav_posts_url ,"domain":"coomer.su"}
+        api_sources = [
+            {"name": "Kemono.cr", "url": kemono_cr_fav_posts_url, "domain": "kemono.cr"},
+            {"name": "Coomer.st", "url": coomer_st_fav_posts_url, "domain": "coomer.st"}
         ]
 
         api_sources_to_try =[]
@@ -76,20 +78,41 @@ class FavoritePostsFetcherThread (QThread ):
             if self .cancellation_event .is_set ():
                 self .finished .emit ([],"KEY_FETCH_CANCELLED_DURING")
                 return 
-            cookies_dict_for_source =None 
-            if self .cookies_config ['use_cookie']:
-                cookies_dict_for_source =prepare_cookies_for_request (
-                True ,
-                self .cookies_config ['cookie_text'],
-                self .cookies_config ['selected_cookie_file'],
-                self .cookies_config ['app_base_dir'],
-                self ._logger ,
-                target_domain =source ['domain']
+            cookies_dict_for_source = None
+            if self.cookies_config['use_cookie']:
+                primary_domain = source['domain']
+                fallback_domain = None
+                if primary_domain == "kemono.cr":
+                    fallback_domain = "kemono.su"
+                elif primary_domain == "coomer.st":
+                    fallback_domain = "coomer.su"
+
+                # First, try the primary domain
+                cookies_dict_for_source = prepare_cookies_for_request(
+                    True,
+                    self.cookies_config['cookie_text'],
+                    self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'],
+                    self._logger,
+                    target_domain=primary_domain
                 )
-                if cookies_dict_for_source :
-                    any_cookies_loaded_successfully_for_any_source =True 
-                else :
-                    self ._logger (f"Warning ({source ['name']}): Cookies enabled but could not be loaded for this domain. Fetch might fail if cookies are required.")
+
+                # If no cookies found, try the fallback domain
+                if not cookies_dict_for_source and fallback_domain:
+                    self._logger(f"Warning ({source['name']}): No cookies found for '{primary_domain}'. Trying fallback '{fallback_domain}'...")
+                    cookies_dict_for_source = prepare_cookies_for_request(
+                        True,
+                        self.cookies_config['cookie_text'],
+                        self.cookies_config['selected_cookie_file'],
+                        self.cookies_config['app_base_dir'],
+                        self._logger,
+                        target_domain=fallback_domain
+                    )
+
+                if cookies_dict_for_source:
+                    any_cookies_loaded_successfully_for_any_source = True
+                else:
+                    self._logger(f"Warning ({source['name']}): Cookies enabled but could not be loaded for this domain. Fetch might fail if cookies are required.")
 
             self ._logger (f"Attempting to fetch favorite posts from: {source ['name']} ({source ['url']})")
             source_key_part =self .error_key_map .get (source ['name'],source ['name'].lower ().replace ('.','_'))
@@ -409,14 +432,14 @@ class FavoritePostsDialog (QDialog ):
             if status_key .startswith ("KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_DOMAIN_")or status_key =="KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_GENERIC":
                 status_label_text_key ="fav_posts_cookies_required_error"
                 self ._logger (f"Cookie error: {status_key }. Showing help dialog.")
-                cookie_help_dialog =CookieHelpDialog (self )
+                cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
                 cookie_help_dialog .exec_ ()
             elif status_key =="KEY_AUTH_FAILED":
                 status_label_text_key ="fav_posts_auth_failed_title"
                 self ._logger (f"Auth error: {status_key }. Showing help dialog.")
                 QMessageBox .warning (self ,self ._tr ("fav_posts_auth_failed_title","Authorization Failed (Posts)"),
                 self ._tr ("fav_posts_auth_failed_message_generic","...").format (domain_specific_part =specific_domain_msg_part ))
-                cookie_help_dialog =CookieHelpDialog (self )
+                cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
                 cookie_help_dialog .exec_ ()
             elif status_key =="KEY_NO_FAVORITES_FOUND_ALL_PLATFORMS":
                 status_label_text_key ="fav_posts_no_posts_found_status"

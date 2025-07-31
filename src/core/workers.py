@@ -410,6 +410,39 @@ class PostProcessorWorker:
         unique_id_for_part_file = uuid.uuid4().hex[:8]
         unique_part_file_stem_on_disk = f"{temp_file_base_for_unique_part}_{unique_id_for_part_file}"
         max_retries = 3
+        if not self.keep_in_post_duplicates:
+            final_save_path_check = os.path.join(target_folder_path, filename_to_save_in_main_path)
+            if os.path.exists(final_save_path_check):
+                try:
+                    # Use a HEAD request to get the expected size without downloading the body
+                    with requests.head(file_url, headers=headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True) as head_response:
+                        head_response.raise_for_status()
+                        expected_size = int(head_response.headers.get('Content-Length', -1))
+                    
+                    actual_size = os.path.getsize(final_save_path_check)
+
+                    if expected_size != -1 and actual_size == expected_size:
+                        self.logger(f"   -> Skip (File Exists & Complete): '{filename_to_save_in_main_path}' is already on disk with the correct size.")
+                        
+                        # We still need to add its hash to the session to prevent duplicates in other modes
+                        # This is a quick hash calculation for the already existing file
+                        try:
+                            md5_hasher = hashlib.md5()
+                            with open(final_save_path_check, 'rb') as f_verify:
+                                for chunk in iter(lambda: f_verify.read(8192), b""):
+                                    md5_hasher.update(chunk)
+                            
+                            with self.downloaded_hash_counts_lock:
+                                self.downloaded_hash_counts[md5_hasher.hexdigest()] += 1
+                        except Exception as hash_exc:
+                             self.logger(f"   ⚠️ Could not hash existing file '{filename_to_save_in_main_path}' for session: {hash_exc}")
+
+                        return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
+                    else:
+                        self.logger(f"   ⚠️ File '{filename_to_save_in_main_path}' exists but is incomplete (Expected: {expected_size}, Actual: {actual_size}). Re-downloading.")
+
+                except requests.RequestException as e:
+                    self.logger(f"   ⚠️ Could not verify size of existing file '{filename_to_save_in_main_path}': {e}. Proceeding with download.")
         retry_delay = 5
         downloaded_size_bytes = 0
         calculated_file_hash = None
@@ -741,8 +774,11 @@ class PostProcessorWorker:
             history_data_for_this_post = None
 
             parsed_api_url = urlparse(self.api_url_input)
-            referer_url = f"https://{parsed_api_url.netloc}/"
-            headers = {'User-Agent': 'Mozilla/5.0', 'Referer': referer_url, 'Accept': '*/*'}
+            post_data = self.post
+            post_id = post_data.get('id', 'unknown_id')
+
+            post_page_url = f"https://{parsed_api_url.netloc}/{self.service}/user/{self.user_id}/post/{post_id}"
+            headers = {'User-Agent': 'Mozilla/5.0', 'Referer': post_page_url, 'Accept': '*/*'}
             link_pattern = re.compile(r"""<a\s+.*?href=["'](https?://[^"']+)["'][^>]*>(.*?)</a>""", re.IGNORECASE | re.DOTALL)
             post_data = self.post
             post_title = post_data.get('title', '') or 'untitled_post'
@@ -802,7 +838,7 @@ class PostProcessorWorker:
             all_files_from_post_api_for_char_check = []
             api_file_domain_for_char_check = urlparse(self.api_url_input).netloc
             if not api_file_domain_for_char_check or not any(d in api_file_domain_for_char_check.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
-                api_file_domain_for_char_check = "kemono.su" if "kemono" in self.service.lower() else "coomer.st"
+                api_file_domain_for_char_check = "kemono.cr" if "kemono" in self.service.lower() else "coomer.st"
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 original_api_name = post_main_file_info.get('name') or os.path.basename(post_main_file_info['path'].lstrip('/'))
                 if original_api_name:
@@ -845,9 +881,9 @@ class PostProcessorWorker:
                     try:
                         parsed_input_url_for_comments = urlparse(self.api_url_input)
                         api_domain_for_comments = parsed_input_url_for_comments.netloc
-                        if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'coomer.su', 'coomer.party']):
+                        if not any(d in api_domain_for_comments.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
                             self.logger(f"⚠️ Unrecognized domain '{api_domain_for_comments}' for comment API. Defaulting based on service.")
-                            api_domain_for_comments = "kemono.su" if "kemono" in self.service.lower() else "coomer.party"
+                            api_domain_for_comments = "kemono.cr" if "kemono" in self.service.lower() else "coomer.st"
                         comments_data = fetch_post_comments(
                             api_domain_for_comments, self.service, self.user_id, post_id,
                             headers, self.logger, self.cancellation_event, self.pause_event,
@@ -1332,7 +1368,7 @@ class PostProcessorWorker:
             all_files_from_post_api = []
             api_file_domain = urlparse(self.api_url_input).netloc
             if not api_file_domain or not any(d in api_file_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
-                api_file_domain = "kemono.su" if "kemono" in self.service.lower() else "coomer.st"
+                api_file_domain = "kemono.cr" if "kemono" in self.service.lower() else "coomer.st"
             if post_main_file_info and isinstance(post_main_file_info, dict) and post_main_file_info.get('path'):
                 file_path = post_main_file_info['path'].lstrip('/')
                 original_api_name = post_main_file_info.get('name') or os.path.basename(file_path)

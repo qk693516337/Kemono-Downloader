@@ -37,13 +37,13 @@ class FavoriteArtistsDialog (QDialog ):
         self ._init_ui ()
         self ._fetch_favorite_artists ()
 
-    def _get_domain_for_service (self ,service_name ):
-        service_lower =service_name .lower ()
-        coomer_primary_services ={'onlyfans','fansly','manyvids','candfans'}
-        if service_lower in coomer_primary_services :
-            return "coomer.su"
-        else :
-            return "kemono.su"
+    def _get_domain_for_service(self, service_name):
+        service_lower = service_name.lower()
+        coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans'}
+        if service_lower in coomer_primary_services:
+            return "coomer.st"  # Use the new domain
+        else:
+            return "kemono.cr"   # Use the new domain
 
     def _tr (self ,key ,default_text =""):
         """Helper to get translation based on current app language."""
@@ -128,9 +128,29 @@ class FavoriteArtistsDialog (QDialog ):
     def _fetch_favorite_artists (self ):
 
         if self.cookies_config['use_cookie']:
-            # Check if we can load cookies for at least one of the services.
-            kemono_cookies = prepare_cookies_for_request(True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'], self.cookies_config['app_base_dir'], self._logger, target_domain="kemono.su")
-            coomer_cookies = prepare_cookies_for_request(True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'], self.cookies_config['app_base_dir'], self._logger, target_domain="coomer.su")
+            # --- Kemono Check with Fallback ---
+            kemono_cookies = prepare_cookies_for_request(
+                True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                self.cookies_config['app_base_dir'], self._logger, target_domain="kemono.cr"
+            )
+            if not kemono_cookies:
+                self._logger("No cookies for kemono.cr, trying fallback kemono.su...")
+                kemono_cookies = prepare_cookies_for_request(
+                    True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'], self._logger, target_domain="kemono.su"
+                )
+
+            # --- Coomer Check with Fallback ---
+            coomer_cookies = prepare_cookies_for_request(
+                True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                self.cookies_config['app_base_dir'], self._logger, target_domain="coomer.st"
+            )
+            if not coomer_cookies:
+                self._logger("No cookies for coomer.st, trying fallback coomer.su...")
+                coomer_cookies = prepare_cookies_for_request(
+                    True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'], self._logger, target_domain="coomer.su"
+                )
 
             if not kemono_cookies and not coomer_cookies:
                 # If cookies are enabled but none could be loaded, show help and stop.
@@ -139,7 +159,7 @@ class FavoriteArtistsDialog (QDialog ):
                 cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
                 cookie_help_dialog.exec_()
                 self.download_button.setEnabled(False)
-                return # Stop further execution
+                return  # Stop further execution
 
         kemono_fav_url ="https://kemono.su/api/v1/account/favorites?type=artist"
         coomer_fav_url ="https://coomer.su/api/v1/account/favorites?type=artist"
@@ -149,9 +169,12 @@ class FavoriteArtistsDialog (QDialog ):
         errors_occurred =[]
         any_cookies_loaded_successfully_for_any_source =False 
 
-        api_sources =[
-        {"name":"Kemono.su","url":kemono_fav_url ,"domain":"kemono.su"},
-        {"name":"Coomer.su","url":coomer_fav_url ,"domain":"coomer.su"}
+        kemono_cr_fav_url = "https://kemono.cr/api/v1/account/favorites?type=artist"
+        coomer_st_fav_url = "https://coomer.st/api/v1/account/favorites?type=artist"
+
+        api_sources = [
+            {"name": "Kemono.cr", "url": kemono_cr_fav_url, "domain": "kemono.cr"},
+            {"name": "Coomer.st", "url": coomer_st_fav_url, "domain": "coomer.st"}
         ]
 
         for source in api_sources :
@@ -159,20 +182,41 @@ class FavoriteArtistsDialog (QDialog ):
             self .status_label .setText (self ._tr ("fav_artists_loading_from_source_status","⏳ Loading favorites from {source_name}...").format (source_name =source ['name']))
             QCoreApplication .processEvents ()
 
-            cookies_dict_for_source =None 
-            if self .cookies_config ['use_cookie']:
-                cookies_dict_for_source =prepare_cookies_for_request (
-                True ,
-                self .cookies_config ['cookie_text'],
-                self .cookies_config ['selected_cookie_file'],
-                self .cookies_config ['app_base_dir'],
-                self ._logger ,
-                target_domain =source ['domain']
+            cookies_dict_for_source = None
+            if self.cookies_config['use_cookie']:
+                primary_domain = source['domain']
+                fallback_domain = None
+                if primary_domain == "kemono.cr":
+                    fallback_domain = "kemono.su"
+                elif primary_domain == "coomer.st":
+                    fallback_domain = "coomer.su"
+
+                # First, try the primary domain
+                cookies_dict_for_source = prepare_cookies_for_request(
+                    True,
+                    self.cookies_config['cookie_text'],
+                    self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'],
+                    self._logger,
+                    target_domain=primary_domain
                 )
-                if cookies_dict_for_source :
-                    any_cookies_loaded_successfully_for_any_source =True 
-                else :
-                    self ._logger (f"Warning ({source ['name']}): Cookies enabled but could not be loaded for this domain. Fetch might fail if cookies are required.")
+
+                # If no cookies found, try the fallback domain
+                if not cookies_dict_for_source and fallback_domain:
+                    self._logger(f"Warning ({source['name']}): No cookies found for '{primary_domain}'. Trying fallback '{fallback_domain}'...")
+                    cookies_dict_for_source = prepare_cookies_for_request(
+                        True,
+                        self.cookies_config['cookie_text'],
+                        self.cookies_config['selected_cookie_file'],
+                        self.cookies_config['app_base_dir'],
+                        self._logger,
+                        target_domain=fallback_domain
+                    )
+                
+                if cookies_dict_for_source:
+                    any_cookies_loaded_successfully_for_any_source = True
+                else:
+                    self._logger(f"Warning ({source['name']}): Cookies enabled but could not be loaded for this source (including fallbacks). Fetch might fail.")
             try :
                 headers ={'User-Agent':'Mozilla/5.0'}
                 response =requests .get (source ['url'],headers =headers ,cookies =cookies_dict_for_source ,timeout =20 )
@@ -223,7 +267,7 @@ class FavoriteArtistsDialog (QDialog ):
         if self .cookies_config ['use_cookie']and not any_cookies_loaded_successfully_for_any_source :
             self .status_label .setText (self ._tr ("fav_artists_cookies_required_status","Error: Cookies enabled but could not be loaded for any source."))
             self ._logger ("Error: Cookies enabled but no cookies loaded for any source. Showing help dialog.")
-            cookie_help_dialog =CookieHelpDialog (self )
+            cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
             cookie_help_dialog .exec_ ()
             self .download_button .setEnabled (False )
             if not fetched_any_successfully :

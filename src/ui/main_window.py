@@ -4288,13 +4288,13 @@ class DownloaderApp (QWidget ):
             self.log_signal.emit("    Cancelling active External Link download thread...")
             self.external_link_download_thread.cancel()
 
-    def _get_domain_for_service (self ,service_name :str )->str :
+    def _get_domain_for_service(self, service_name: str) -> str:
         """Determines the base domain for a given service."""
-        if not isinstance (service_name ,str ):
-            return "kemono.cr"
-        service_lower =service_name .lower ()
-        coomer_primary_services ={'onlyfans','fansly','manyvids','candfans','gumroad','patreon','subscribestar','dlsite','discord','fantia','boosty','pixiv','fanbox'}
-        if service_lower in coomer_primary_services and service_lower not in ['patreon','discord','fantia','boosty','pixiv','fanbox']:
+        if not isinstance(service_name, str):
+            return "kemono.cr"  # Default fallback
+        service_lower = service_name.lower()
+        coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans', 'gumroad', 'subscribestar', 'dlsite'}
+        if service_lower in coomer_primary_services:
             return "coomer.st"
         return "kemono.cr"
 
@@ -5343,42 +5343,54 @@ class DownloaderApp (QWidget ):
 
         target_domain_preference_for_fetch =None 
 
-        if cookies_config ['use_cookie']:
-            self .log_signal .emit ("Favorite Posts: 'Use Cookie' is checked. Determining target domain...")
-            kemono_cookies =prepare_cookies_for_request (
-            cookies_config ['use_cookie'],
-            cookies_config ['cookie_text'],
-            cookies_config ['selected_cookie_file'],
-            cookies_config ['app_base_dir'],
-            lambda msg :self .log_signal .emit (f"[FavPosts Cookie Check - Kemono] {msg }"),
-            target_domain ="kemono.su"
+        if cookies_config['use_cookie']:
+            self.log_signal.emit("Favorite Posts: 'Use Cookie' is checked. Determining target domain...")
+            
+            # --- Kemono Check with Fallback ---
+            kemono_cookies = prepare_cookies_for_request(
+                cookies_config['use_cookie'], cookies_config['cookie_text'], cookies_config['selected_cookie_file'],
+                cookies_config['app_base_dir'], lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}"),
+                target_domain="kemono.cr"
             )
-            coomer_cookies =prepare_cookies_for_request (
-            cookies_config ['use_cookie'],
-            cookies_config ['cookie_text'],
-            cookies_config ['selected_cookie_file'],
-            cookies_config ['app_base_dir'],
-            lambda msg :self .log_signal .emit (f"[FavPosts Cookie Check - Coomer] {msg }"),
-            target_domain ="coomer.su"
+            if not kemono_cookies:
+                self.log_signal.emit("  ↳ No cookies for kemono.cr, trying fallback kemono.su...")
+                kemono_cookies = prepare_cookies_for_request(
+                    cookies_config['use_cookie'], cookies_config['cookie_text'], cookies_config['selected_cookie_file'],
+                    cookies_config['app_base_dir'], lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}"),
+                    target_domain="kemono.su"
+                )
+
+            # --- Coomer Check with Fallback ---
+            coomer_cookies = prepare_cookies_for_request(
+                cookies_config['use_cookie'], cookies_config['cookie_text'], cookies_config['selected_cookie_file'],
+                cookies_config['app_base_dir'], lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}"),
+                target_domain="coomer.st"
             )
+            if not coomer_cookies:
+                self.log_signal.emit("  ↳ No cookies for coomer.st, trying fallback coomer.su...")
+                coomer_cookies = prepare_cookies_for_request(
+                    cookies_config['use_cookie'], cookies_config['cookie_text'], cookies_config['selected_cookie_file'],
+                    cookies_config['app_base_dir'], lambda msg: self.log_signal.emit(f"[FavPosts Cookie Check] {msg}"),
+                    target_domain="coomer.su"
+                )
 
-            kemono_ok =bool (kemono_cookies )
-            coomer_ok =bool (coomer_cookies )
+            kemono_ok = bool(kemono_cookies)
+            coomer_ok = bool(coomer_cookies)
 
-            if kemono_ok and not coomer_ok :
-                target_domain_preference_for_fetch ="kemono.su"
-                self .log_signal .emit ("  ↳ Only Kemono.su cookies loaded. Will fetch favorites from Kemono.su only.")
-            elif coomer_ok and not kemono_ok :
-                target_domain_preference_for_fetch ="coomer.su"
-                self .log_signal .emit ("  ↳ Only Coomer.su cookies loaded. Will fetch favorites from Coomer.su only.")
-            elif kemono_ok and coomer_ok :
-                target_domain_preference_for_fetch =None 
-                self .log_signal .emit ("  ↳ Cookies for both Kemono.su and Coomer.su loaded. Will attempt to fetch from both.")
-            else :
-                self .log_signal .emit ("  ↳ No valid cookies loaded for Kemono.su or Coomer.su.")
-                cookie_help_dialog =CookieHelpDialog (self ,self )
-                cookie_help_dialog .exec_ ()
-                return 
+            if kemono_ok and not coomer_ok:
+                target_domain_preference_for_fetch = "kemono.cr"
+                self.log_signal.emit("  ↳ Only Kemono cookies loaded. Will fetch favorites from Kemono.cr only.")
+            elif coomer_ok and not kemono_ok:
+                target_domain_preference_for_fetch = "coomer.st"
+                self.log_signal.emit("  ↳ Only Coomer cookies loaded. Will fetch favorites from Coomer.st only.")
+            elif kemono_ok and coomer_ok:
+                target_domain_preference_for_fetch = None
+                self.log_signal.emit("  ↳ Cookies for both Kemono and Coomer loaded. Will attempt to fetch from both.")
+            else:
+                self.log_signal.emit("  ↳ No valid cookies loaded for Kemono.cr or Coomer.st.")
+                cookie_help_dialog = CookieHelpDialog(self, self)
+                cookie_help_dialog.exec_()
+                return
         else :
             self .log_signal .emit ("Favorite Posts: 'Use Cookie' is NOT checked. Cookies are required.")
             cookie_help_dialog =CookieHelpDialog (self ,self )
