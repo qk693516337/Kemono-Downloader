@@ -3,27 +3,33 @@ import re
 try:
     from fpdf import FPDF
     FPDF_AVAILABLE = True
+
+    # --- FIX: Move the class definition inside the try block ---
+    class PDF(FPDF):
+        """Custom PDF class to handle headers and footers."""
+        def header(self):
+            pass 
+
+        def footer(self):
+            self.set_y(-15)
+            if self.font_family:
+                 self.set_font(self.font_family, '', 8)
+            else:
+                 self.set_font('Arial', '', 8)
+            self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')
+
 except ImportError:
     FPDF_AVAILABLE = False
+    # If the import fails, FPDF and PDF will not be defined,
+    # but the program won't crash here.
+    FPDF = None 
+    PDF = None
 
 def strip_html_tags(text):
     if not text:
         return ""
     clean = re.compile('<.*?>')
     return re.sub(clean, '', text)
-
-class PDF(FPDF):
-    """Custom PDF class to handle headers and footers."""
-    def header(self):
-        pass 
-
-    def footer(self):
-        self.set_y(-15)
-        if self.font_family:
-             self.set_font(self.font_family, '', 8)
-        else:
-             self.set_font('Arial', '', 8)
-        self.cell(0, 10, 'Page ' + str(self.page_no()), 0, 0, 'C')
 
 def create_single_pdf_from_content(posts_data, output_filename, font_path, logger=print):
     """
@@ -68,7 +74,7 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, logge
                 pdf.ln(10)
 
         pdf.set_font(default_font_family, 'B', 16)
-        pdf.multi_cell(w=0, h=10, text=post.get('title', 'Untitled Post'), align='L')
+        pdf.multi_cell(w=0, h=10, txt=post.get('title', 'Untitled Post'), align='L')
         pdf.ln(5)
 
         if 'comments' in post and post['comments']:
@@ -89,7 +95,7 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, logge
                 pdf.ln(10)
 
                 pdf.set_font(default_font_family, '', 11)
-                pdf.multi_cell(0, 7, body)
+                pdf.multi_cell(w=0, h=7, txt=body)
                 
                 if comment_index < len(comments_list) - 1:
                     pdf.ln(3)
@@ -97,7 +103,7 @@ def create_single_pdf_from_content(posts_data, output_filename, font_path, logge
                     pdf.ln(3)
         elif 'content' in post:
             pdf.set_font(default_font_family, '', 12)
-            pdf.multi_cell(w=0, h=7, text=post.get('content', 'No Content'))
+            pdf.multi_cell(w=0, h=7, txt=post.get('content', 'No Content'))
     
     try:
         pdf.output(output_filename)

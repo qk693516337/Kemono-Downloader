@@ -54,6 +54,24 @@ from ..utils.text_utils import (
 )
 from ..config.constants import *
 
+def robust_clean_name(name):
+    """A more robust function to remove illegal characters for filenames and folders."""
+    if not name:
+        return ""
+    # Removes illegal characters for Windows, macOS, and Linux: < > : " / \ | ? *
+    # Also removes control characters (ASCII 0-31) which are invisible but invalid.
+    illegal_chars_pattern = r'[\x00-\x1f<>:"/\\|?*]'
+    cleaned_name = re.sub(illegal_chars_pattern, '', name)
+    
+    # Remove leading/trailing spaces or periods, which can cause issues.
+    cleaned_name = cleaned_name.strip(' .')
+    
+    # If the name is empty after cleaning (e.g., it was only illegal chars),
+    # provide a safe fallback name.
+    if not cleaned_name:
+        return "untitled_folder" # Or "untitled_file" depending on context
+    return cleaned_name
+
 class PostProcessorSignals (QObject ):
     progress_signal =pyqtSignal (str )
     file_download_status_signal =pyqtSignal (bool )
@@ -64,7 +82,6 @@ class PostProcessorSignals (QObject ):
     worker_finished_signal = pyqtSignal(tuple)
 
 class PostProcessorWorker:
-
     def __init__(self, post_data, download_root, known_names,
                  filter_character_list, emitter,
                  unwanted_keywords, filter_mode, skip_zip,
@@ -104,7 +121,10 @@ class PostProcessorWorker:
                  text_export_format='txt',
                  single_pdf_mode=False,
                  project_root_dir=None,
-                 processed_post_ids=None
+                 processed_post_ids=None,
+                 multipart_scope='both', 
+                 multipart_parts_count=4, 
+                 multipart_min_size_mb=100 
                  ):
         self.post = post_data
         self.download_root = download_root
@@ -166,7 +186,9 @@ class PostProcessorWorker:
         self.single_pdf_mode = single_pdf_mode
         self.project_root_dir = project_root_dir
         self.processed_post_ids = processed_post_ids if processed_post_ids is not None else []
-
+        self.multipart_scope = multipart_scope 
+        self.multipart_parts_count = multipart_parts_count 
+        self.multipart_min_size_mb = multipart_min_size_mb 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
@@ -201,7 +223,7 @@ class PostProcessorWorker:
             return self .dynamic_filter_holder .get_filters ()
         return self .filter_character_list_objects_initial 
     
-    def _download_single_file(self, file_info, target_folder_path, headers, original_post_id_for_log, skip_event,
+    def _download_single_file(self, file_info, target_folder_path, post_page_url, original_post_id_for_log, skip_event,
                                 post_title="", file_index_in_post=0, num_files_in_this_post=1,
                                 manga_date_file_counter_ref=None,
                                 forced_filename_override=None,
@@ -260,7 +282,7 @@ class PostProcessorWorker:
                     was_original_name_kept_flag = True
                 elif self.manga_filename_style == STYLE_POST_TITLE:
                     if post_title and post_title.strip():
-                        cleaned_post_title_base = clean_filename(post_title.strip())
+                        cleaned_post_title_base = robust_clean_name(post_title.strip())
                         if num_files_in_this_post > 1:
                             if file_index_in_post == 0:
                                 filename_to_save_in_main_path = f"{cleaned_post_title_base}{original_ext}"
@@ -330,7 +352,7 @@ class PostProcessorWorker:
                         self.logger(f"     ⚠️ Post ID {original_post_id_for_log} missing both 'published' and 'added' dates for STYLE_DATE_POST_TITLE. Using 'nodate'.")
 
                     if post_title and post_title.strip():
-                        temp_cleaned_title = clean_filename(post_title.strip())
+                        temp_cleaned_title = robust_clean_name(post_title.strip())
                         if not temp_cleaned_title or temp_cleaned_title.startswith("untitled_file"):
                             self.logger(f"⚠️ Manga mode (Date+PostTitle Style): Post title for post {original_post_id_for_log} ('{post_title}') was empty or generic after cleaning. Using 'post' as title part.")
                             cleaned_post_title_for_filename = "post"
@@ -415,7 +437,7 @@ class PostProcessorWorker:
             if os.path.exists(final_save_path_check):
                 try:
                     # Use a HEAD request to get the expected size without downloading the body
-                    with requests.head(file_url, headers=headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True) as head_response:
+                    with requests.head(file_url, headers=file_download_headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True) as head_response:
                         head_response.raise_for_status()
                         expected_size = int(head_response.headers.get('Content-Length', -1))
                     
@@ -443,6 +465,11 @@ class PostProcessorWorker:
 
                 except requests.RequestException as e:
                     self.logger(f"   ⚠️ Could not verify size of existing file '{filename_to_save_in_main_path}': {e}. Proceeding with download.")
+            file_download_headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+                'Referer': post_page_url
+            }
+     
         retry_delay = 5
         downloaded_size_bytes = 0
         calculated_file_hash = None
@@ -463,13 +490,31 @@ class PostProcessorWorker:
                     self.logger(f"   Retrying download for '{api_original_filename}' (Overall Attempt {attempt_num_single_stream + 1}/{max_retries + 1})...")
                     time.sleep(retry_delay * (2 ** (attempt_num_single_stream - 1)))
                 self._emit_signal('file_download_status', True)
-                response = requests.get(file_url, headers=headers, timeout=(15, 300), stream=True, cookies=cookies_to_use_for_file)
+                response = requests.get(file_url, headers=file_download_headers, timeout=(15, 300), stream=True, cookies=cookies_to_use_for_file)
+              
                 response.raise_for_status()
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
-                num_parts_for_file = min(self.num_file_threads, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
+                # Use the dedicated parts count from the dialog, not the main thread count
+                num_parts_for_file = min(self.multipart_parts_count, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
+           
+                file_is_eligible_by_scope = False
+                if self.multipart_scope == 'videos':
+                    if is_video(api_original_filename):
+                        file_is_eligible_by_scope = True
+                elif self.multipart_scope == 'archives':
+                    if is_archive(api_original_filename):
+                        file_is_eligible_by_scope = True
+                elif self.multipart_scope == 'both':
+                    if is_video(api_original_filename) or is_archive(api_original_filename):
+                        file_is_eligible_by_scope = True
+
+                min_size_in_bytes = self.multipart_min_size_mb * 1024 * 1024
+
                 attempt_multipart = (self.allow_multipart_download and MULTIPART_DOWNLOADER_AVAILABLE and
-                                     num_parts_for_file > 1 and total_size_bytes > MIN_SIZE_FOR_MULTIPART_DOWNLOAD and
+                                     file_is_eligible_by_scope and
+                                     num_parts_for_file > 1 and total_size_bytes > min_size_in_bytes and 
                                      'bytes' in response.headers.get('Accept-Ranges', '').lower())
+          
                 if self._check_pause(f"Multipart decision for '{api_original_filename}'"): break
 
                 if attempt_multipart:
@@ -478,7 +523,7 @@ class PostProcessorWorker:
                         response_for_this_attempt = None
                     mp_save_path_for_unique_part_stem_arg = os.path.join(target_folder_path, f"{unique_part_file_stem_on_disk}{temp_file_ext_for_unique_part}")
                     mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
-                        file_url, mp_save_path_for_unique_part_stem_arg, total_size_bytes, num_parts_for_file, headers, api_original_filename,
+                        file_url, mp_save_path_for_unique_part_stem_arg, total_size_bytes, num_parts_for_file, file_download_headers, api_original_filename,
                         emitter_for_multipart=self.emitter, cookies_for_chunk_session=cookies_to_use_for_file,
                         cancellation_event=self.cancellation_event, skip_event=skip_event, logger_func=self.logger,
                         pause_event=self.pause_event
@@ -553,12 +598,15 @@ class PostProcessorWorker:
                 if isinstance(e, requests.exceptions.ConnectionError) and ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
                     self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
             except requests.exceptions.RequestException as e:
-                self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
-                last_exception_for_retry_later = e
-                is_permanent_error = True
-                if ("Failed to resolve" in str(e) or "NameResolutionError" in str(e)):
-                    self.logger("   💡 This looks like a DNS resolution problem. Please check your internet connection, DNS settings, or VPN.")
-                break
+                if e.response is not None and e.response.status_code == 403:
+                    self.logger(f"   ⚠️ Download Error (403 Forbidden): {api_original_filename}. This often requires valid cookies.")
+                    self.logger(f"      Will retry... Check your 'Use Cookie' settings if this persists.")
+                    last_exception_for_retry_later = e
+                else:
+                    self.logger(f"   ❌ Download Error (Non-Retryable): {api_original_filename}. Error: {e}")
+                    last_exception_for_retry_later = e
+                    is_permanent_error = True
+                    break
             except Exception as e:
                 self.logger(f"   ❌ Unexpected Download Error: {api_original_filename}: {e}\n{traceback.format_exc(limit=2)}")
                 last_exception_for_retry_later = e
@@ -728,7 +776,7 @@ class PostProcessorWorker:
                         self.logger(f"   -> Failed to remove partially saved file: {final_save_path}")
 
                 permanent_failure_details = {
-                    'file_info': file_info, 'target_folder_path': target_folder_path, 'headers': headers,
+                    'file_info': file_info, 'target_folder_path': target_folder_path, 'headers': file_download_headers,
                     'original_post_id_for_log': original_post_id_for_log, 'post_title': post_title,
                     'file_index_in_post': file_index_in_post, 'num_files_in_this_post': num_files_in_this_post,
                     'forced_filename_override': filename_to_save_in_main_path,
@@ -742,7 +790,7 @@ class PostProcessorWorker:
             details_for_failure = {
                 'file_info': file_info, 
                 'target_folder_path': target_folder_path, 
-                'headers': headers,
+                'headers': file_download_headers,
                 'original_post_id_for_log': original_post_id_for_log, 
                 'post_title': post_title,
                 'file_index_in_post': file_index_in_post, 
@@ -1044,7 +1092,7 @@ class PostProcessorWorker:
                     determined_post_save_path_for_history = os.path.join(determined_post_save_path_for_history, base_folder_names_for_post_content[0])
 
             if not self.extract_links_only and self.use_post_subfolders:
-                cleaned_post_title_for_sub = clean_folder_name(post_title)
+                cleaned_post_title_for_sub = robust_clean_name(post_title)
                 post_id_for_fallback = self.post.get('id', 'unknown_id')
 
                 if not cleaned_post_title_for_sub or cleaned_post_title_for_sub == "untitled_folder":
@@ -1626,7 +1674,7 @@ class PostProcessorWorker:
                             self._download_single_file,
                             file_info=file_info_to_dl,
                             target_folder_path=current_path_for_file_instance,
-                            headers=headers, original_post_id_for_log=post_id, skip_event=self.skip_current_file_flag,
+                            post_page_url=post_page_url,  original_post_id_for_log=post_id, skip_event=self.skip_current_file_flag,
                             post_title=post_title, manga_date_file_counter_ref=manga_date_counter_to_pass,
                             manga_global_file_counter_ref=manga_global_counter_to_pass, folder_context_name_for_history=folder_context_for_file,
                             file_index_in_post=file_idx, num_files_in_this_post=len(files_to_download_info_list)
@@ -1783,6 +1831,8 @@ class DownloadThread(QThread):
                  remove_from_filename_words_list=None,
                  manga_date_prefix='',
                  allow_multipart_download=True,
+                 multipart_parts_count=4, 
+                 multipart_min_size_mb=100, 
                  selected_cookie_file=None,
                  override_output_dir=None,
                  app_base_dir=None,
@@ -1845,6 +1895,8 @@ class DownloadThread(QThread):
         self.remove_from_filename_words_list = remove_from_filename_words_list
         self.manga_date_prefix = manga_date_prefix
         self.allow_multipart_download = allow_multipart_download
+        self.multipart_parts_count = multipart_parts_count 
+        self.multipart_min_size_mb = multipart_min_size_mb 
         self.selected_cookie_file = selected_cookie_file
         self.app_base_dir = app_base_dir
         self.cookie_text = cookie_text
@@ -1986,6 +2038,8 @@ class DownloadThread(QThread):
                         'text_only_scope': self.text_only_scope,
                         'text_export_format': self.text_export_format,
                         'single_pdf_mode': self.single_pdf_mode,
+                        'multipart_parts_count': self.multipart_parts_count, 
+                        'multipart_min_size_mb': self.multipart_min_size_mb, 
                         'project_root_dir': self.project_root_dir,
                     }
 

@@ -58,6 +58,7 @@ from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from .dialogs.SinglePDF import create_single_pdf_from_content
 from .dialogs.SupportDialog import SupportDialog
 from .dialogs.KeepDuplicatesDialog import KeepDuplicatesDialog
+from .dialogs.MultipartScopeDialog import MultipartScopeDialog
 
 class DynamicFilterHolder:
     """A thread-safe class to hold and update character filters during a download."""
@@ -222,6 +223,9 @@ class DownloaderApp (QWidget ):
         self.only_links_log_display_mode = LOG_DISPLAY_LINKS
         self.mega_download_log_preserved_once = False
         self.allow_multipart_download_setting = False
+        self.multipart_scope = 'both'
+        self.multipart_parts_count = 4     
+        self.multipart_min_size_mb = 100 
         self.use_cookie_setting = False
         self.scan_content_images_setting = self.settings.value(SCAN_CONTENT_IMAGES_KEY, False, type=bool)
         self.cookie_text_setting = ""
@@ -236,7 +240,8 @@ class DownloaderApp (QWidget ):
         self.session_temp_files = []
         self.single_pdf_mode = False
         self.save_creator_json_enabled_this_session = True 
-        
+        self.is_single_post_session = False 
+
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
         try:
@@ -267,7 +272,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.2.1")
+        self.setWindowTitle("Kemono Downloader v6.3.0")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -2689,16 +2694,13 @@ class DownloaderApp (QWidget ):
         url_text =self .link_input .text ().strip ()if self .link_input else ""
         _ ,_ ,post_id =extract_post_info (url_text )
 
-        # --- START: MODIFIED LOGIC ---
         is_creator_feed =not post_id if url_text else False 
         is_single_post = bool(post_id)
         is_favorite_mode_on =self .favorite_mode_checkbox .isChecked ()if self .favorite_mode_checkbox else False 
 
-        # If the download queue contains items selected from the popup, treat it as a single-post context for UI purposes.
         if self.favorite_download_queue and all(item.get('type') == 'single_post_from_popup' for item in self.favorite_download_queue):
             is_single_post = True
 
-        # Allow Manga Mode checkbox for any valid URL (creator or single post) or if single posts are queued.
         can_enable_manga_checkbox = (is_creator_feed or is_single_post) and not is_favorite_mode_on
         
         if self .manga_mode_checkbox :
@@ -2709,12 +2711,10 @@ class DownloaderApp (QWidget ):
 
         manga_mode_effectively_on = can_enable_manga_checkbox and checked
 
-        # If it's a single post context, prevent sequential styles from being selected as they don't apply.
         sequential_styles = [STYLE_DATE_BASED, STYLE_POST_TITLE_GLOBAL_NUMBERING]
         if is_single_post and self.manga_filename_style in sequential_styles:
-            self.manga_filename_style = STYLE_POST_TITLE # Default to a safe, non-sequential style
+            self.manga_filename_style = STYLE_POST_TITLE 
             self._update_manga_filename_style_button_text()
-        # --- END: MODIFIED LOGIC ---
 
         if self .manga_rename_toggle_button :
             self .manga_rename_toggle_button .setVisible (manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode ))
@@ -2748,11 +2748,9 @@ class DownloaderApp (QWidget ):
                 self .manga_date_prefix_input .setMaximumWidth (16777215 )
                 self .manga_date_prefix_input .setMinimumWidth (0 )
 
-        if hasattr (self ,'multipart_toggle_button'):
-
-            hide_multipart_button_due_mode =is_only_links_mode or is_only_archives_mode or is_only_audio_mode 
-            hide_multipart_button_due_manga_mode =manga_mode_effectively_on 
-            self .multipart_toggle_button .setVisible (not (hide_multipart_button_due_mode or hide_multipart_button_due_manga_mode ))
+        if hasattr(self, 'multipart_toggle_button'):
+            hide_multipart_button_due_mode = is_only_links_mode or is_only_archives_mode or is_only_audio_mode
+            self.multipart_toggle_button.setVisible(not hide_multipart_button_due_mode)
 
         self ._update_multithreading_for_date_mode ()
 
@@ -2953,9 +2951,6 @@ class DownloaderApp (QWidget ):
         
         service, user_id, post_id_from_url = extract_post_info(api_url)
 
-        # --- START: MODIFIED SECTION ---
-        # This check is now smarter. It only triggers the error if the item from the queue
-        # was supposed to be a post ('single_post_from_popup', etc.) but couldn't be parsed.
         if direct_api_url and not post_id_from_url and item_type_from_queue and 'post' in item_type_from_queue:
             self.log_signal.emit(f"❌ CRITICAL ERROR: Could not parse post ID from the queued POST URL: {api_url}")
             self.log_signal.emit("   Skipping this item. This might be due to an unsupported URL format or a temporary issue.")
@@ -2966,39 +2961,42 @@ class DownloaderApp (QWidget ):
                 kept_original_names_list=[]
             )
             return False
-        # --- END: MODIFIED SECTION ---
 
         if not service or not user_id:
             QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
             return False
 
         self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
+        self.is_single_post_session = bool(post_id_from_url) 
 
-        creator_profile_data = {}
-        if self.save_creator_json_enabled_this_session:
-            creator_name_for_profile = None
-            if self.is_processing_favorites_queue and self.current_processing_favorite_item_info:
-                creator_name_for_profile = self.current_processing_favorite_item_info.get('name_for_folder')
-            else:
-                creator_key = (service.lower(), str(user_id))
-                creator_name_for_profile = self.creator_name_cache.get(creator_key)
+        if not self.is_single_post_session:
+            self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
 
-            if not creator_name_for_profile:
-                creator_name_for_profile = f"{service}_{user_id}"
-                self.log_signal.emit(f"⚠️ Creator name not in cache. Using '{creator_name_for_profile}' for profile file.")
+            creator_profile_data = {}
+            if self.save_creator_json_enabled_this_session:
+                creator_name_for_profile = None
+                if self.is_processing_favorites_queue and self.current_processing_favorite_item_info:
+                    creator_name_for_profile = self.current_processing_favorite_item_info.get('name_for_folder')
+                else:
+                    creator_key = (service.lower(), str(user_id))
+                    creator_name_for_profile = self.creator_name_cache.get(creator_key)
 
-            creator_profile_data = self._setup_creator_profile(creator_name_for_profile, self.session_file_path)
-        
-            current_settings = self._get_current_ui_settings_as_dict(api_url_override=api_url, output_dir_override=effective_output_dir_for_run)
-            creator_profile_data['settings'] = current_settings
-        
-            creator_profile_data.setdefault('creator_url', [])
-            if api_url not in creator_profile_data['creator_url']:
-                creator_profile_data['creator_url'].append(api_url)
+                if not creator_name_for_profile:
+                    creator_name_for_profile = f"{service}_{user_id}"
+                    self.log_signal.emit(f"⚠️ Creator name not in cache. Using '{creator_name_for_profile}' for profile file.")
 
-            creator_profile_data.setdefault('processed_post_ids', [])
-            self._save_creator_profile(creator_name_for_profile, creator_profile_data, self.session_file_path)
-            self.log_signal.emit(f"✅ Profile for '{creator_name_for_profile}' loaded/created. Settings saved.")
+                creator_profile_data = self._setup_creator_profile(creator_name_for_profile, self.session_file_path)
+            
+                current_settings = self._get_current_ui_settings_as_dict(api_url_override=api_url, output_dir_override=effective_output_dir_for_run)
+                creator_profile_data['settings'] = current_settings
+            
+                creator_profile_data.setdefault('creator_url', [])
+                if api_url not in creator_profile_data['creator_url']:
+                    creator_profile_data['creator_url'].append(api_url)
+
+                creator_profile_data.setdefault('processed_post_ids', [])
+                self._save_creator_profile(creator_name_for_profile, creator_profile_data, self.session_file_path)
+                self.log_signal.emit(f"✅ Profile for '{creator_name_for_profile}' loaded/created. Settings saved.")
         
         profile_processed_ids = set()
 
@@ -3453,6 +3451,9 @@ class DownloaderApp (QWidget ):
             'num_file_threads_for_worker': effective_num_file_threads_per_worker,
             'manga_date_file_counter_ref': manga_date_file_counter_ref_for_thread,
             'allow_multipart_download': allow_multipart,
+            'multipart_scope': self.multipart_scope,
+            'multipart_parts_count': self.multipart_parts_count,
+            'multipart_min_size_mb': self.multipart_min_size_mb,
             'cookie_text': cookie_text_from_input,
             'selected_cookie_file': selected_cookie_file_path_for_backend,
             'manga_global_file_counter_ref': manga_global_file_counter_ref_for_thread,
@@ -3497,7 +3498,7 @@ class DownloaderApp (QWidget ):
                     'manga_mode_active', 'unwanted_keywords', 'manga_filename_style', 'scan_content_for_images',
                     'allow_multipart_download', 'use_cookie', 'cookie_text', 'app_base_dir', 'selected_cookie_file', 'override_output_dir', 'project_root_dir',
                     'text_only_scope', 'text_export_format',
-                    'single_pdf_mode',
+                    'single_pdf_mode','multipart_parts_count', 'multipart_min_size_mb', 
                     'use_date_prefix_for_subfolder','keep_in_post_duplicates', 'keep_duplicates_mode',
                     'keep_duplicates_limit', 'downloaded_hash_counts', 'downloaded_hash_counts_lock',
                     'processed_post_ids'
@@ -3513,7 +3514,6 @@ class DownloaderApp (QWidget ):
             if self.pause_event: self.pause_event.clear()
             self.is_paused = False
         return True
-
 
     def restore_download(self):
         """Initiates the download restoration process."""
@@ -3960,8 +3960,8 @@ class DownloaderApp (QWidget ):
         self.log_signal.emit("="*40)
 
     def _add_to_history_candidates(self, history_data):
-        """Adds processed post data to the history candidates list and updates the creator profile."""
-        if self.save_creator_json_enabled_this_session:
+        """Adds processed post data to the history candidates list and updates the creator profile."""        
+        if self.save_creator_json_enabled_this_session and not self.is_single_post_session:
             post_id = history_data.get('post_id')
             service = history_data.get('service')
             user_id = history_data.get('user_id')
@@ -3969,7 +3969,6 @@ class DownloaderApp (QWidget ):
                 creator_key = (service.lower(), str(user_id))
                 creator_name = self.creator_name_cache.get(creator_key, f"{service}_{user_id}")
                 
-                # Load the profile data before using it to prevent NameError
                 profile_data = self._setup_creator_profile(creator_name, self.session_file_path)
                 
                 if post_id not in profile_data.get('processed_post_ids', []):
@@ -3981,6 +3980,7 @@ class DownloaderApp (QWidget ):
             creator_key = (history_data.get('service','').lower(), str(history_data.get('user_id','')))
             history_data['creator_name'] = self.creator_name_cache.get(creator_key, history_data.get('user_id','Unknown'))
             self.download_history_candidates.append(history_data)
+
 
     def _finalize_download_history (self ):
         """Processes candidates and selects the final 3 history entries.
@@ -4937,14 +4937,15 @@ class DownloaderApp (QWidget ):
         with QMutexLocker (self .prompt_mutex ):self ._add_character_response =result 
         self .log_signal .emit (f"    Main thread received character prompt response: {'Action resulted in addition/confirmation'if result else 'Action resulted in no addition/declined'}")
 
-    def _update_multipart_toggle_button_text (self ):
-        if hasattr (self ,'multipart_toggle_button'):
-            if self .allow_multipart_download_setting :
-                self .multipart_toggle_button .setText (self ._tr ("multipart_on_button_text","Multi-part: ON"))
-                self .multipart_toggle_button .setToolTip (self ._tr ("multipart_on_button_tooltip","Tooltip for multipart ON"))
-            else :
-                self .multipart_toggle_button .setText (self ._tr ("multipart_off_button_text","Multi-part: OFF"))
-                self .multipart_toggle_button .setToolTip (self ._tr ("multipart_off_button_tooltip","Tooltip for multipart OFF"))
+    def _update_multipart_toggle_button_text(self):
+        if hasattr(self, 'multipart_toggle_button'):
+            if self.allow_multipart_download_setting:
+                scope_text = self.multipart_scope.capitalize()
+                self.multipart_toggle_button.setText(self._tr("multipart_on_button_text", f"Multi-part: {scope_text}"))
+                self.multipart_toggle_button.setToolTip(self._tr("multipart_on_button_tooltip", f"Multipart download is ON. Applied to: {scope_text} files. Click to change."))
+            else:
+                self.multipart_toggle_button.setText(self._tr("multipart_off_button_text", "Multi-part: OFF"))
+                self.multipart_toggle_button.setToolTip(self._tr("multipart_off_button_tooltip", "Multipart download is OFF. Click to enable and set options."))
 
     def _update_error_button_count(self):
         """Updates the Error button text to show the count of failed files."""
@@ -4959,36 +4960,25 @@ class DownloaderApp (QWidget ):
         else:
             self.error_btn.setText(base_text)
 
-    def _toggle_multipart_mode (self ):
-        if not self .allow_multipart_download_setting :
-            msg_box =QMessageBox (self )
-            msg_box .setIcon (QMessageBox .Warning )
-            msg_box .setWindowTitle ("Multi-part Download Advisory")
-            msg_box .setText (
-            "<b>Multi-part download advisory:</b><br><br>"
-            "<ul>"
-            "<li>Best suited for <b>large files</b> (e.g., single post videos).</li>"
-            "<li>When downloading a full creator feed with many small files (like images):"
-            "<ul><li>May not offer significant speed benefits.</li>"
-            "<li>Could potentially make the UI feel <b>choppy</b>.</li>"
-            "<li>May <b>spam the process log</b> with rapid, numerous small download messages.</li></ul></li>"
-            "<li>Consider using the <b>'Videos' filter</b> if downloading a creator feed to primarily target large files for multi-part.</li>"
-            "</ul><br>"
-            "Do you want to enable multi-part download?"
-            )
-            proceed_button =msg_box .addButton ("Proceed Anyway",QMessageBox .AcceptRole )
-            cancel_button =msg_box .addButton ("Cancel",QMessageBox .RejectRole )
-            msg_box .setDefaultButton (proceed_button )
-            msg_box .exec_ ()
-
-            if msg_box .clickedButton ()==cancel_button :
-                self .log_signal .emit ("ℹ️ Multi-part download enabling cancelled by user.")
-                return 
-
-        self .allow_multipart_download_setting =not self .allow_multipart_download_setting 
-        self ._update_multipart_toggle_button_text ()
-        self .settings .setValue (ALLOW_MULTIPART_DOWNLOAD_KEY ,self .allow_multipart_download_setting )
-        self .log_signal .emit (f"ℹ️ Multi-part download set to: {'Enabled'if self .allow_multipart_download_setting else 'Disabled'}")
+    def _toggle_multipart_mode(self):
+        """
+        Opens the Multipart Scope Dialog and updates settings based on user choice.
+        """
+        current_scope = self.multipart_scope if self.allow_multipart_download_setting else 'both'
+        dialog = MultipartScopeDialog(current_scope, self.multipart_parts_count, self.multipart_min_size_mb, self)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            self.multipart_scope = dialog.get_selected_scope()
+            self.multipart_parts_count = dialog.get_selected_parts()
+            self.multipart_min_size_mb = dialog.get_selected_min_size() # Get the new value
+            self.allow_multipart_download_setting = True
+            self.log_signal.emit(f"ℹ️ Multi-part download enabled: Scope='{self.multipart_scope.capitalize()}', Parts={self.multipart_parts_count}, Min Size={self.multipart_min_size_mb} MB")
+        else:
+            self.allow_multipart_download_setting = False
+            self.log_signal.emit("ℹ️ Multi-part download setting remains OFF.")
+            
+        self._update_multipart_toggle_button_text()
+        self.settings.setValue(ALLOW_MULTIPART_DOWNLOAD_KEY, self.allow_multipart_download_setting)
 
     def _open_known_txt_file (self ):
         if not os .path .exists (self .config_file ):
