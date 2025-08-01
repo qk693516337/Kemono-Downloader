@@ -2994,20 +2994,22 @@ class DownloaderApp (QWidget ):
                 if api_url not in creator_profile_data['creator_url']:
                     creator_profile_data['creator_url'].append(api_url)
 
+                if self.active_update_profile:
+                    self.log_signal.emit("   Update session active: Loading existing processed post IDs to find new content.")
+                    profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
+                
+                elif not is_restore:
+                    self.log_signal.emit("   Fresh download session: Clearing previous post history for this creator to re-download all.")
+                    if 'processed_post_ids' in creator_profile_data:
+                        creator_profile_data['processed_post_ids'] = []
+
                 creator_profile_data.setdefault('processed_post_ids', [])
                 self._save_creator_profile(creator_name_for_profile, creator_profile_data, self.session_file_path)
                 self.log_signal.emit(f"✅ Profile for '{creator_name_for_profile}' loaded/created. Settings saved.")
         
         profile_processed_ids = set()
 
-        if self.active_update_profile:
-            self.log_signal.emit("   Update session active: Loading existing processed post IDs to find new content.")
-            profile_processed_ids = set(creator_profile_data.get('processed_post_ids', []))
         
-        elif not is_restore:
-            self.log_signal.emit("   Fresh download session: Clearing previous post history for this creator to re-download all.")
-            if 'processed_post_ids' in creator_profile_data:
-                creator_profile_data['processed_post_ids'] = []
 
         session_processed_ids = set(processed_post_ids_for_restore)
         combined_processed_ids = session_processed_ids.union(profile_processed_ids)
