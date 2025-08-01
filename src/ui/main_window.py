@@ -4555,44 +4555,51 @@ class DownloaderApp (QWidget ):
             self .active_retry_futures_map [future ]=job_details 
             self .active_retry_futures .append (future )
 
-    def _execute_single_file_retry (self ,job_details ,common_args ):
-        """Executes a single file download retry attempt."""
-        dummy_post_data ={'id':job_details ['original_post_id_for_log'],'title':job_details ['post_title']}
+    def _execute_single_file_retry(self, job_details, common_args):
+        """
+        Executes a single file download retry attempt. This function is called by the retry thread pool.
+        """
+        # This worker is temporary and only for this retry task.
+        # It needs dummy post data to initialize.
+        dummy_post_data = {'id': job_details['original_post_id_for_log'], 'title': job_details['post_title']}
 
-        ppw_init_args ={
-        **common_args ,
-        'post_data':dummy_post_data ,
-        'service':job_details .get ('service','unknown_service'),
-        'user_id':job_details .get ('user_id','unknown_user'),
-        'api_url_input':job_details .get ('api_url_input',''),
-        'manga_mode_active':job_details .get ('manga_mode_active_for_file',False ),
-        'manga_filename_style':job_details .get ('manga_filename_style_for_file',STYLE_POST_TITLE ),
-        'scan_content_for_images':common_args .get ('scan_content_for_images',False ),
-        'use_cookie':common_args .get ('use_cookie',False ),
-        'cookie_text':common_args .get ('cookie_text',""),
-        'selected_cookie_file':common_args .get ('selected_cookie_file',None ),
-        'app_base_dir':common_args .get ('app_base_dir',None ),
+        # Reconstruct the post_page_url, which is needed by the download function
+        service = job_details.get('service', 'unknown_service')
+        user_id = job_details.get('user_id', 'unknown_user')
+        post_id = job_details.get('original_post_id_for_log', 'unknown_id')
+        api_url_input = job_details.get('api_url_input', '')
+        parsed_api_url = urlparse(api_url_input)
+        api_domain = parsed_api_url.netloc if parsed_api_url.netloc else self._get_domain_for_service(service)
+        post_page_url = f"https://{api_domain}/{service}/user/{user_id}/post/{post_id}"
+
+        # Prepare all arguments for the PostProcessorWorker
+        ppw_init_args = {
+            **common_args,
+            'post_data': dummy_post_data,
+            'service': service,
+            'user_id': user_id,
+            'api_url_input': api_url_input
         }
-        worker =PostProcessorWorker (**ppw_init_args )
 
-        dl_count ,skip_count ,filename_saved ,original_kept ,status ,_ =worker ._download_single_file (
-        file_info =job_details ['file_info'],
-        target_folder_path =job_details ['target_folder_path'],
-        headers =job_details ['headers'],
-        original_post_id_for_log =job_details ['original_post_id_for_log'],
-        skip_event =None ,
-        post_title =job_details ['post_title'],
-        file_index_in_post =job_details ['file_index_in_post'],
-        num_files_in_this_post =job_details ['num_files_in_this_post'],
-        forced_filename_override =job_details .get ('forced_filename_override')
+        worker = PostProcessorWorker(**ppw_init_args)
+
+        # Call the download method with the corrected arguments
+        dl_count, skip_count, filename_saved, original_kept, status, _ = worker._download_single_file(
+            file_info=job_details['file_info'],
+            target_folder_path=job_details['target_folder_path'],
+            post_page_url=post_page_url, # Using the correct argument
+            original_post_id_for_log=job_details['original_post_id_for_log'],
+            skip_event=None,
+            post_title=job_details['post_title'],
+            file_index_in_post=job_details['file_index_in_post'],
+            num_files_in_this_post=job_details['num_files_in_this_post'],
+            forced_filename_override=job_details.get('forced_filename_override')
         )
 
+        is_successful_download = (status == FILE_DOWNLOAD_STATUS_SUCCESS)
+        is_resolved_as_skipped = (status == FILE_DOWNLOAD_STATUS_SKIPPED)
 
-
-        is_successful_download =(status ==FILE_DOWNLOAD_STATUS_SUCCESS )
-        is_resolved_as_skipped =(status ==FILE_DOWNLOAD_STATUS_SKIPPED )
-
-        return is_successful_download or is_resolved_as_skipped 
+        return is_successful_download or is_resolved_as_skipped
 
     def _handle_retry_future_result (self ,future ):
         self .processed_retry_count +=1 

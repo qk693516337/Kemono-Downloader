@@ -237,6 +237,11 @@ class PostProcessorWorker:
         if self.check_cancel() or (skip_event and skip_event.is_set()):
             return 0, 1, "", False, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
+        file_download_headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+            'Referer': post_page_url
+        }
+
         file_url = file_info.get('url')
         cookies_to_use_for_file = None
         if self.use_cookie:
@@ -255,29 +260,23 @@ class PostProcessorWorker:
                         self.logger(f"   -> Skip File (Keyword in Original Name '{skip_word}'): '{api_original_filename}'. Scope: {self.skip_words_scope}")
                         return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
-            cleaned_original_api_filename = clean_filename(api_original_filename)
+            cleaned_original_api_filename = robust_clean_name(api_original_filename)
             original_filename_cleaned_base, original_ext = os.path.splitext(cleaned_original_api_filename)
             if not original_ext.startswith('.'): original_ext = '.' + original_ext if original_ext else ''
 
             if self.manga_mode_active:
                 if self.manga_filename_style == STYLE_ORIGINAL_NAME:
-                    # Get the post's publication or added date
                     published_date_str = self.post.get('published')
                     added_date_str = self.post.get('added')
-                    formatted_date_str = "nodate"  # Fallback if no date is found
-
+                    formatted_date_str = "nodate"
                     date_to_use_str = published_date_str or added_date_str
-
                     if date_to_use_str:
                         try:
-                            # Extract just the YYYY-MM-DD part from the timestamp
                             formatted_date_str = date_to_use_str.split('T')[0]
                         except Exception:
                             self.logger(f"     ⚠️ Could not parse date '{date_to_use_str}'. Using 'nodate' prefix.")
                     else:
                         self.logger(f"     ⚠️ Post ID {original_post_id_for_log} has no date. Using 'nodate' prefix.")
-
-                    # Combine the date with the cleaned original filename
                     filename_to_save_in_main_path = f"{formatted_date_str}_{cleaned_original_api_filename}"
                     was_original_name_kept_flag = True
                 elif self.manga_filename_style == STYLE_POST_TITLE:
@@ -303,7 +302,7 @@ class PostProcessorWorker:
                             manga_date_file_counter_ref[0] += 1
                         base_numbered_name = f"{counter_val_for_filename:03d}"
                         if self.manga_date_prefix and self.manga_date_prefix.strip():
-                            cleaned_prefix = clean_filename(self.manga_date_prefix.strip())
+                            cleaned_prefix = robust_clean_name(self.manga_date_prefix.strip())
                             if cleaned_prefix:
                                 filename_to_save_in_main_path = f"{cleaned_prefix} {base_numbered_name}{original_ext}"
                             else:
@@ -320,7 +319,7 @@ class PostProcessorWorker:
                         with counter_lock:
                             counter_val_for_filename = manga_global_file_counter_ref[0]
                             manga_global_file_counter_ref[0] += 1
-                        cleaned_post_title_base_for_global = clean_filename(post_title.strip() if post_title and post_title.strip() else "post")
+                        cleaned_post_title_base_for_global = robust_clean_name(post_title.strip() if post_title and post_title.strip() else "post")
                         filename_to_save_in_main_path = f"{cleaned_post_title_base_for_global}_{counter_val_for_filename:03d}{original_ext}"
                     else:
                         self.logger(f"⚠️ Manga Title+GlobalNum Mode: Counter ref not provided or malformed for '{api_original_filename}'. Using original. Ref: {manga_global_file_counter_ref}")
@@ -353,7 +352,7 @@ class PostProcessorWorker:
 
                     if post_title and post_title.strip():
                         temp_cleaned_title = robust_clean_name(post_title.strip())
-                        if not temp_cleaned_title or temp_cleaned_title.startswith("untitled_file"):
+                        if not temp_cleaned_title or temp_cleaned_title.startswith("untitled_folder"):
                             self.logger(f"⚠️ Manga mode (Date+PostTitle Style): Post title for post {original_post_id_for_log} ('{post_title}') was empty or generic after cleaning. Using 'post' as title part.")
                             cleaned_post_title_for_filename = "post"
                         else:
@@ -436,7 +435,6 @@ class PostProcessorWorker:
             final_save_path_check = os.path.join(target_folder_path, filename_to_save_in_main_path)
             if os.path.exists(final_save_path_check):
                 try:
-                    # Use a HEAD request to get the expected size without downloading the body
                     with requests.head(file_url, headers=file_download_headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True) as head_response:
                         head_response.raise_for_status()
                         expected_size = int(head_response.headers.get('Content-Length', -1))
@@ -445,31 +443,21 @@ class PostProcessorWorker:
 
                     if expected_size != -1 and actual_size == expected_size:
                         self.logger(f"   -> Skip (File Exists & Complete): '{filename_to_save_in_main_path}' is already on disk with the correct size.")
-                        
-                        # We still need to add its hash to the session to prevent duplicates in other modes
-                        # This is a quick hash calculation for the already existing file
                         try:
                             md5_hasher = hashlib.md5()
                             with open(final_save_path_check, 'rb') as f_verify:
                                 for chunk in iter(lambda: f_verify.read(8192), b""):
                                     md5_hasher.update(chunk)
-                            
                             with self.downloaded_hash_counts_lock:
                                 self.downloaded_hash_counts[md5_hasher.hexdigest()] += 1
                         except Exception as hash_exc:
                              self.logger(f"   ⚠️ Could not hash existing file '{filename_to_save_in_main_path}' for session: {hash_exc}")
-
                         return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_SKIPPED, None
                     else:
                         self.logger(f"   ⚠️ File '{filename_to_save_in_main_path}' exists but is incomplete (Expected: {expected_size}, Actual: {actual_size}). Re-downloading.")
-
                 except requests.RequestException as e:
                     self.logger(f"   ⚠️ Could not verify size of existing file '{filename_to_save_in_main_path}': {e}. Proceeding with download.")
-            file_download_headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-                'Referer': post_page_url
-            }
-     
+        
         retry_delay = 5
         downloaded_size_bytes = 0
         calculated_file_hash = None
@@ -494,7 +482,6 @@ class PostProcessorWorker:
               
                 response.raise_for_status()
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
-                # Use the dedicated parts count from the dialog, not the main thread count
                 num_parts_for_file = min(self.multipart_parts_count, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
            
                 file_is_eligible_by_scope = False
@@ -532,7 +519,7 @@ class PostProcessorWorker:
                         download_successful_flag = True
                         downloaded_size_bytes = mp_bytes
                         calculated_file_hash = mp_hash
-                        downloaded_part_file_path = mp_save_path_for_unique_part_stem_arg + ".part"
+                        downloaded_part_file_path = mp_save_path_for_unique_part_stem_arg
                         if mp_file_handle: mp_file_handle.close()
                         break
                     else:
@@ -683,26 +670,22 @@ class PostProcessorWorker:
                 self.logger(f"   🔄 Compressing '{api_original_filename}' to WebP...")
                 try:
                     with Image.open(downloaded_part_file_path) as img:
-                        # Convert to RGB to avoid issues with paletted images or alpha channels in WebP
                         if img.mode not in ('RGB', 'RGBA'):
                             img = img.convert('RGBA')
                         
-                        # Use an in-memory buffer to save the compressed image
                         output_buffer = BytesIO()
                         img.save(output_buffer, format='WebP', quality=85)
                         
-                        # This buffer now holds the compressed data
                         data_to_write_io = output_buffer
                         
-                        # Update the filename to use the .webp extension
                         base, _ = os.path.splitext(filename_to_save_in_main_path)
                         filename_to_save_in_main_path = f"{base}.webp"
                         self.logger(f"   ✅ Compression successful. New size: {len(data_to_write_io.getvalue()) / (1024*1024):.2f} MB")
 
                 except Exception as e_compress:
                     self.logger(f"   ⚠️ Failed to compress '{api_original_filename}': {e_compress}. Saving original file instead.")
-                    data_to_write_io = None # Ensure we fall back to saving the original
-
+                    data_to_write_io = None
+            
             effective_save_folder = target_folder_path
             base_name, extension = os.path.splitext(filename_to_save_in_main_path)
             counter = 1
@@ -719,17 +702,14 @@ class PostProcessorWorker:
 
             try:
                 if data_to_write_io:
-                    # Write the compressed data from the in-memory buffer
                     with open(final_save_path, 'wb') as f_out:
                         f_out.write(data_to_write_io.getvalue())
-                    # Clean up the original downloaded part file
                     if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                         try:
                             os.remove(downloaded_part_file_path)
                         except OSError as e_rem:
                             self.logger(f"  -> Failed to remove .part after compression: {e_rem}")
                 else:
-                    # No compression was done, just rename the original file
                     if downloaded_part_file_path and os.path.exists(downloaded_part_file_path):
                         time.sleep(0.1)
                         os.rename(downloaded_part_file_path, final_save_path)
