@@ -7,8 +7,6 @@ import base64
 import time
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
-# --- Third-Party Library Imports ---
-# Make sure to install these: pip install requests pycryptodome gdown
 import requests
 
 try:
@@ -23,10 +21,7 @@ try:
 except ImportError:
     GDRIVE_AVAILABLE = False
 
-# --- Constants ---
 MEGA_API_URL = "https://g.api.mega.co.nz"
-
-# --- Helper Functions (Original and New) ---
 
 def _get_filename_from_headers(headers):
     """
