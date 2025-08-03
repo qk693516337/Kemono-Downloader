@@ -1,4 +1,4 @@
-<h1 align="center">Kemono Downloader v6.0.0</h1>
+<h1 align="center">Kemono Downloader </h1>
 
 <div align="center">
 
@@ -99,7 +99,7 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 ### Install Dependencies
 
 ```bash
-pip install PyQt5 requests Pillow mega.py
+pip install PyQt5 requests Pillow mega.py fpdf2 python-docx
 ```
 
 ### Running the Application
