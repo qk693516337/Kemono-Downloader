@@ -206,3 +206,69 @@
     </ul>
   </li>
 </ul>
+<h2><strong>Start Download</strong></h2>
+<ul>
+  <li>
+    <strong>Default State ("⬇️ Start Download"):</strong> When idle, this button gathers all current settings (URL, filters, checkboxes, etc.) and begins the download process via the DownloadManager.
+  </li>
+  <li>
+    <strong>Restore State:</strong> If an interrupted session is detected, the tooltip will indicate that starting a new download will discard previous session progress.
+  </li>
+  <li>
+    <strong>Update Mode (Phase 1 - "🔄 Check For Updates"):</strong> If a creator profile is loaded, clicking this button will fetch the creator's posts and compare them against your saved profile to identify new content.
+  </li>
+  <li>
+    <strong>Update Mode (Phase 2 - "⬇️ Start Download (X new)"):</strong> After new posts are found, the button text updates to reflect the number. Clicking it downloads only the new content.
+  </li>
+</ul>
+
+<h2><strong>Pause / Resume Download</strong></h2>
+<ul>
+  <li>
+    <strong>While Downloading:</strong> The button toggles between:
+    <ul>
+      <li><strong>"⏸️ Pause Download":</strong> Sets a <code>pause_event</code>, which tells all worker threads to halt their current task and wait.</li>
+      <li><strong>"▶️ Resume Download":</strong> Clears the <code>pause_event</code>, allowing threads to resume their work.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>While Idle:</strong> The button is disabled.
+  </li>
+  <li>
+    <strong>Restore State:</strong> Changes to "🔄 Restore Download", which resumes the last session from saved data.
+  </li>
+</ul>
+
+<h2><strong>Cancel & Reset UI</strong></h2>
+<ul>
+  <li>
+    <strong>Functionality:</strong> Stops downloads gracefully using a <code>cancellation_event</code>. Threads finish current tasks before shutting down.
+  </li>
+  <li>
+    <strong>The Soft Reset:</strong> After cancellation is confirmed by background threads, the UI resets via the <code>download_finished</code> function. Input fields (URL and Download Location) are preserved for convenience.
+  </li>
+  <li>
+    <strong>Restore State:</strong> Changes to "🗑️ Discard Session", which deletes <code>session.json</code> and resets the UI.
+  </li>
+  <li>
+    <strong>Update State:</strong> Changes to "🗑️ Clear Selection", unloading the selected creator profile and returning to normal UI state.
+  </li>
+</ul>
+
+<h2><strong>Error Button</strong></h2>
+<ul>
+  <li>
+    <strong>Error Counter:</strong> Shows how many files failed to download (e.g., <code>(3) Error</code>). Disabled if there are no errors.
+  </li>
+  <li>
+    <strong>Error Dialog:</strong> Clicking opens the "Files Skipped Due to Errors" dialog (defined in <code>ErrorFilesDialog.py</code>), listing all failed files.
+  </li>
+  <li>
+    <strong>Dialog Features:</strong>
+    <ul>
+      <li><strong>View Failed Files:</strong> Shows filenames and related post info.</li>
+      <li><strong>Select and Retry:</strong> Retry selected failed files in a focused download session.</li>
+      <li><strong>Export URLs:</strong> Save a <code>.txt</code> file of direct download links. Optionally include post metadata with each URL.</li>
+    </ul>
+  </li>
+</ul>
