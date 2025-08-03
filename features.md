@@ -1,147 +1,149 @@
 <div>
-    <h1>Kemono Downloader - Comprehensive Feature Guide</h1>
-    <p>This guide provides a detailed overview of all user interface elements, input fields, buttons, popups, and functionalities available in the application.</p>
-    <hr>
-    <h2><strong>Main Window: Core Functionality</strong></h2>
-    <p>The application is divided into a configuration panel on the left and a status/log panel on the right.</p>
-    <h3><strong>Primary Inputs (Top-Left)</strong></h3>
-    <ul>
-        <li><strong>URL Input Field</strong>: This is the starting point for most downloads. You can paste a URL for a specific post or for an entire creator's feed. The application's behavior adapts based on the URL type.</li>
-        <li><strong>🎨 Creator Selection Popup</strong>: This button opens a powerful dialog listing all known creators. From here, you can:
-            <ul>
-                <li><strong>Search and Queue</strong>: Search for creators and check multiple names. Clicking "Add Selected" populates the main input field, preparing a batch download.</li>
-                <li><strong>Check for Updates</strong>: Select a single creator's saved profile. This loads their information and switches the main download button to "Check for Updates" mode, allowing you to download only new content since your last session.</li>
-            </ul>
-        </li>
-        <li><strong>Download Location</strong>: The primary folder where all content will be saved. The <strong>Browse...</strong> button lets you select this folder from your computer.</li>
-        <li><strong>Page Range (Start/End)</strong>: These fields activate only for creator feed URLs. They allow you to download a specific slice of a creator's history (e.g., pages 5 through 10) instead of their entire feed.</li>
-    </ul>
-    <hr>
-    <h2><strong>Filtering & Naming (Left Panel)</strong></h2>
-    <p>These features give you precise control over what gets downloaded and how it's named and organized.</p>
-    <ul>
-        <li><strong>Filter by Character(s)</strong>: A powerful tool to download content featuring specific characters. You can enter multiple names separated by commas.
-            <ul>
-                <li><strong>Filter: [Scope] Button</strong>: This button changes how the character filter works:
-                    <ul>
-                        <li><strong>Title</strong>: Downloads posts only if a character's name is in the post title.</li>
-                        <li><strong>Files</strong>: Downloads posts if a character's name is in any of the filenames within the post.</li>
-                        <li><strong>Both</strong>: Combines the "Title" and "Files" logic.</li>
-                        <li><strong>Comments (Beta)</strong>: Downloads a post if a character's name is mentioned in the comments section.</li>
-                    </ul>
-                </li>
-            </ul>
-        </li>
-        <li><strong>Skip with Words</strong>: A keyword-based filter to avoid unwanted content (e.g., <code>WIP</code>, <code>sketch</code>).
-            <ul>
-                <li><strong>Scope: [Type] Button</strong>: This button changes how the skip filter works:
-                    <ul>
-                        <li><strong>Posts</strong>: Skips the entire post if a keyword is found in the title.</li>
-                        <li><strong>Files</strong>: Skips only individual files if a keyword is found in the filename.</li>
-                        <li><strong>Both</strong>: Applies both levels of skipping.</li>
-                    </ul>
-                </li>
-            </ul>
-        </li>
-        <li><strong>Remove Words from name</strong>: Automatically cleans downloaded filenames by removing any specified words (e.g., "patreon," "HD").</li>
-    </ul>
-    <h3><strong>File Type Filter (Radio Buttons)</strong></h3>
-    <p>This section lets you choose the kind of content you want:</p>
-    <ul>
-        <li><strong>All, Images/GIFs, Videos, 🎧 Only Audio, 📦 Only Archives</strong>: These options filter the downloads to only include the selected file types.</li>
-        <li><strong>🔗 Only Links</strong>: This special mode doesn't download any files. Instead, it scans post descriptions and lists all external links (like Mega, Google Drive) in the log panel.</li>
-        <li><strong>More</strong>: Opens a dialog for text-only downloads. You can choose to save post <strong>descriptions</strong> or <strong>comments</strong> as formatted <strong>PDF, DOCX, or TXT</strong> files. A key feature here is the <strong>"Single PDF"</strong> option, which compiles the text from all downloaded posts into one continuous, sorted PDF document.</li>
-    </ul>
-    <hr>
-    <h2><strong>Download Options & Advanced Settings (Checkboxes)</strong></h2>
-    <ul>
-        <li><strong>Skip .zip</strong>: A simple toggle to ignore archive files during downloads.</li>
-        <li><strong>Download Thumbnails Only</strong>: Downloads only the small preview images instead of the full-resolution files.</li>
-        <li><strong>Scan Content for Images</strong>: A crucial feature that scans the post's text content for embedded images that may not be listed in the API, ensuring a more complete download.</li>
-        <li><strong>Compress to WebP</strong>: Saves disk space by automatically converting large images into the efficient WebP format.</li>
-        <li><strong>Keep Duplicates</strong>: Opens a dialog to control how files with identical content are handled. The default is to skip duplicates, but you can choose to keep all of them or set a specific limit (e.g., "keep up to 2 copies of the same file").</li>
-        <li><strong>Subfolder per Post</strong>: Organizes downloads by creating a unique folder for each post, named after the post's title.</li>
-        <li><strong>Date Prefix</strong>: When "Subfolder per Post" is on, this adds the post's date to the beginning of the folder name (e.g., <code>2025-07-25 Post Title</code>).</li>
-        <li><strong>Separate Folders by Known.txt</strong>: This enables the automatic folder organization system based on your "Known Names" list.</li>
-        <li><strong>Use Cookie</strong>: Allows the application to use browser cookies to access content that might be behind a paywall or login. You can paste a cookie string directly or use <strong>Browse...</strong> to select a <code>cookies.txt</code> file.</li>
-        <li><strong>Use Multithreading</strong>: Greatly speeds up downloads of creator feeds by processing multiple posts at once. The number of <strong>Threads</strong> can be configured.</li>
-        <li><strong>Show External Links in Log</strong>: When checked, a secondary log panel appears at the bottom of the right side, dedicated to listing any external links found.</li>
-    </ul>
-    <hr>
-    <h2><strong>Known Names Management (Bottom-Left)</strong></h2>
-    <p>This powerful feature automates the creation of organized, named folders.</p>
-    <ul>
-        <li><strong>Known Shows/Characters List</strong>: Displays all the names and groups you've saved.</li>
-        <li><strong>Search...</strong>: Filters the list to quickly find a name.</li>
-        <li><strong>Open Known.txt</strong>: Opens the source file in a text editor for advanced manual editing.</li>
-        <li><strong>Add New Name</strong>:
-            <ul>
-                <li><strong>Single Name</strong>: Typing <code>Tifa Lockhart</code> and clicking <strong>➕ Add</strong> creates an entry that will match "Tifa Lockhart".</li>
-                <li><strong>Group</strong>: Typing <code>(Boa, Hancock, Snake Princess)~</code> and clicking <strong>➕ Add</strong> creates a single entry named "Boa Hancock Snake Princess". The application will then look for "Boa," "Hancock," OR "Snake Princess" in titles/filenames and save any matches into that combined folder.</li>
-            </ul>
-        </li>
-        <li><strong>⤵️ Add to Filter</strong>: Opens a dialog with your full Known Names list, allowing you to check multiple entries and add them all to the "Filter by Character(s)" field at once.</li>
-        <li><strong>🗑️ Delete Selected</strong>: Removes highlighted names from your list.</li>
-    </ul>
-    <hr>
-    <h2><strong>Action Buttons & Status Controls</strong></h2>
-    <ul>
-        <li><strong>⬇️ Start Download / 🔗 Extract Links</strong>: The main action button. Its function is dynamic:
-            <ul>
-                <li><strong>Normal Mode</strong>: Starts the download based on the current settings.</li>
-                <li><strong>Update Mode</strong>: After selecting a creator profile, this button changes to <strong>🔄 Check for Updates</strong>.</li>
-                <li><strong>Update Confirmation</strong>: After new posts are found, it changes to <strong>⬇️ Start Download (X new)</strong>.</li>
-                <li><strong>Link Extraction Mode</strong>: The text changes to <strong>🔗 Extract Links</strong>.</li>
-            </ul>
-        </li>
-        <li><strong>⏸️ Pause / ▶️ Resume Download</strong>: Pauses the ongoing download, allowing you to change certain settings (like filters) on the fly. Click again to resume.</li>
-        <li><strong>❌ Cancel & Reset UI</strong>: Immediately stops all download activity and resets the UI to a clean state, preserving your URL and Download Location inputs.</li>
-        <li><strong>Error Button</strong>: If files fail to download, they are logged. This button opens a dialog listing all failed files and will show a count of errors (e.g., <strong>(5) Error</strong>). From the dialog, you can:
-            <ul>
-                <li>Select specific files to <strong>Retry</strong> downloading.</li>
-                <li><strong>Export</strong> the list of failed URLs to a <code>.txt</code> file.</li>
-            </ul>
-        </li>
-        <li><strong>🔄 Reset (Top-Right)</strong>: A hard reset that clears all logs and returns every single UI element to its default state.</li>
-        <li><strong>⚙️ (Settings)</strong>: Opens the main Settings dialog.</li>
-        <li><strong>📜 (History)</strong>: Opens the Download History dialog.</li>
-        <li><strong>? (Help)</strong>: Opens a helpful guide explaining the application's features.</li>
-        <li><strong>❤️ Support</strong>: Opens a dialog with information on how to support the developer.</li>
-    </ul>
-    <hr>
-    <h2><strong>Specialized Modes & Features</strong></h2>
-    <h3><strong>⭐ Favorite Mode</strong></h3>
-    <p>Activating this mode transforms the UI for managing saved collections:</p>
-    <ul>
-        <li>The URL input is disabled.</li>
-        <li>The main action buttons are replaced with:
-            <ul>
-                <li><strong>🖼️ Favorite Artists</strong>: Opens a dialog to browse and queue downloads from your saved favorite creators.</li>
-                <li><strong>📄 Favorite Posts</strong>: Opens a dialog to browse and queue downloads for specific saved favorite posts.</li>
-            </ul>
-        </li>
-        <li><strong>Scope: [Location] Button</strong>: Toggles where the favorited content is saved:
-            <ul>
-                <li><strong>Selected Location</strong>: Saves all content directly into the main "Download Location".</li>
-                <li><strong>Artist Folders</strong>: Creates a subfolder for each artist inside the main "Download Location".</li>
-            </ul>
-        </li>
-    </ul>
-    <h3><strong>📖 Manga/Comic Mode</strong></h3>
-    <p>This mode is designed for sequential content and has several effects:</p>
-    <ul>
-        <li><strong>Reverses Download Order</strong>: It fetches and downloads posts from <strong>oldest to newest</strong>.</li>
-        <li><strong>Enables Special Naming</strong>: A <strong><code>Name: [Style]</code></strong> button appears, allowing you to choose how files are named to maintain their correct order (e.g., by Post Title, by Date, or simple sequential numbering like <code>001, 002, 003...</code>).</li>
-        <li><strong>Disables Multithreading (for certain styles)</strong>: To guarantee perfect sequential numbering, multithreading for posts is automatically disabled for certain naming styles.</li>
-    </ul>
-    <h3><strong>Session & Error Management</strong></h3>
-    <ul>
-        <li><strong>Session Restore</strong>: If the application is closed unexpectedly during a download, it will detect the incomplete session on the next launch. The UI will present a <strong>🔄 Restore Download</strong> button to resume exactly where you left off. You can also choose to discard the session.</li>
-        <li><strong>Update Checking</strong>: By selecting a creator profile via the <strong>🎨 Creator Selection Popup</strong>, you can run an update check. The application compares the posts on the server with your download history for that creator and will prompt you to download only the new content.</li>
-    </ul>
-    <h3><strong>Logging & Monitoring</strong></h3>
-    <ul>
-        <li><strong>Progress Log</strong>: The main log provides real-time feedback on the download process, including status messages, file saves, skips, and errors.</li>
-        <li><strong>👁️ Log View Toggle</strong>: Switches the log view between the standard <strong>Progress Log</strong> and a <strong>Missed Character Log</strong>, which shows potential character names from posts that were skipped by your filters, helping you discover new names to add to your list.</li>
-    </ul>
+  <h1>Kemono Downloader - Comprehensive Feature Guide</h1>
+  <p>This guide provides a detailed overview of all user interface elements, input fields, buttons, popups, and functionalities available in the application.</p>
+  <hr>
+
+  <h2><strong>1. URL Input (🔗)</strong></h2>
+  <p>This is the primary input field where you specify the content you want to download.</p>
+
+  <p><strong>Functionality:</strong></p>
+  <ul>
+    <li><strong>Creator URL:</strong> A link to a creator's main page (e.g., https://kemono.su/patreon/user/12345). Downloads all posts from the creator.</li>
+    <li><strong>Post URL:</strong> A direct link to a specific post (e.g., .../post/98765). Downloads only the specified post.</li>
+  </ul>
+
+  <p><strong>Interaction with Other Features:</strong> The content of this field influences "Manga Mode" and "Page Range". "Page Range" is enabled only with a creator URL.</p>
+
+  <hr>
+
+  <h2><strong>2. Creator Selection & Update (🎨)</strong></h2>
+  <p>The color palette emoji button opens the Creator Selection & Update dialog. This allows managing and downloading from a local creator database.</p>
+
+  <p><strong>Functionality:</strong></p>
+  <ul>
+    <li><strong>Creator Browser:</strong> Loads a list from <code>creators.json</code>. Search by name, service, or paste a URL to find creators.</li>
+    <li><strong>Batch Selection:</strong> Select multiple creators and click "Add Selected" to add them to the batch download session.</li>
+    <li><strong>Update Checker:</strong> Use a saved profile (.json) to download only new content based on previously fetched posts.</li>
+    <li><strong>Post Fetching & Filtering:</strong> "Fetch Posts" loads post titles, allowing you to choose specific posts for download.</li>
+  </ul>
+
+  <hr>
+
+  <h2><strong>3. Download Location Input (📁)</strong></h2>
+  <p>This input defines the destination directory for downloaded files.</p>
+
+  <p><strong>Functionality:</strong></p>
+  <ul>
+    <li><strong>Manual Entry:</strong> Enter or paste the folder path.</li>
+    <li><strong>Browse Button:</strong> Opens a system dialog to choose a folder.</li>
+    <li><strong>Directory Creation:</strong> If the folder doesn't exist, the app can create it after user confirmation.</li>
+  </ul>
+
+  <hr>
+
+  <h2><strong>4. Filter by Character(s) & Scope Button</strong></h2>
+  <p>Used to download content for specific characters or series and organize them into subfolders.</p>
+
+  <p><strong>Input Field (Filter by Character(s)):</strong></p>
+  <ul>
+    <li>Enter comma-separated names (e.g., <code>Tifa, Aerith</code>).</li>
+    <li>Group aliases using parentheses (e.g., <code>(Cloud, Zack)</code>).</li>
+    <li>Names are matched against titles, filenames, or comments.</li>
+    <li>If "Separate Folders by Known.txt" is enabled, the name becomes the subfolder name.</li>
+  </ul>
+
+  <p><strong>Scope Button Modes:</strong></p>
+  <ul>
+    <li><strong>Filter: Title</strong> (default) – Match names in post titles only.</li>
+    <li><strong>Filter: Files</strong> – Match names in filenames only.</li>
+    <li><strong>Filter: Both</strong> – Try title match first, then filenames.</li>
+    <li><strong>Filter: Comments</strong> – Try filenames first, then post comments if no match.</li>
+  </ul>
+
+  <hr>
+
+  <h2><strong>5. Skip with Words & Scope Button</strong></h2>
+  <p>Prevents downloading content based on keywords.</p>
+
+  <p><strong>Input Field (Skip with Words):</strong></p>
+  <ul>
+    <li>Enter comma-separated keywords (e.g., <code>WIP, sketch, preview</code>).</li>
+    <li>Matching is case-insensitive.</li>
+    <li>If a keyword matches, the file or post is skipped.</li>
+  </ul>
+
+  <p><strong>Scope Button Modes:</strong></p>
+  <ul>
+    <li><strong>Scope: Posts</strong> (default) – Skips post if title contains a keyword.</li>
+    <li><strong>Scope: Files</strong> – Skips individual files with keyword matches.</li>
+    <li><strong>Scope: Both</strong> – Skips entire post if title matches, otherwise filters individual files.</li>
+  </ul>
+</div>
+<div>
+  <h2><strong>Filter File Section (Radio Buttons)</strong></h2>
+  <p>This section uses a group of radio buttons to control the primary download mode, dictating which types of files are targeted. Only one of these modes can be active at a time.</p>
+
+  <ul>
+    <li>
+      <strong>All:</strong> Default mode. Downloads every file and attachment provided by the API, regardless of type.
+    </li>
+    <li>
+      <strong>Images/GIFs:</strong> Filters for common image formats (<code>.jpg</code>, <code>.png</code>, <code>.gif</code>, <code>.webp</code>), skipping non-image files.
+    </li>
+    <li>
+      <strong>Videos:</strong> Filters for common video formats like <code>.mp4</code>, <code>.webm</code>, and <code>.mov</code>, skipping all others.
+    </li>
+    <li>
+      <strong>Only Archives:</strong> Downloads only archive files (<code>.zip</code>, <code>.rar</code>). Disables "Compress to WebP" and unchecks "Skip Archives".
+    </li>
+    <li>
+      <strong>Only Audio:</strong> Filters for common audio formats like <code>.mp3</code>, <code>.wav</code>, and <code>.flac</code>.
+    </li>
+    <li>
+      <strong>Only Links:</strong> Extracts external hyperlinks from post descriptions (e.g., Mega, Google Drive) and displays them in the log. Disables all download options.
+    </li>
+    <li>
+      <strong>More:</strong> Opens the "More Options" dialog to download text-based content instead of media files.
+      <ul>
+        <li><strong>Scope:</strong> Choose to extract from post description or comments.</li>
+        <li><strong>Export Format:</strong> Save text as PDF, DOCX, or TXT.</li>
+        <li><strong>Single PDF:</strong> Optionally compile all text into one PDF.</li>
+      </ul>
+    </li>
+  </ul>
+
+  <hr>
+
+  <h2><strong>Check Box Buttons</strong></h2>
+  <p>These checkboxes provide additional toggles to refine the download behavior and enable special features.</p>
+
+  <ul>
+    <li>
+      <strong>⭐ Favorite Mode:</strong> Changes workflow to download from your personal favorites. Disables the URL input.
+      <ul>
+        <li><strong>Favorite Artists:</strong> Opens a dialog to select from your favorited creators.</li>
+        <li><strong>Favorite Posts:</strong> Opens a dialog to select from your favorited posts on Kemono and Coomer.</li>
+      </ul>
+    </li>
+    <li>
+      <strong>Skip Archives:</strong> When checked, archive files (<code>.zip</code>, <code>.rar</code>) are ignored. Disabled in "Only Archives" mode.
+    </li>
+    <li>
+      <strong>Download Thumbnail Only:</strong> Saves only thumbnail previews, not full-resolution files. Enables "Scan Content for Images".
+    </li>
+    <li>
+      <strong>Scan Content for Images:</strong> Parses post HTML for embedded images not listed in the API. Looks for <code>&lt;img&gt;</code> tags and direct image links.
+    </li>
+    <li>
+      <strong>Compress to WebP:</strong> Converts large images (over 1.5 MB) to WebP format using the Pillow library for space-saving.
+    </li>
+    <li>
+      <strong>Keep Duplicates:</strong> Provides control over duplicate handling via the "Duplicate Handling Options" dialog.
+      <ul>
+        <li><strong>Skip by Hash:</strong> Default – skip identical files.</li>
+        <li><strong>Keep Everything:</strong> Save all files regardless of duplication.</li>
+        <li><strong>Limit:</strong> Set a limit on how many copies of the same file are saved. A limit of <code>0</code> means no limit.</li>
+      </ul>
+    </li>
+  </ul>
 </div>

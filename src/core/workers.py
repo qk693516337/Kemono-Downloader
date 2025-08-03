@@ -222,7 +222,37 @@ class PostProcessorWorker:
         if self .dynamic_filter_holder :
             return self .dynamic_filter_holder .get_filters ()
         return self .filter_character_list_objects_initial 
-    
+
+    def _find_valid_subdomain(self, url: str, max_subdomains: int = 4) -> str:
+        """
+        Attempts to find a working subdomain for a Kemono/Coomer URL that returned a 403 error.
+        Returns the original URL if no other valid subdomain is found.
+        """
+        self.logger(f"    probing for a valid subdomain...")
+        parsed_url = urlparse(url)
+        original_domain = parsed_url.netloc
+
+        for i in range(1, max_subdomains + 1):
+            domain_parts = original_domain.split('.')
+            if len(domain_parts) > 1:
+                base_domain = ".".join(domain_parts[-2:])
+                new_domain = f"n{i}.{base_domain}"
+            else:
+                continue 
+
+            new_url = parsed_url._replace(netloc=new_domain).geturl()
+            
+            try:
+                with requests.head(new_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5, allow_redirects=True) as resp:
+                    if resp.status_code == 200:
+                        self.logger(f"   ✅ Valid subdomain found: {new_domain}")
+                        return new_url
+            except requests.RequestException:
+                continue
+        
+        self.logger(f"   ⚠️ No other valid subdomain found. Sticking with the original.")
+        return url
+
     def _download_single_file(self, file_info, target_folder_path, post_page_url, original_post_id_for_log, skip_event,
                                 post_title="", file_index_in_post=0, num_files_in_this_post=1,
                                 manga_date_file_counter_ref=None,
@@ -477,9 +507,22 @@ class PostProcessorWorker:
                 if attempt_num_single_stream > 0:
                     self.logger(f"   Retrying download for '{api_original_filename}' (Overall Attempt {attempt_num_single_stream + 1}/{max_retries + 1})...")
                     time.sleep(retry_delay * (2 ** (attempt_num_single_stream - 1)))
+                
                 self._emit_signal('file_download_status', True)
-                response = requests.get(file_url, headers=file_download_headers, timeout=(15, 300), stream=True, cookies=cookies_to_use_for_file)
-              
+                
+                current_url_to_try = file_url
+                
+                response = requests.get(current_url_to_try, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file)
+                
+                if response.status_code == 403 and ('kemono.cr' in current_url_to_try or 'coomer.st' in current_url_to_try):
+                    self.logger(f"   ⚠️ Got 403 Forbidden for '{api_original_filename}'. Attempting subdomain rotation...")
+                    new_url = self._find_valid_subdomain(current_url_to_try)
+                    if new_url != current_url_to_try:
+                        self.logger(f"   Retrying with new URL: {new_url}")
+                        file_url = new_url # Update the main file_url for subsequent retries
+                        response = requests.get(new_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file)
+
+
                 response.raise_for_status()
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
                 num_parts_for_file = min(self.multipart_parts_count, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
@@ -1073,6 +1116,9 @@ class PostProcessorWorker:
 
             if not self.extract_links_only and self.use_post_subfolders:
                 cleaned_post_title_for_sub = robust_clean_name(post_title)
+                max_folder_len = 100 
+                if len(cleaned_post_title_for_sub) > max_folder_len:
+                    cleaned_post_title_for_sub = cleaned_post_title_for_sub[:max_folder_len].strip()
                 post_id_for_fallback = self.post.get('id', 'unknown_id')
 
                 if not cleaned_post_title_for_sub or cleaned_post_title_for_sub == "untitled_folder":

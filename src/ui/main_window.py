@@ -1023,23 +1023,42 @@ class DownloaderApp (QWidget ):
     def save_known_names(self):
         """
         Saves the current list of known names (KNOWN_NAMES) to the config file.
-        This version includes a fix to ensure the destination directory exists
-        before attempting to write the file, preventing crashes in new installations.
+        FIX: This version re-reads the file from disk before saving to preserve
+        any external edits made by the user.
         """
         global KNOWN_NAMES
         try:
             config_dir = os.path.dirname(self.config_file)
             os.makedirs(config_dir, exist_ok=True)
 
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            if os.path.exists(self.config_file):
+                self.log_signal.emit("ℹ️ Re-reading Known.txt before saving to check for external edits...")
+                disk_names = set()
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        disk_names.add(line.strip())
+                
                 for entry in KNOWN_NAMES:
                     if entry["is_group"]:
-                        f.write(f"({', '.join(sorted(entry['aliases'], key=str.lower))})\n")
+                        disk_names.add(f"({', '.join(sorted(entry['aliases'], key=str.lower))})")
                     else:
-                        f.write(entry["name"] + '\n')
+                        disk_names.add(entry["name"])
+                
+                with open(self.config_file, 'w', encoding='utf-8') as f:
+                    for name in sorted(list(disk_names), key=str.lower):
+                        if name: 
+                            f.write(name + '\n')
+
+            else:
+                with open(self.config_file, 'w', encoding='utf-8') as f:
+                    for entry in KNOWN_NAMES:
+                        if entry["is_group"]:
+                            f.write(f"({', '.join(sorted(entry['aliases'], key=str.lower))})\n")
+                        else:
+                            f.write(entry["name"] + '\n')
 
             if hasattr(self, 'log_signal'):
-                self.log_signal.emit(f"💾 Saved {len(KNOWN_NAMES)} known entries to {self.config_file}")
+                self.log_signal.emit(f"💾 Saved known entries to {self.config_file}")
 
         except Exception as e:
             log_msg = f"❌ Error saving config '{self.config_file}': {e}"
