@@ -272,3 +272,47 @@
     </ul>
   </li>
 </ul>
+<h2><strong>"Known Area" and its Controls</strong></h2>
+<p>This section, located on the right side of the main window, manages your personal name database (<code>Known.txt</code>), which the app uses to organize downloads into subfolders.</p>
+
+<ul>
+  <li>
+    <strong>Open Known.txt:</strong> Opens the <code>Known.txt</code> file in your system's default text editor for manual editing, such as bulk changes or cleanup.
+  </li>
+  <li>
+    <strong>Search character input:</strong> A live search filter that hides any list items not matching your input text. Useful for quickly locating specific names in large lists.
+  </li>
+  <li>
+    <strong>Known Series/Characters Area:</strong> Displays all names currently stored in your <code>Known.txt</code>. These names are used when "Separate folders by Known.txt" is enabled.
+  </li>
+  <li>
+    <strong>Input at bottom & Add button:</strong> Type a new character or series name into the input field, then click "➕ Add". The app checks for duplicates, updates the list, and saves to <code>Known.txt</code>.
+  </li>
+  <li>
+    <strong>Add to Filter:</strong> Opens a dialog showing all entries from <code>Known.txt</code> with checkboxes. You can select one or more to auto-fill the "Filter by Character(s)" field at the top of the app.
+  </li>
+  <li>
+    <strong>Delete Selected:</strong> Select one or more entries from the list and click "🗑️ Delete Selected" to remove them from the app and update <code>Known.txt</code> accordingly.
+  </li>
+</ul>
+
+<h2><strong>Other Buttons</strong></h2>
+<ul>
+  <li>
+    <strong>(?_?) mark button (Help Guide):</strong> Opens a multi-page help dialog with step-by-step instructions and explanations for all app features. Useful for new users.
+  </li>
+  <li>
+    <strong>History Button:</strong> Opens the Download History dialog (from <code>DownloadHistoryDialog.py</code>), showing:
+    <ul>
+      <li>Recently downloaded files</li>
+      <li>The first few posts processed in the last session</li>
+    </ul>
+    This allows for a quick review of recent activity.
+  </li>
+  <li>
+    <strong>Settings Button:</strong> Opens the Settings dialog (from <code>FutureSettingsDialog.py</code>), where you can change app-wide settings such as theme (light/dark) and language.
+  </li>
+  <li>
+    <strong>Support Button:</strong> Opens the Support dialog (from <code>SupportDialog.py</code>), which includes developer info, source links, and donation platforms like Ko-fi or Patreon.
+  </li>
+</ul>
