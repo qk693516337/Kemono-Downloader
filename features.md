@@ -316,3 +316,76 @@
     <strong>Support Button:</strong> Opens the Support dialog (from <code>SupportDialog.py</code>), which includes developer info, source links, and donation platforms like Ko-fi or Patreon.
   </li>
 </ul>
+<h2><strong>Log Area Controls</strong></h2>
+<p>These controls are located around the main log panel and offer tools for managing downloads, configuring advanced options, and resetting the application.</p>
+
+<ul>
+  <li>
+    <strong>Multi-part: OFF</strong><br>
+    This button acts as both a status indicator and a configuration panel for multi-part downloading (parallel downloading of large files).
+    <ul>
+      <li><strong>Function:</strong> Opens the <code>Multipart Download Options</code> dialog (defined in <code>MultipartScopeDialog.py</code>).</li>
+      <li><strong>Scope Options:</strong> Choose between "Videos Only", "Archives Only", or "Both".</li>
+      <li><strong>Number of parts:</strong> Set how many simultaneous connections to use (2–16).</li>
+      <li><strong>Minimum file size:</strong> Set a threshold (MB) below which files are downloaded normally.</li>
+      <li><strong>Status:</strong> After applying settings, the button's text updates (e.g., <code>Multi-part: Both</code>); otherwise, it resets to <code>Multi-part: OFF</code>.</li>
+    </ul>
+  </li>
+
+  <li>
+    <strong>👁️ Eye Emoji Button (Log View Toggle)</strong><br>
+    Switches between two views in the log panel:
+    <ul>
+      <li><strong>👁️ Progress Log View:</strong> Shows real-time download progress, status messages, and errors.</li>
+      <li><strong>🚫 Missed Character View:</strong> Displays names detected in posts that didn’t match the current filter — useful for updating <code>Known.txt</code>.</li>
+    </ul>
+  </li>
+
+  <li>
+    <strong>Reset Button</strong><br>
+    Performs a full "soft reset" of the UI when the application is idle.
+    <ul>
+      <li>Clears all inputs (except saved Download Location)</li>
+      <li>Resets checkboxes, buttons, and logs</li>
+      <li>Clears counters, queues, and restores the UI to its default state</li>
+      <li><strong>Note:</strong> This is different from <em>Cancel & Reset UI</em>, which halts active downloads</li>
+    </ul>
+  </li>
+</ul>
+
+<h3><strong>The Progress Log and "Only Links" Mode Controls</strong></h3>
+
+<ul>
+  <li>
+    <strong>Standard Mode (Progress Log)</strong><br>
+    This is the default behavior. The <code>main_log_output</code> field displays:
+    <ul>
+      <li>Post processing steps</li>
+      <li>Download/skipped file notifications</li>
+      <li>Error messages</li>
+      <li>Session summaries</li>
+    </ul>
+  </li>
+
+  <li>
+    <strong>"Only Links" Mode</strong><br>
+    When enabled, the log panel switches modes and reveals new controls.
+    <ul>
+      <li><strong>📜 Extracted Links Log:</strong> Replaces progress info with a list of found external links (e.g., Mega, Dropbox).</li>
+      <li><strong>Export Links Button:</strong> Saves the extracted links to a <code>.txt</code> file.</li>
+      <li><strong>Download Button:</strong> Opens the <code>Download Selected External Links</code> dialog (from <code>DownloadExtractedLinksDialog.py</code>), where you can:
+        <ul>
+          <li>View all supported external links</li>
+          <li>Select which ones to download</li>
+          <li>Begin download directly from cloud services</li>
+        </ul>
+      </li>
+      <li><strong>Links View Button:</strong> Toggles log display between:
+        <ul>
+          <li><strong>🔗 Links View:</strong> Shows all extracted links</li>
+          <li><strong>⬇️ Progress View:</strong> Shows download progress from external services (e.g., Mega)</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>
