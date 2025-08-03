@@ -142,7 +142,7 @@ Feel free to fork this repo and submit pull requests for bug fixes, new features
 
 ## License
 
-This project is under the Custom Licence
+This project is under the MIT Licence
 
 ## Star History
 
