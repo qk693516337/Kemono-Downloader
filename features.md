@@ -147,3 +147,62 @@
     </li>
   </ul>
 </div>
+<h2><strong>Folder Organization Checkboxes</strong></h2>
+<ul>
+  <li>
+    <strong>Separate folders by Known.txt:</strong> Automatically organizes downloads into folders based on name matches.
+    <ul>
+      <li>Uses "Filter by Character(s)" input first, if available.</li>
+      <li>Then checks names in <code>Known.txt</code>.</li>
+      <li>Falls back to extracting from post title.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Subfolder per post:</strong> Creates a unique folder per post, using the post’s title.
+    <ul>
+      <li>Prevents mixing files from multiple posts.</li>
+      <li>Can be combined with Known.txt-based folders.</li>
+      <li>Ensures uniqueness (e.g., <code>My Post Title_1</code>).</li>
+      <li>Automatically removes empty folders.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Date prefix:</strong> Enabled only with "Subfolder per post". Prepends the post date (e.g., <code>2025-08-03 My Post Title</code>) for chronological sorting.
+  </li>
+</ul>
+
+<h2><strong>General Functionality Checkboxes</strong></h2>
+<ul>
+  <li>
+    <strong>Use cookie:</strong> Enables login-based access via cookies.
+    <ul>
+      <li>Paste cookie string directly, or browse to select a <code>cookies.txt</code> file.</li>
+      <li>Cookies are used in all authenticated API requests.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Use Multithreading:</strong> Enables parallel downloading of posts.
+    <ul>
+      <li>Specify the number of worker threads (e.g., 10).</li>
+      <li>Disabled for Manga Mode and Only Links mode.</li>
+    </ul>
+  </li>
+  <li>
+    <strong>Show external links in log:</strong> Adds a secondary log that displays links (e.g., Mega, Dropbox) found in post text.
+  </li>
+  <li>
+    <strong>Manga/Comic mode:</strong> Sorts posts chronologically before download.
+    <ul>
+      <li>Ensures correct page order for comics/manga.</li>
+    </ul>
+    <strong>Scope Button (Name: ...):</strong> Controls filename style:
+    <ul>
+      <li><strong>Name: Post Title</strong> — e.g., <code>Chapter-1.jpg</code></li>
+      <li><strong>Name: Date + Original</strong> — e.g., <code>2025-08-03_filename.png</code></li>
+      <li><strong>Name: Date + Title</strong> — e.g., <code>2025-08-03_Chapter-1.jpg</code></li>
+      <li><strong>Name: Title+G.Num</strong> — e.g., <code>Page_001.jpg</code></li>
+      <li><strong>Name: Date Based</strong> — e.g., <code>001.jpg</code>, with optional prefix</li>
+      <li><strong>Name: Post ID</strong> — uses unique post ID as filename</li>
+    </ul>
+  </li>
+</ul>
