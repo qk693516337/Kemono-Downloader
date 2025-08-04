@@ -272,7 +272,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.3.0")
+        self.setWindowTitle("Kemono Downloader v6.3.1")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -5025,22 +5025,16 @@ class DownloaderApp (QWidget ):
         update_url = self.active_update_profile['creator_url'][0]
         service, user_id, _ = extract_post_info(update_url)
 
-        # --- FIX: Use the BASE download path, not the creator-specific one ---
-        # Get the base path from the UI (e.g., "E:/Kemono"). The worker will create subfolders inside this.
         base_download_dir_from_ui = self.dir_input.text().strip()
         self.log_signal.emit(f"   Update session will save to base folder: {base_download_dir_from_ui}")
-        # --- END FIX ---
 
         raw_character_filters_text = self.character_input.text().strip()
         parsed_character_filter_objects = self._parse_character_filters(raw_character_filters_text)
         
-        # --- FIX: Set paths to mimic a normal download, allowing the worker to create subfolders ---
-        # 'download_root' is the base directory.
-        # 'override_output_dir' is None, which allows the worker to use its own folder logic.
         args_template = {
             'api_url_input': update_url, 
-            'download_root': base_download_dir_from_ui, # Corrected: Use the BASE path
-            'override_output_dir': None, # Corrected: Set to None to allow subfolder logic
+            'download_root': base_download_dir_from_ui, 
+            'override_output_dir': None, 
             'known_names': list(KNOWN_NAMES), 
             'filter_character_list': parsed_character_filter_objects,
             'emitter': self.worker_to_gui_queue, 
