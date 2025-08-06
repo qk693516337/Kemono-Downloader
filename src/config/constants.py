@@ -97,7 +97,7 @@ FOLDER_NAME_STOP_WORDS = {
     "for", "he", "her", "his", "i", "im", "in", "is", "it", "its",
     "me", "my", "net", "not", "of", "on", "or", "org", "our",
     "s", "she", "so", "the", "their", "they", "this",
-    "to", "ve", "was", "we", "were", "with", "www", "you", "your",
+    "to", "ve", "was", "we", "were", "with", "www", "you", "your", "nsfw", "sfw",
  # add more according to need     
 }
 

@@ -626,7 +626,7 @@ class DownloaderApp (QWidget ):
         self.log_signal.emit("ℹ️ Update selection cleared. Resetting UI to defaults.")
         self.active_update_profile = None
         self.new_posts_for_update = []
-        self._reset_ui_to_defaults()
+        self._perform_soft_ui_reset()
 
     def _retranslate_main_ui (self ):
         """Retranslates static text elements in the main UI."""
@@ -5002,7 +5002,8 @@ class DownloaderApp (QWidget ):
 
         self.log_signal.emit(f"   Fetched a total of {len(all_posts_from_api)} posts from the server.")
         
-        self.new_posts_for_update = [post for post in all_posts_from_api if post.get('id') not in processed_ids_from_profile]
+        # CORRECTED LINE: Assign the list directly without re-filtering
+        self.new_posts_for_update = all_posts_from_api
         
         if not self.new_posts_for_update:
             self.log_signal.emit("✅ Creator is up to date! No new posts found.")
@@ -5030,11 +5031,24 @@ class DownloaderApp (QWidget ):
 
         raw_character_filters_text = self.character_input.text().strip()
         parsed_character_filter_objects = self._parse_character_filters(raw_character_filters_text)
-        
+
+        try:
+            num_threads_from_gui = int(self.thread_count_input.text().strip())
+        except ValueError:
+            num_threads_from_gui = 1
+        effective_num_file_threads_per_worker = max(1, min(num_threads_from_gui, MAX_FILE_THREADS_PER_POST_OR_WORKER))
+
+        # Logic to get folder ignore words if no character filters are used
+        creator_folder_ignore_words_for_run = None
+        # The 'not self.active_update_profile.get('post_id')' part is a simple way to check if it's a full creator page
+        is_full_creator_download = not self.active_update_profile.get('post_id')
+        if is_full_creator_download and not parsed_character_filter_objects:
+            creator_folder_ignore_words_for_run = CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS
+
         args_template = {
             'api_url_input': update_url, 
-            'download_root': base_download_dir_from_ui, 
-            'override_output_dir': None, 
+            'download_root': base_download_dir_from_ui,
+            'override_output_dir': None,
             'known_names': list(KNOWN_NAMES), 
             'filter_character_list': parsed_character_filter_objects,
             'emitter': self.worker_to_gui_queue, 
@@ -5071,7 +5085,13 @@ class DownloaderApp (QWidget ):
             'manga_date_prefix': self.manga_date_prefix_input.text().strip(), 
             'manga_date_file_counter_ref': None,
             'scan_content_for_images': self.scan_content_images_checkbox.isChecked(),
-            'creator_download_folder_ignore_words': None, 
+            
+            'creator_download_folder_ignore_words': creator_folder_ignore_words_for_run,
+            'num_file_threads_for_worker': effective_num_file_threads_per_worker,
+            'multipart_scope': 'files',
+            'multipart_parts_count': 8,
+            'multipart_min_size_mb': 100,
+
             'manga_global_file_counter_ref': None,
             'use_date_prefix_for_subfolder': self.date_prefix_checkbox.isChecked(),
             'keep_in_post_duplicates': self.keep_duplicates_checkbox.isChecked(),
@@ -5085,7 +5105,8 @@ class DownloaderApp (QWidget ):
             'text_export_format': self.text_export_format,
             'single_pdf_mode': self.single_pdf_setting, 
             'project_root_dir': self.app_base_dir,
-            'processed_post_ids': list(self.active_update_profile['processed_post_ids'])
+            'processed_post_ids': list(self.active_update_profile['processed_post_ids']),
+            'keep_archives_skip_others': self.keep_archives_skip_others_checkbox.isChecked() if hasattr(self, 'keep_archives_skip_others_checkbox') else False
         }
 
         num_threads = int(self.thread_count_input.text()) if self.use_multithreading_checkbox.isChecked() else 1
