@@ -826,37 +826,60 @@ class PostProcessorWorker:
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, details_for_failure
 
     def process(self):
+        # --- START: REFACTORED PROCESS METHOD ---
 
+        # 1. DATA MAPPING: Map Discord Message or Creator Post fields to a consistent set of variables.
+        if self.service == 'discord':
+            # For Discord, self.post is a MESSAGE object from the API.
+            post_title = self.post.get('content', '') or f"Message {self.post.get('id', 'N/A')}"
+            post_id = self.post.get('id', 'unknown_id')
+            post_main_file_info = {}  # Discord messages don't have a single main file
+            post_attachments = self.post.get('attachments', [])
+            post_content_html = self.post.get('content', '')
+            post_data = self.post  # Keep a reference to the original message object
+            log_prefix = "Message"
+        else:
+            # Existing logic for standard creator posts
+            post_title = self.post.get('title', '') or 'untitled_post'
+            post_id = self.post.get('id', 'unknown_id')
+            post_main_file_info = self.post.get('file')
+            post_attachments = self.post.get('attachments', [])
+            post_content_html = self.post.get('content', '')
+            post_data = self.post  # Reference to the post object
+            log_prefix = "Post"
+
+        # 2. SHARED PROCESSING LOGIC: The rest of the function now uses the consistent variables from above.
         result_tuple = (0, 0, [], [], [], None, None)
+        total_downloaded_this_post = 0
+        total_skipped_this_post = 0
+        determined_post_save_path_for_history = self.override_output_dir if self.override_output_dir else self.download_root
+        
         try:
-            if self._check_pause(f"Post processing for ID {self.post.get('id', 'N/A')}"):
-                result_tuple = (0, 0, [], [], [], None, None)
-                return result_tuple  
+            if self._check_pause(f"{log_prefix} processing for ID {post_id}"):
+                return (0, 0, [], [], [], None, None)
             if self.check_cancel():
-                result_tuple = (0, 0, [], [], [], None, None)
-                return result_tuple
+                return (0, 0, [], [], [], None, None)
 
             current_character_filters = self._get_current_character_filters()
             kept_original_filenames_for_log = []
             retryable_failures_this_post = []
             permanent_failures_this_post = []
-            total_downloaded_this_post = 0
-            total_skipped_this_post = 0
+            
             history_data_for_this_post = None
 
             parsed_api_url = urlparse(self.api_url_input)
-            post_data = self.post
-            post_id = post_data.get('id', 'unknown_id')
+            
+            # CONTEXT-AWARE URL for Referer Header
+            if self.service == 'discord':
+                server_id = self.user_id 
+                channel_id = self.post.get('channel', 'unknown_channel')
+                post_page_url = f"https://{parsed_api_url.netloc}/discord/server/{server_id}/{channel_id}"
+            else:
+                post_page_url = f"https://{parsed_api_url.netloc}/{self.service}/user/{self.user_id}/post/{post_id}"
 
-            post_page_url = f"https://{parsed_api_url.netloc}/{self.service}/user/{self.user_id}/post/{post_id}"
             headers = {'User-Agent': 'Mozilla/5.0', 'Referer': post_page_url, 'Accept': '*/*'}
             link_pattern = re.compile(r"""<a\s+.*?href=["'](https?://[^"']+)["'][^>]*>(.*?)</a>""", re.IGNORECASE | re.DOTALL)
-            post_data = self.post
-            post_title = post_data.get('title', '') or 'untitled_post'
-            post_id = post_data.get('id', 'unknown_id')
-            post_main_file_info = post_data.get('file')
-            post_attachments = post_data.get('attachments', [])
-
+            
             effective_unwanted_keywords_for_folder_naming = self.unwanted_keywords.copy()
             is_full_creator_download_no_char_filter = not self.target_post_id_from_initial_url and not current_character_filters
            
@@ -874,9 +897,9 @@ class PostProcessorWorker:
                 self.logger(f"   Applying creator download specific folder ignore words ({len(self.creator_download_folder_ignore_words)} words).")
                 effective_unwanted_keywords_for_folder_naming.update(self.creator_download_folder_ignore_words)
 
-            post_content_html = post_data.get('content', '')
             if not self.extract_links_only:
-                self.logger(f"\n--- Processing Post {post_id} ('{post_title[:50]}...') (Thread: {threading.current_thread().name}) ---")
+                self.logger(f"\n--- Processing {log_prefix} {post_id} ('{post_title[:50]}...') (Thread: {threading.current_thread().name}) ---")
+            
             num_potential_files_in_post = len(post_attachments or []) + (1 if post_main_file_info and post_main_file_info.get('path') else 0)
 
             post_is_candidate_by_title_char_match = False
@@ -920,7 +943,7 @@ class PostProcessorWorker:
                     if original_api_att_name:
                         all_files_from_post_api_for_char_check.append({'_original_name_for_log': original_api_att_name})
 
-            if current_character_filters and self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+            if current_character_filters and self.char_filter_scope == CHAR_SCOPE_COMMENTS and self.service != 'discord':
                 self.logger(f"   [Char Scope: Comments] Phase 1: Checking post files for matches before comments for post ID '{post_id}'.")
                 if self._check_pause(f"File check (comments scope) for post {post_id}"):
                     result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
@@ -943,7 +966,7 @@ class PostProcessorWorker:
                     if post_is_candidate_by_file_char_match_in_comment_scope: break
                 self.logger(f"   [Char Scope: Comments] Phase 1 Result: post_is_candidate_by_file_char_match_in_comment_scope = {post_is_candidate_by_file_char_match_in_comment_scope}")
 
-            if current_character_filters and self.char_filter_scope == CHAR_SCOPE_COMMENTS:
+            if current_character_filters and self.char_filter_scope == CHAR_SCOPE_COMMENTS and self.service != 'discord':
                 if not post_is_candidate_by_file_char_match_in_comment_scope:
                     if self._check_pause(f"Comment check for post {post_id}"):
                         result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
@@ -1007,10 +1030,10 @@ class PostProcessorWorker:
                     return result_tuple
 
             if not self.extract_links_only and self.manga_mode_active and current_character_filters and (self.char_filter_scope == CHAR_SCOPE_TITLE or self.char_filter_scope == CHAR_SCOPE_BOTH) and not post_is_candidate_by_title_char_match:
-                self.logger(f"   -> Skip Post (Manga Mode with Title/Both Scope - No Title Char Match): Title '{post_title[:50]}' doesn't match filters.")
-                self._emit_signal('missed_character_post', post_title, "Manga Mode: No title match for character filter (Title/Both scope)")
-                result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
-                return result_tuple
+                 self.logger(f"   -> Skip Post (Manga Mode with Title/Both Scope - No Title Char Match): Title '{post_title[:50]}' doesn't match filters.")
+                 self._emit_signal('missed_character_post', post_title, "Manga Mode: No title match for character filter (Title/Both scope)")
+                 result_tuple = (0, num_potential_files_in_post, [], [], [], None, None)
+                 return result_tuple
 
             if not isinstance(post_attachments, list):
                 self.logger(f"⚠️ Corrupt attachment data for post {post_id} (expected list, got {type(post_attachments)}). Skipping attachments.")
@@ -1143,29 +1166,50 @@ class PostProcessorWorker:
                 suffix_counter = 0
                 final_post_subfolder_name = ""
 
-                while True:
+                suffix_counter = 0
+                folder_creation_successful = False
+                final_post_subfolder_name = ""
+                post_id_for_folder = str(self.post.get('id', 'unknown_id'))
+
+                while not folder_creation_successful:
                     if suffix_counter == 0:
                         name_candidate = original_cleaned_post_title_for_sub
                     else:
                         name_candidate = f"{original_cleaned_post_title_for_sub}_{suffix_counter}"
+                    
                     potential_post_subfolder_path = os.path.join(base_path_for_post_subfolder, name_candidate)
-                    try:
-                        os.makedirs(potential_post_subfolder_path, exist_ok=False)
-                        final_post_subfolder_name = name_candidate
-                        if suffix_counter > 0:
-                            self.logger(f"   Post subfolder name conflict: Using '{final_post_subfolder_name}' instead of '{original_cleaned_post_title_for_sub}' to avoid mixing posts.")
-                        break
-                    except FileExistsError:
-                        suffix_counter += 1
-                        if suffix_counter > 100:
-                            self.logger(f"   ⚠️ Exceeded 100 attempts to find unique subfolder name for '{original_cleaned_post_title_for_sub}'. Using UUID.")
-                            final_post_subfolder_name = f"{original_cleaned_post_title_for_sub}_{uuid.uuid4().hex[:8]}"
-                            os.makedirs(os.path.join(base_path_for_post_subfolder, final_post_subfolder_name), exist_ok=True)
+                    id_file_path = os.path.join(potential_post_subfolder_path, f".postid_{post_id_for_folder}")
+
+                    if not os.path.isdir(potential_post_subfolder_path):
+                        # Folder does not exist, create it and its ID file
+                        try:
+                            os.makedirs(potential_post_subfolder_path)
+                            with open(id_file_path, 'w') as f:
+                                f.write(post_id_for_folder)
+                            
+                            final_post_subfolder_name = name_candidate
+                            folder_creation_successful = True
+                            if suffix_counter > 0:
+                                self.logger(f"   Post subfolder name conflict: Using '{final_post_subfolder_name}' to avoid mixing posts.")
+                        except OSError as e_mkdir:
+                            self.logger(f"   ❌ Error creating directory '{potential_post_subfolder_path}': {e_mkdir}.")
+                            final_post_subfolder_name = original_cleaned_post_title_for_sub
                             break
-                    except OSError as e_mkdir:
-                        self.logger(f"   ❌ Error creating directory '{potential_post_subfolder_path}': {e_mkdir}. Files for this post might be saved in parent or fail.")
-                        final_post_subfolder_name = original_cleaned_post_title_for_sub
-                        break
+                    else:
+                        # Folder exists, check if it's for this post or a different one
+                        if os.path.exists(id_file_path):
+                            # ID file matches! This is a restore scenario. Reuse the folder.
+                            self.logger(f"   ℹ️ Re-using existing post subfolder: '{name_candidate}'")
+                            final_post_subfolder_name = name_candidate
+                            folder_creation_successful = True
+                        else:
+                            # Folder exists but ID file does not match (or is missing). This is a normal name collision.
+                            suffix_counter += 1
+                            if suffix_counter > 100: # Safety break
+                                self.logger(f"   ⚠️ Exceeded 100 attempts to find unique subfolder for '{original_cleaned_post_title_for_sub}'.")
+                                final_post_subfolder_name = f"{original_cleaned_post_title_for_sub}_{uuid.uuid4().hex[:8]}"
+                                os.makedirs(os.path.join(base_path_for_post_subfolder, final_post_subfolder_name), exist_ok=True)
+                                break
                 determined_post_save_path_for_history = os.path.join(base_path_for_post_subfolder, final_post_subfolder_name)
 
             if self.skip_words_list and (self.skip_words_scope == SKIP_SCOPE_POSTS or self.skip_words_scope == SKIP_SCOPE_BOTH):
@@ -1807,14 +1851,23 @@ class PostProcessorWorker:
                             permanent_failures_this_post, history_data_for_this_post,
                             None)
 
+        except Exception as main_thread_err:
+            self.logger(f"\n❌ Critical error within Worker process for {log_prefix} {post_id}: {main_thread_err}")
+            self.logger(traceback.format_exc())
+            # Ensure we still return a valid tuple to prevent the app from stalling
+            result_tuple = (0, 1, [], [], [{'error': str(main_thread_err)}], None, None)
         finally:
+            # This block ALWAYS executes, ensuring that every task signals its completion.
+            # This is critical for the main thread to know when all work is done.
             if not self.extract_links_only and self.use_post_subfolders and total_downloaded_this_post == 0:
                 path_to_check_for_emptiness = determined_post_save_path_for_history
                 try:
+                    # Check if the path is a directory and if it's empty
                     if os.path.isdir(path_to_check_for_emptiness) and not os.listdir(path_to_check_for_emptiness):
                         self.logger(f"   🗑️ Removing empty post-specific subfolder: '{path_to_check_for_emptiness}'")
                         os.rmdir(path_to_check_for_emptiness)
                 except OSError as e_rmdir:
+                    # Log if removal fails for any reason (e.g., permissions)
                     self.logger(f"   ⚠️ Could not remove potentially empty subfolder '{path_to_check_for_emptiness}': {e_rmdir}")
 
             self._emit_signal('worker_finished', result_tuple)

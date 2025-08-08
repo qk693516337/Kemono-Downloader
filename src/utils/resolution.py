@@ -391,6 +391,10 @@ def setup_ui(main_app):
     main_app.link_search_button.setVisible(False)
     main_app.link_search_button.setFixedWidth(int(30 * scale))
     log_title_layout.addWidget(main_app.link_search_button)
+    main_app.discord_scope_toggle_button = QPushButton("Scope: Files")
+    main_app.discord_scope_toggle_button.setVisible(False) # Hidden by default
+    main_app.discord_scope_toggle_button.setFixedWidth(int(140 * scale))
+    log_title_layout.addWidget(main_app.discord_scope_toggle_button)
     main_app.manga_rename_toggle_button = QPushButton()
     main_app.manga_rename_toggle_button.setVisible(False)
     main_app.manga_rename_toggle_button.setFixedWidth(int(140 * scale))

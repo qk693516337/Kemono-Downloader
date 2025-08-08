@@ -34,6 +34,7 @@ from ..core.workers import DownloadThread as BackendDownloadThread
 from ..core.workers import PostProcessorWorker  
 from ..core.workers import PostProcessorSignals
 from ..core.api_client import download_from_api
+from ..core.discord_client import fetch_server_channels, fetch_channel_messages 
 from ..core.manager import DownloadManager
 from .assets import get_app_icon_object
 from ..config.constants import *
@@ -56,6 +57,7 @@ from .dialogs.FavoriteArtistsDialog import FavoriteArtistsDialog
 from .dialogs.ConfirmAddAllDialog import ConfirmAddAllDialog
 from .dialogs.MoreOptionsDialog import MoreOptionsDialog
 from .dialogs.SinglePDF import create_single_pdf_from_content
+from .dialogs.discord_pdf_generator import create_pdf_from_discord_messages
 from .dialogs.SupportDialog import SupportDialog
 from .dialogs.KeepDuplicatesDialog import KeepDuplicatesDialog
 from .dialogs.MultipartScopeDialog import MultipartScopeDialog
@@ -241,6 +243,8 @@ class DownloaderApp (QWidget ):
         self.single_pdf_mode = False
         self.save_creator_json_enabled_this_session = True 
         self.is_single_post_session = False 
+        self.discord_download_scope = 'files' 
+
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
 
@@ -621,6 +625,14 @@ class DownloaderApp (QWidget ):
             self.cancel_btn.setEnabled(False)
             self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
 
+    def update_discord_button_visibility(self, text=""):
+        if not hasattr(self, 'save_discord_as_pdf_btn'):
+            return
+        url_text = self.link_input.text().strip()
+        service, _, _ = extract_post_info(url_text)
+        is_discord = (service == 'discord')
+        self.save_discord_as_pdf_btn.setVisible(is_discord)
+
     def _clear_update_selection(self):
         """Clears the loaded creator profile and fully resets the UI to its default state."""
         self.log_signal.emit("ℹ️ Update selection cleared. Resetting UI to defaults.")
@@ -791,6 +803,9 @@ class DownloaderApp (QWidget ):
             self .use_cookie_checkbox .toggled .connect (self ._update_cookie_input_visibility )
         if hasattr (self ,'link_input'):
             self .link_input .textChanged .connect (self ._sync_queue_with_link_input )
+            self.link_input.textChanged.connect(self._update_contextual_ui_elements) 
+        if hasattr(self, 'discord_scope_toggle_button'):
+            self.discord_scope_toggle_button.clicked.connect(self._cycle_discord_scope)
         if hasattr (self ,'cookie_browse_button'):
             self .cookie_browse_button .clicked .connect (self ._browse_cookie_file )
         if hasattr (self ,'cookie_text_input'):
@@ -954,6 +969,10 @@ class DownloaderApp (QWidget ):
                     self ._handle_file_successfully_downloaded (payload [0 ])
                 elif signal_type == 'worker_finished':
                     self.actual_gui_signals.worker_finished_signal.emit(payload[0] if payload else tuple())
+                elif signal_type == 'set_progress_label' and self.progress_label:
+                    self.progress_label.setText(payload[0] if payload else "")
+                elif signal_type == 'set_ui_enabled':
+                    self.set_ui_enabled(payload[0] if payload else True)
                 else:
                     self .log_signal .emit (f"⚠️ Unknown signal type from worker queue: {signal_type }")
                 self .worker_to_gui_queue .task_done ()
@@ -1019,6 +1038,107 @@ class DownloaderApp (QWidget ):
                 self .log_signal .emit ("ℹ️ 'Known.txt' is empty or was not found. No default entries will be added.")
 
             self .character_list .addItems ([entry ["name"]for entry in KNOWN_NAMES ])
+
+    def start_discord_pdf_save(self):
+        if self._is_download_active():
+            QMessageBox.warning(self, "Busy", "Another operation is already in progress.")
+            return
+
+        api_url = self.link_input.text().strip()
+        service, server_id, channel_id = extract_post_info(api_url)
+
+        if service != 'discord':
+            QMessageBox.critical(self, "Input Error", "This feature is only for Discord URLs.")
+            return
+
+        # --- Get Save Filename ---
+        default_filename = f"discord_{server_id}_{channel_id or 'server'}.pdf"
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Discord Log as PDF", default_filename, "PDF Files (*.pdf)")
+
+        if not filepath:
+            self.log_signal.emit("ℹ️ Discord PDF save cancelled by user.")
+            return
+        
+        # --- Create and run the background thread ---
+        pdf_thread = threading.Thread(
+            target=self._run_discord_pdf_creation_thread, 
+            args=(api_url, server_id, channel_id, filepath),
+            daemon=True
+        )
+        pdf_thread.start()
+
+    def _run_discord_pdf_creation_thread(self, api_url, server_id, channel_id, output_filepath):
+        # --- START: NEW THREAD-SAFE LOGGER ---
+        def queue_logger(message):
+            # This helper function puts log messages into the thread-safe queue
+            self.worker_to_gui_queue.put({'type': 'progress', 'payload': (message,)})
+        
+        # This helper function will update the main progress label via the queue
+        def queue_progress_label_update(message):
+            self.worker_to_gui_queue.put({'type': 'set_progress_label', 'payload': (message,)})
+        # --- END: NEW THREAD-SAFE LOGGER ---
+
+        self.set_ui_enabled(False)
+        queue_logger("=" * 40)
+        queue_logger(f"🚀 Starting Discord PDF export for: {api_url}")
+        queue_progress_label_update("Fetching messages...")
+
+        all_messages = []
+        cookies = prepare_cookies_for_request(
+            self.use_cookie_checkbox.isChecked(), self.cookie_text_input.text(), 
+            self.selected_cookie_filepath, self.app_base_dir, queue_logger # Use safe logger
+        )
+
+        channels_to_process = []
+        server_name_for_pdf = server_id
+
+        if channel_id:
+            channels_to_process.append({'id': channel_id, 'name': channel_id})
+        else:
+            channels = fetch_server_channels(server_id, queue_logger, cookies) # Use safe logger
+            if channels:
+                channels_to_process = channels
+                # In a real scenario, you'd get the server name from an API. We'll use the ID.
+                server_name_for_pdf = server_id 
+            else:
+                queue_logger(f"❌ Could not find any channels for server {server_id}.")
+                self.worker_to_gui_queue.put({'type': 'set_ui_enabled', 'payload': (True,)})
+                return
+
+        # Fetch messages for all required channels
+        for i, channel in enumerate(channels_to_process):
+            queue_progress_label_update(f"Fetching from channel {i+1}/{len(channels_to_process)}: #{channel.get('name', '')}")
+            message_generator = fetch_channel_messages(channel['id'], queue_logger, self.cancellation_event, self.pause_event, cookies) # Use safe logger
+            for message_batch in message_generator:
+                all_messages.extend(message_batch)
+        
+        queue_progress_label_update(f"Collected {len(all_messages)} total messages. Generating PDF...")
+        
+        # Determine font path
+        if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+            base_path = sys._MEIPASS
+        else:
+            base_path = self.app_base_dir
+        font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+
+        # Generate the PDF
+        success = create_pdf_from_discord_messages(
+            all_messages,
+            server_name_for_pdf,
+            channels_to_process[0].get('name', channel_id) if len(channels_to_process) == 1 else "All Channels",
+            output_filepath,
+            font_path,
+            logger=queue_logger # Use safe logger
+        )
+
+        if success:
+            queue_progress_label_update(f"✅ PDF export complete!")
+        else:
+            queue_progress_label_update(f"❌ PDF export failed. Check log for details.")
+        
+        queue_logger("=" * 40)
+        # Safely re-enable the UI from the main thread via the queue
+        self.worker_to_gui_queue.put({'type': 'set_ui_enabled', 'payload': (True,)})
 
     def save_known_names(self):
         """
@@ -1708,15 +1828,19 @@ class DownloaderApp (QWidget ):
             scrollbar .setValue (0 )
 
     def _is_download_active (self ):
-        single_thread_active =self .download_thread and self .download_thread .isRunning ()
+        single_thread_active = False
+        if self.download_thread:
+            # Handle both QThread and standard threading.Thread
+            if hasattr(self.download_thread, 'isRunning') and self.download_thread.isRunning():
+                single_thread_active = True
+            elif hasattr(self.download_thread, 'is_alive') and self.download_thread.is_alive():
+                single_thread_active = True
+
         fetcher_active =hasattr (self ,'is_fetcher_thread_running')and self .is_fetcher_thread_running 
         pool_has_active_tasks =self .thread_pool is not None and any (not f .done ()for f in self .active_futures if f is not None )
         retry_pool_active =hasattr (self ,'retry_thread_pool')and self .retry_thread_pool is not None and hasattr (self ,'active_retry_futures')and any (not f .done ()for f in self .active_retry_futures if f is not None )
-
-
         external_dl_thread_active =hasattr (self ,'external_link_download_thread')and self .external_link_download_thread is not None and self .external_link_download_thread .isRunning ()
-
-        return single_thread_active or fetcher_active or pool_has_active_tasks or retry_pool_active or external_dl_thread_active 
+        return single_thread_active or fetcher_active or pool_has_active_tasks or retry_pool_active or external_dl_thread_active
 
     def handle_external_link_signal (self ,post_title ,link_text ,link_url ,platform ,decryption_key ):
         link_data =(post_title ,link_text ,link_url ,platform ,decryption_key )
@@ -2706,11 +2830,28 @@ class DownloaderApp (QWidget ):
                 self .favorite_mode_posts_button .setEnabled (False )
 
     def update_ui_for_manga_mode (self ,checked ):
+        # --- START: NEW DISCORD UI LOGIC ---
+        url_text =self .link_input .text ().strip ()if self .link_input else ""
+        service, _, _ = extract_post_info(url_text)
+        is_discord_url = (service == 'discord')
+
+        if is_discord_url:
+            # When a discord URL is detected, disable incompatible options
+            if self.manga_mode_checkbox:
+                self.manga_mode_checkbox.setEnabled(False)
+                self.manga_mode_checkbox.setChecked(False)
+            if self.page_range_label: self.page_range_label.setEnabled(False)
+            if self.start_page_input: self.start_page_input.setEnabled(False)
+            if self.to_label: self.to_label.setEnabled(False)
+            if self.end_page_input: self.end_page_input.setEnabled(False)
+            checked = False # Force manga mode off
+        # --- END: NEW DISCORD UI LOGIC ---
+
         is_only_links_mode =self .radio_only_links and self .radio_only_links .isChecked ()
         is_only_archives_mode =self .radio_only_archives and self .radio_only_archives .isChecked ()
         is_only_audio_mode =hasattr (self ,'radio_only_audio')and self .radio_only_audio .isChecked ()
 
-        url_text =self .link_input .text ().strip ()if self .link_input else ""
+        # The rest of the original function continues from here...
         _ ,_ ,post_id =extract_post_info (url_text )
 
         is_creator_feed =not post_id if url_text else False 
@@ -2720,7 +2861,8 @@ class DownloaderApp (QWidget ):
         if self.favorite_download_queue and all(item.get('type') == 'single_post_from_popup' for item in self.favorite_download_queue):
             is_single_post = True
 
-        can_enable_manga_checkbox = (is_creator_feed or is_single_post) and not is_favorite_mode_on
+        # --- MODIFIED: Added check for is_discord_url ---
+        can_enable_manga_checkbox = (is_creator_feed or is_single_post) and not is_favorite_mode_on and not is_discord_url
         
         if self .manga_mode_checkbox :
             self .manga_mode_checkbox .setEnabled (can_enable_manga_checkbox)
@@ -2738,7 +2880,9 @@ class DownloaderApp (QWidget ):
         if self .manga_rename_toggle_button :
             self .manga_rename_toggle_button .setVisible (manga_mode_effectively_on and not (is_only_links_mode or is_only_archives_mode or is_only_audio_mode ))
 
-        self .update_page_range_enabled_state ()
+        # --- MODIFIED: Added check for is_discord_url ---
+        if not is_discord_url:
+            self .update_page_range_enabled_state ()
 
         current_filename_style =self .manga_filename_style 
 
@@ -2772,7 +2916,6 @@ class DownloaderApp (QWidget ):
             self.multipart_toggle_button.setVisible(not hide_multipart_button_due_mode)
 
         self ._update_multithreading_for_date_mode ()
-
 
     def filter_character_list (self ,search_text ):
         search_text_lower =search_text .lower ()
@@ -2841,7 +2984,35 @@ class DownloaderApp (QWidget ):
         if total_posts >0 or processed_posts >0 :
             self .file_progress_label .setText ("")
 
+    def _update_contextual_ui_elements(self, text=""):
+        """Shows or hides UI elements based on the URL, like the Discord scope button."""
+        if not hasattr(self, 'discord_scope_toggle_button'): return
+        url_text = self.link_input.text().strip()
+        service, _, _ = extract_post_info(url_text) 
+        is_discord = (service == 'discord')
+        self.discord_scope_toggle_button.setVisible(is_discord)
+        if is_discord: self._update_discord_scope_button_text()
+        else: self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+
+    def _update_discord_scope_button_text(self):
+        """Updates the text of the discord scope button and the main download button."""
+        if self.discord_download_scope == 'files':
+            self.discord_scope_toggle_button.setText("Scope: Files")
+            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+        else:
+             self.discord_scope_toggle_button.setText("Scope: Messages")
+             self.download_btn.setText("📄 Save Messages as PDF")
+
+    def _cycle_discord_scope(self):
+        """Toggles between 'files' and 'messages' for Discord downloads."""
+        self.discord_download_scope = 'messages' if self.discord_download_scope == 'files' else 'files'
+        self._update_discord_scope_button_text()
+    
     def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False, is_continuation=False, item_type_from_queue=None):
+        # --- NEW: Import clean_folder_name here ---
+        from ..utils.file_utils import clean_folder_name
+        from ..config.constants import FOLDER_NAME_STOP_WORDS
+
         self.finish_lock = threading.Lock() 
         self.is_finishing = False                  
         if self.active_update_profile:
@@ -2852,7 +3023,7 @@ class DownloaderApp (QWidget ):
 
         self.is_finishing = False
         self.downloaded_hash_counts.clear()
-        global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, clean_folder_name, MAX_FILE_THREADS_PER_POST_OR_WORKER
+        global KNOWN_NAMES, BackendDownloadThread, PostProcessorWorker, extract_post_info, MAX_FILE_THREADS_PER_POST_OR_WORKER
 
         if not is_restore and not is_continuation:
             self.permanently_failed_files_for_dialog.clear()
@@ -2968,8 +3139,146 @@ class DownloaderApp (QWidget ):
 
         self.cancellation_message_logged_this_session = False
         
-        service, user_id, post_id_from_url = extract_post_info(api_url)
+        # --- MODIFIED: ID names are now generic ---
+        service, id1, id2 = extract_post_info(api_url)
 
+        if not service or not id1:
+            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
+            return False
+
+                 # --- START: NEW DISCORD LOGIC BRANCH ---
+        if service == 'discord':
+            server_id, channel_id = id1, id2
+            
+            def discord_processing_task():
+                def queue_logger(message):
+                    self.worker_to_gui_queue.put({'type': 'progress', 'payload': (message,)})
+                
+                def queue_progress_label_update(message):
+                    self.worker_to_gui_queue.put({'type': 'set_progress_label', 'payload': (message,)})
+
+                cookies = prepare_cookies_for_request(
+                    self.use_cookie_checkbox.isChecked(), self.cookie_text_input.text(),
+                    self.selected_cookie_filepath, self.app_base_dir, queue_logger
+                )
+                
+                # --- SCOPE: MESSAGES (PDF CREATION) ---
+                if self.discord_download_scope == 'messages':
+                    queue_logger("=" * 40)
+                    queue_logger(f"🚀 Starting Discord PDF export for: {api_url}")
+                    
+                    output_dir = self.dir_input.text().strip()
+                    if not output_dir or not os.path.isdir(output_dir):
+                        queue_logger("❌ PDF Save Error: No valid download directory selected in the UI.")
+                        self.worker_to_gui_queue.put({'type': 'set_ui_enabled', 'payload': (True,)})
+                        return
+
+                    default_filename = f"discord_{server_id}_{channel_id or 'server'}.pdf"
+                    output_filepath = os.path.join(output_dir, default_filename)  # We'll save with a default name
+                    
+                    all_messages, channels_to_process = [], []
+                    server_name_for_pdf = server_id
+                    
+                    if channel_id:
+                        channels_to_process.append({'id': channel_id, 'name': channel_id})
+                    else:
+                        channels = fetch_server_channels(server_id, queue_logger, cookies)
+                        if channels:
+                            channels_to_process = channels
+
+                    for i, channel in enumerate(channels_to_process):
+                        queue_progress_label_update(f"Fetching from channel {i+1}/{len(channels_to_process)}: #{channel.get('name', '')}")
+                        message_generator = fetch_channel_messages(channel['id'], queue_logger, self.cancellation_event, self.pause_event, cookies)
+                        for message_batch in message_generator:
+                            all_messages.extend(message_batch)
+                    
+                    queue_progress_label_update(f"Collected {len(all_messages)} total messages. Generating PDF...")
+                    
+                    if getattr(sys, 'frozen', False):
+                        base_path = sys._MEIPASS
+                    else:
+                        base_path = self.app_base_dir
+                    font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+
+                    success = create_pdf_from_discord_messages(
+                        all_messages, server_name_for_pdf,
+                        channels_to_process[0].get('name', channel_id) if len(channels_to_process) == 1 else "All Channels",
+                        output_filepath, font_path, logger=queue_logger
+                    )
+                    
+                    if success:
+                        queue_progress_label_update("✅ PDF export complete!")
+                    else:
+                        queue_progress_label_update("❌ PDF export failed.")
+                    self.finished_signal.emit(0, len(all_messages), self.cancellation_event.is_set(), [])
+                    return
+
+                # --- SCOPE: FILES (DOWNLOAD) ---
+                elif self.discord_download_scope == 'files':
+                    worker_args = {
+                        'download_root': effective_output_dir_for_run, 'known_names': list(KNOWN_NAMES),
+                        'filter_character_list': self._parse_character_filters(self.character_input.text().strip()),
+                        'emitter': self.worker_to_gui_queue, 'unwanted_keywords': FOLDER_NAME_STOP_WORDS,
+                        'filter_mode': self.get_filter_mode(), 'skip_zip': self.skip_zip_checkbox.isChecked(),
+                        'use_subfolders': self.use_subfolders_checkbox.isChecked(), 'use_post_subfolders': self.use_subfolder_per_post_checkbox.isChecked(),
+                        'target_post_id_from_initial_url': None, 'custom_folder_name': None,
+                        'compress_images': self.compress_images_checkbox.isChecked(), 'download_thumbnails': self.download_thumbnails_checkbox.isChecked(),
+                        'service': service, 'user_id': server_id, 'api_url_input': api_url,
+                        'pause_event': self.pause_event, 'cancellation_event': self.cancellation_event,
+                        'downloaded_files': self.downloaded_files, 'downloaded_file_hashes': self.downloaded_file_hashes,
+                        'downloaded_files_lock': self.downloaded_files_lock, 'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
+                        'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
+                        'skip_words_scope': self.get_skip_words_scope(), 'char_filter_scope': self.get_char_filter_scope(),
+                        'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()],
+                        'scan_content_for_images': self.scan_content_images_checkbox.isChecked(),
+                        'manga_mode_active': False,
+                    }
+                    total_dl, total_skip = 0, 0
+                    
+                    def process_channel_files(channel_id_to_process, output_directory):
+                        nonlocal total_dl, total_skip
+                        message_generator = fetch_channel_messages(channel_id_to_process, queue_logger, self.cancellation_event, self.pause_event, cookies)
+                        for message_batch in message_generator:
+                            if self.cancellation_event.is_set():
+                                break
+                            for message in message_batch:
+                                if self.cancellation_event.is_set():
+                                    break
+                                if not message.get('attachments'):
+                                    continue
+
+                                worker_instance_args = worker_args.copy()
+                                worker_instance_args.update({'post_data': message, 'download_root': output_directory, 'override_output_dir': output_directory})
+                                worker = PostProcessorWorker(**worker_instance_args)
+                                dl_count, skip_count, _, _, _, _, _ = worker.process()
+                                total_dl += dl_count
+                                total_skip += skip_count
+                    
+                    if channel_id:
+                        process_channel_files(channel_id, effective_output_dir_for_run)
+                    else:
+                        channels = fetch_server_channels(server_id, queue_logger, cookies)
+                        if channels:
+                            for i, channel in enumerate(channels):
+                                if self.cancellation_event.is_set():
+                                    break
+                                chan_id = channel.get('id')
+                                chan_name = channel.get('name', f"channel_{chan_id}")
+                                queue_logger("=" * 40)
+                                queue_logger(f"Processing Channel {i+1}/{len(channels)}: '{chan_name}'")
+                                channel_dir = os.path.join(effective_output_dir_for_run, clean_folder_name(chan_name))
+                                os.makedirs(channel_dir, exist_ok=True)
+                                process_channel_files(chan_id, channel_dir)
+                    
+                    self.finished_signal.emit(total_dl, total_skip, self.cancellation_event.is_set(), [])
+
+            self.set_ui_enabled(False)
+            self.download_thread = threading.Thread(target=discord_processing_task, daemon=True)
+            self.download_thread.start()
+            return True
+
+        user_id, post_id_from_url = id1, id2
+        
         if direct_api_url and not post_id_from_url and item_type_from_queue and 'post' in item_type_from_queue:
             self.log_signal.emit(f"❌ CRITICAL ERROR: Could not parse post ID from the queued POST URL: {api_url}")
             self.log_signal.emit("   Skipping this item. This might be due to an unsupported URL format or a temporary issue.")
@@ -2979,10 +3288,6 @@ class DownloaderApp (QWidget ):
                 cancelled_by_user=False, 
                 kept_original_names_list=[]
             )
-            return False
-
-        if not service or not user_id:
-            QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
             return False
 
         self.save_creator_json_enabled_this_session = self.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
@@ -3027,8 +3332,6 @@ class DownloaderApp (QWidget ):
                 self.log_signal.emit(f"✅ Profile for '{creator_name_for_profile}' loaded/created. Settings saved.")
         
         profile_processed_ids = set()
-
-        
 
         session_processed_ids = set(processed_post_ids_for_restore)
         combined_processed_ids = session_processed_ids.union(profile_processed_ids)
@@ -3924,9 +4227,11 @@ class DownloaderApp (QWidget ):
                 self.permanently_failed_files_for_dialog.extend(permanent)
                 self._update_error_button_count()
             
-            if history_data: 
-                # This single call now correctly handles both history and profile saving.
+            if history_data and not permanent:
                 self._add_to_history_candidates(history_data)
+            elif history_data and permanent:
+                post_id = history_data.get('post_id', 'N/A')
+                self.log_signal.emit(f"⚠️ Post {post_id} had permanent file failures. It will NOT be marked as processed and will be retried on the next session/update.")
 
             self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
@@ -4298,7 +4603,8 @@ class DownloaderApp (QWidget ):
 
         self.progress_label.setText(self._tr("status_cancelling", "Cancelling... Please wait."))
 
-        if self.download_thread and self.download_thread.isRunning():
+        # Only call QThread-specific methods if the thread is a QThread
+        if self.download_thread and hasattr(self.download_thread, 'requestInterruption'):
             self.download_thread.requestInterruption()
             self.log_signal.emit("    Signaled single download thread to interrupt.")
 
@@ -4402,23 +4708,25 @@ class DownloaderApp (QWidget ):
                 self.log_signal.emit("=" * 40)
 
             if self.download_thread:
-                try:
-                    if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
-                    if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
-                    if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
-                    if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
-                    if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
-                    if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
-                    if hasattr(self.download_thread, 'missed_character_post_signal'): self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
-                    if hasattr(self.download_thread, 'retryable_file_failed_signal'): self.download_thread.retryable_file_failed_signal.disconnect(self._handle_retryable_file_failure)
-                    if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): self.download_thread.file_successfully_downloaded_signal.disconnect(self._handle_actual_file_downloaded)
-                    if hasattr(self.download_thread, 'post_processed_for_history_signal'): self.download_thread.post_processed_for_history_signal.disconnect(self._add_to_history_candidates)
-                except (TypeError, RuntimeError) as e:
-                    self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
+                if isinstance(self.download_thread, QThread):
+                    try:
+                        if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
+                        if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
+                        if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
+                        if hasattr(self.download_thread, 'receive_add_character_result'): self.character_prompt_response_signal.disconnect(self.download_thread.receive_add_character_result)
+                        if hasattr(self.download_thread, 'external_link_signal'): self.download_thread.external_link_signal.disconnect(self.handle_external_link_signal)
+                        if hasattr(self.download_thread, 'file_progress_signal'): self.download_thread.file_progress_signal.disconnect(self.update_file_progress_display)
+                        if hasattr(self.download_thread, 'missed_character_post_signal'): self.download_thread.missed_character_post_signal.disconnect(self.handle_missed_character_post)
+                        if hasattr(self.download_thread, 'retryable_file_failed_signal'): self.download_thread.retryable_file_failed_signal.disconnect(self._handle_retryable_file_failure)
+                        if hasattr(self.download_thread, 'file_successfully_downloaded_signal'): self.download_thread.file_successfully_downloaded_signal.disconnect(self._handle_actual_file_downloaded)
+                        if hasattr(self.download_thread, 'post_processed_for_history_signal'): self.download_thread.post_processed_for_history_signal.disconnect(self._add_to_history_candidates)
+                    except (TypeError, RuntimeError) as e:
+                        self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
 
-                if not self.download_thread.isRunning():
-                    if self.download_thread:
+                    if not self.download_thread.isRunning():
                         self.download_thread.deleteLater()
+                        self.download_thread = None
+                else:
                     self.download_thread = None
 
             self.progress_label.setText(
@@ -4435,10 +4743,10 @@ class DownloaderApp (QWidget ):
                                              "Would you like to attempt to download these failed files again?",
                                              QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
                 if reply == QMessageBox.Yes:
-                    self.is_finishing = False # Allow retry session to start
-                    self.finish_lock.release() # Release lock for the retry session
+                    self.is_finishing = False
+                    self.finish_lock.release()
                     self._start_failed_files_retry_session()
-                    return # Exit to allow retry session to run
+                    return
                 else:
                     self.log_signal.emit("ℹ️ User chose not to retry failed files.")
                     self.permanently_failed_files_for_dialog.extend(self.retryable_failed_files_info)
@@ -4737,7 +5045,7 @@ class DownloaderApp (QWidget ):
         self.is_paused = False
 
         self._clear_session_file()
-        self._reset_ui_to_defaults()
+        self._perform_soft_ui_reset()
         self._load_saved_download_location()
         self.main_log_output.clear()
         self.external_log_output.clear()

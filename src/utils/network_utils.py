@@ -141,12 +141,15 @@ def prepare_cookies_for_request(use_cookie_flag, cookie_text_input, selected_coo
 def extract_post_info(url_string):
     """
     Parses a URL string to extract the service, user ID, and post ID.
+    UPDATED to support Discord server/channel URLs.
 
     Args:
         url_string (str): The URL to parse.
 
     Returns:
-        tuple: A tuple containing (service, user_id, post_id). Any can be None.
+        tuple: A tuple containing (service, id1, id2). 
+               For posts: (service, user_id, post_id).
+               For Discord: ('discord', server_id, channel_id).
     """
     if not isinstance(url_string, str) or not url_string.strip():
         return None, None, None
@@ -155,7 +158,15 @@ def extract_post_info(url_string):
         parsed_url = urlparse(url_string.strip())
         path_parts = [part for part in parsed_url.path.strip('/').split('/') if part]
         
-        # Standard format: /<service>/user/<user_id>/post/<post_id>
+        # Check for new Discord URL format first
+        # e.g., /discord/server/891670433978531850/1252332668805189723
+        if len(path_parts) >= 3 and path_parts[0].lower() == 'discord' and path_parts[1].lower() == 'server':
+            service = 'discord'
+            server_id = path_parts[2]
+            channel_id = path_parts[3] if len(path_parts) >= 4 else None
+            return service, server_id, channel_id
+
+        # Standard creator/post format: /<service>/user/<user_id>/post/<post_id>
         if len(path_parts) >= 3 and path_parts[1].lower() == 'user':
             service = path_parts[0]
             user_id = path_parts[2]
@@ -173,7 +184,6 @@ def extract_post_info(url_string):
         print(f"Debug: Exception during URL parsing for '{url_string}': {e}")
 
     return None, None, None
-
 
 def get_link_platform(url):
     """
