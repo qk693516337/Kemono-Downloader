@@ -3,12 +3,20 @@ import requests
 import json
 from urllib.parse import urlparse
 
-def fetch_server_channels(server_id, logger, cookies=None):
+def fetch_server_channels(server_id, logger, cookies=None, cancellation_event=None, pause_event=None):
     """
     Fetches the list of channels for a given Discord server ID from the Kemono API.
+    UPDATED to be pausable and cancellable.
     """
     domains_to_try = ["kemono.cr", "kemono.su"]
     for domain in domains_to_try:
+        if cancellation_event and cancellation_event.is_set():
+            logger("   Channel fetching cancelled by user.")
+            return None
+        while pause_event and pause_event.is_set():
+            if cancellation_event and cancellation_event.is_set(): break
+            time.sleep(0.5)
+
         lookup_url = f"https://{domain}/api/v1/discord/channel/lookup/{server_id}"
         logger(f"   Attempting to fetch channel list from: {lookup_url}")
         try:

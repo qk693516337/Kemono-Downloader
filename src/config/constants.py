@@ -60,6 +60,7 @@ DOWNLOAD_LOCATION_KEY = "downloadLocationV1"
 RESOLUTION_KEY = "window_resolution"
 UI_SCALE_KEY = "ui_scale_factor"
 SAVE_CREATOR_JSON_KEY = "saveCreatorJsonProfile"
+FETCH_FIRST_KEY = "fetchAllPostsFirst" 
 
 # --- UI Constants and Identifiers ---
 HTML_PREFIX = "<!HTML!>"
@@ -111,7 +112,9 @@ CREATOR_DOWNLOAD_DEFAULT_FOLDER_IGNORE_WORDS = {
     "may", "jun", "june", "jul", "july", "aug", "august", "sep", "september",
     "oct", "october", "nov", "november", "dec", "december",
     "mon", "monday", "tue", "tuesday", "wed", "wednesday", "thu", "thursday",
-    "fri", "friday", "sat", "saturday", "sun", "sunday"
+    "fri", "friday", "sat", "saturday", "sun", "sunday", "Pack", "tier", "spoiler",
+    
+
     # add more according to need 
 }
 

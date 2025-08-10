@@ -16,7 +16,8 @@ from ..main_window import get_app_icon_object
 from ...config.constants import (
     THEME_KEY, LANGUAGE_KEY, DOWNLOAD_LOCATION_KEY,
     RESOLUTION_KEY, UI_SCALE_KEY, SAVE_CREATOR_JSON_KEY,
-    COOKIE_TEXT_KEY, USE_COOKIE_KEY
+    COOKIE_TEXT_KEY, USE_COOKIE_KEY,
+    FETCH_FIRST_KEY ### ADDED ###
 )
 
 
@@ -36,7 +37,7 @@ class FutureSettingsDialog(QDialog):
 
         screen_height = QApplication.primaryScreen().availableGeometry().height() if QApplication.primaryScreen() else 800
         scale_factor = screen_height / 800.0
-        base_min_w, base_min_h = 420, 360 # Adjusted height for new layout
+        base_min_w, base_min_h = 420, 390
         scaled_min_w = int(base_min_w * scale_factor)
         scaled_min_h = int(base_min_h * scale_factor)
         self.setMinimumSize(scaled_min_w, scaled_min_h)
@@ -49,7 +50,6 @@ class FutureSettingsDialog(QDialog):
         """Initializes all UI components and layouts for the dialog."""
         main_layout = QVBoxLayout(self)
 
-        # --- Group 1: Interface Settings ---
         self.interface_group_box = QGroupBox()
         interface_layout = QGridLayout(self.interface_group_box)
 
@@ -76,36 +76,32 @@ class FutureSettingsDialog(QDialog):
 
         main_layout.addWidget(self.interface_group_box)
 
-        # --- Group 2: Download & Window Settings ---
         self.download_window_group_box = QGroupBox()
         download_window_layout = QGridLayout(self.download_window_group_box)
-
-        # Window Size (Resolution)
         self.window_size_label = QLabel()
         self.resolution_combo_box = QComboBox()
         self.resolution_combo_box.currentIndexChanged.connect(self._display_setting_changed)
         download_window_layout.addWidget(self.window_size_label, 0, 0)
         download_window_layout.addWidget(self.resolution_combo_box, 0, 1)
 
-        # Default Path
         self.default_path_label = QLabel()
         self.save_path_button = QPushButton()
-        # --- START: MODIFIED LOGIC ---
         self.save_path_button.clicked.connect(self._save_cookie_and_path)
-        # --- END: MODIFIED LOGIC ---
         download_window_layout.addWidget(self.default_path_label, 1, 0)
         download_window_layout.addWidget(self.save_path_button, 1, 1)
 
-        # Save Creator.json Checkbox
         self.save_creator_json_checkbox = QCheckBox()
         self.save_creator_json_checkbox.stateChanged.connect(self._creator_json_setting_changed) 
         download_window_layout.addWidget(self.save_creator_json_checkbox, 2, 0, 1, 2)
+        
+        self.fetch_first_checkbox = QCheckBox()
+        self.fetch_first_checkbox.stateChanged.connect(self._fetch_first_setting_changed)
+        download_window_layout.addWidget(self.fetch_first_checkbox, 3, 0, 1, 2)
 
         main_layout.addWidget(self.download_window_group_box)
 
         main_layout.addStretch(1)
 
-        # --- OK Button ---
         self.ok_button = QPushButton()
         self.ok_button.clicked.connect(self.accept)
         main_layout.addWidget(self.ok_button, 0, Qt.AlignRight | Qt.AlignBottom)
@@ -113,15 +109,25 @@ class FutureSettingsDialog(QDialog):
     def _load_checkbox_states(self):
         """Loads the initial state for all checkboxes from settings."""
         self.save_creator_json_checkbox.blockSignals(True)
-        # Default to True so the feature is on by default for users
         should_save = self.parent_app.settings.value(SAVE_CREATOR_JSON_KEY, True, type=bool)
         self.save_creator_json_checkbox.setChecked(should_save)
         self.save_creator_json_checkbox.blockSignals(False)
+
+        self.fetch_first_checkbox.blockSignals(True)
+        should_fetch_first = self.parent_app.settings.value(FETCH_FIRST_KEY, False, type=bool)
+        self.fetch_first_checkbox.setChecked(should_fetch_first)
+        self.fetch_first_checkbox.blockSignals(False)
 
     def _creator_json_setting_changed(self, state):
         """Saves the state of the 'Save Creator.json' checkbox."""
         is_checked = state == Qt.Checked
         self.parent_app.settings.setValue(SAVE_CREATOR_JSON_KEY, is_checked)
+        self.parent_app.settings.sync()
+
+    def _fetch_first_setting_changed(self, state):
+        """Saves the state of the 'Fetch First' checkbox."""
+        is_checked = state == Qt.Checked
+        self.parent_app.settings.setValue(FETCH_FIRST_KEY, is_checked)
         self.parent_app.settings.sync()
 
     def _tr(self, key, default_text=""):
@@ -132,32 +138,30 @@ class FutureSettingsDialog(QDialog):
     def _retranslate_ui(self):
         self.setWindowTitle(self._tr("settings_dialog_title", "Settings"))
         
-        # Group Box Titles
         self.interface_group_box.setTitle(self._tr("interface_group_title", "Interface Settings"))
         self.download_window_group_box.setTitle(self._tr("download_window_group_title", "Download & Window Settings"))
 
-        # Interface Group Labels
         self.theme_label.setText(self._tr("theme_label", "Theme:"))
         self.ui_scale_label.setText(self._tr("ui_scale_label", "UI Scale:"))
         self.language_label.setText(self._tr("language_label", "Language:"))
         
-        # Download & Window Group Labels
         self.window_size_label.setText(self._tr("window_size_label", "Window Size:"))
         self.default_path_label.setText(self._tr("default_path_label", "Default Path:"))
         self.save_creator_json_checkbox.setText(self._tr("save_creator_json_label", "Save Creator.json file"))
         
-        # --- START: MODIFIED LOGIC ---
-        # Buttons and Controls
+        self.fetch_first_checkbox.setText(self._tr("fetch_first_label", "Fetch First (Download after all pages are found)"))
+        self.fetch_first_checkbox.setToolTip(self._tr("fetch_first_tooltip", "If checked, the downloader will find all posts from a creator first before starting any downloads.\nThis can be slower to start but provides a more accurate progress bar."))
+        
         self._update_theme_toggle_button_text()
         self.save_path_button.setText(self._tr("settings_save_cookie_path_button", "Save Cookie + Download Path"))
         self.save_path_button.setToolTip(self._tr("settings_save_cookie_path_tooltip", "Save the current 'Download Location' and Cookie settings for future sessions."))
         self.ok_button.setText(self._tr("ok_button", "OK"))
-        # --- END: MODIFIED LOGIC ---
 
-        # Populate dropdowns
         self._populate_display_combo_boxes()
         self._populate_language_combo_box()
         self._load_checkbox_states()
+
+    # --- (The rest of the file remains unchanged) ---
 
     def _apply_theme(self):
         if self.parent_app and self.parent_app.current_theme == "dark":
@@ -285,14 +289,12 @@ class FutureSettingsDialog(QDialog):
         path_saved = False
         cookie_saved = False
         
-        # --- Save Download Path Logic ---
         if hasattr(self.parent_app, 'dir_input') and self.parent_app.dir_input:
             current_path = self.parent_app.dir_input.text().strip()
             if current_path and os.path.isdir(current_path):
                 self.parent_app.settings.setValue(DOWNLOAD_LOCATION_KEY, current_path)
                 path_saved = True
         
-        # --- Save Cookie Logic ---
         if hasattr(self.parent_app, 'use_cookie_checkbox'):
             use_cookie = self.parent_app.use_cookie_checkbox.isChecked()
             cookie_content = self.parent_app.cookie_text_input.text().strip()
@@ -301,7 +303,7 @@ class FutureSettingsDialog(QDialog):
                 self.parent_app.settings.setValue(USE_COOKIE_KEY, True)
                 self.parent_app.settings.setValue(COOKIE_TEXT_KEY, cookie_content)
                 cookie_saved = True
-            else: # Also save the 'off' state
+            else: 
                 self.parent_app.settings.setValue(USE_COOKIE_KEY, False)
                 self.parent_app.settings.setValue(COOKIE_TEXT_KEY, "")
 

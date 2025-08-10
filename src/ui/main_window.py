@@ -100,6 +100,7 @@ class DownloaderApp (QWidget ):
     finished_signal =pyqtSignal (int ,int ,bool ,list )
     external_link_signal =pyqtSignal (str ,str ,str ,str ,str )
     file_progress_signal =pyqtSignal (str ,object )
+    fetch_only_complete_signal = pyqtSignal(list)
 
 
     def __init__(self):
@@ -152,6 +153,7 @@ class DownloaderApp (QWidget ):
         self.final_download_history_entries = []
         self.favorite_download_queue = deque()
         self.is_processing_favorites_queue = False
+        self.current_processing_favorite_item_info = None 
         self.download_counter = 0
         self.permanently_failed_files_for_dialog = []
         self.last_link_input_text_for_queue_sync = ""
@@ -244,6 +246,9 @@ class DownloaderApp (QWidget ):
         self.save_creator_json_enabled_this_session = True 
         self.is_single_post_session = False 
         self.discord_download_scope = 'files' 
+        self.is_fetching_only = False
+        self.fetched_posts_for_download = []
+        self.is_ready_to_download_fetched = False 
 
 
         print(f"ℹ️ Known.txt will be loaded/saved at: {self.config_file}")
@@ -539,18 +544,26 @@ class DownloaderApp (QWidget ):
                     self.log_signal.emit(f"❌ Failed to remove temp session file: {e_rem}")
 
     def _update_button_states_and_connections(self):
-        """
-        Updates the text and click connections of the main action buttons
-        based on the current application state.
-        """
-        try: self.download_btn.clicked.disconnect()
-        except TypeError: pass
-        try: self.pause_btn.clicked.disconnect()
-        except TypeError: pass
-        try: self.cancel_btn.clicked.disconnect()
+        try:
+            self.download_btn.clicked.disconnect()
+            self.pause_btn.clicked.disconnect()
+            self.cancel_btn.clicked.disconnect()
         except TypeError: pass
 
         is_download_active = self._is_download_active()
+        fetch_first_enabled = self.settings.value(FETCH_FIRST_KEY, False, type=bool)
+        print(f"--- DEBUG: Updating buttons (is_download_active={is_download_active}) ---")
+
+        if self.is_ready_to_download_fetched:
+            num_posts = len(self.fetched_posts_for_download)
+            self.download_btn.setText(f"⬇️ Start Download ({num_posts} Posts)")
+            self.download_btn.setEnabled(True)
+            self.download_btn.clicked.connect(self.start_download)
+            self.pause_btn.setEnabled(False)
+            self.cancel_btn.setText("🗑️ Clear Fetch")
+            self.cancel_btn.setEnabled(True)
+            self.cancel_btn.clicked.connect(self.reset_application_state)
+            return  # <-- This 'return' is CRITICAL
 
         if self.active_update_profile and self.new_posts_for_update and not is_download_active:
             # State: Update confirmation (new posts found, waiting for user to start)
@@ -600,30 +613,131 @@ class DownloaderApp (QWidget ):
             self.cancel_btn.setToolTip(self._tr("discard_session_tooltip", "Click to discard the interrupted session and reset the UI."))
 
         elif is_download_active:
-            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
-            self.download_btn.setEnabled(False)
-
-            self.pause_btn.setText(self._tr("resume_download_button_text", "▶️ Resume Download") if self.is_paused else self._tr("pause_download_button_text", "⏸️ Pause Download"))
-            self.pause_btn.setEnabled(True)
-            self.pause_btn.clicked.connect(self._handle_pause_resume_action)
-            self.pause_btn.setToolTip(self._tr("resume_download_button_tooltip", "Click to resume the download.") if self.is_paused else self._tr("pause_download_button_tooltip", "Click to pause the download."))
+            print("  --> Button state: ACTIVE DOWNLOAD/FETCH")
+            if self.is_fetching_only:
+                self.download_btn.setText("⏳ Fetching Pages...")
+                self.download_btn.setEnabled(False)
+                self.pause_btn.setEnabled(False)
+            else:
+                # --- START MODIFICATION ---
+                # Check if we are about to download fetched posts and update text accordingly
+                if self.is_ready_to_download_fetched:
+                    num_posts = len(self.fetched_posts_for_download)
+                    self.download_btn.setText(f"⬇️ Start Download ({num_posts} Posts)")
+                    self.download_btn.setEnabled(True) # Keep it enabled for the user to click
+                else:
+                    # Original logic for an active download in other scenarios
+                    self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+                    self.download_btn.setEnabled(False)
+                
+                self.pause_btn.setText(self._tr("resume_download_button_text", "▶️ Resume Download") if self.is_paused else self._tr("pause_download_button_text", "⏸️ Pause Download"))
+                self.pause_btn.setEnabled(True)
+                self.pause_btn.clicked.connect(self._handle_pause_resume_action)
+            print("  --> Button state: IDLE")
 
             self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
             self.cancel_btn.setEnabled(True)
             self.cancel_btn.clicked.connect(self.cancel_download_button_action)
-            self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+        
         else:
-            self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            url_text = self.link_input.text().strip()
+            _, _, post_id = extract_post_info(url_text)
+            is_single_post = bool(post_id)
+
+            if fetch_first_enabled and not is_single_post:
+                self.download_btn.setText("📄 Fetch Pages")
+            else:
+                self.download_btn.setText(self._tr("start_download_button_text", "⬇️ Start Download"))
+            
             self.download_btn.setEnabled(True)
             self.download_btn.clicked.connect(self.start_download)
-
             self.pause_btn.setText(self._tr("pause_download_button_text", "⏸️ Pause Download"))
             self.pause_btn.setEnabled(False)
-            self.pause_btn.setToolTip(self._tr("pause_download_button_tooltip", "Click to pause the ongoing download process."))
-
             self.cancel_btn.setText(self._tr("cancel_button_text", "❌ Cancel & Reset UI"))
             self.cancel_btn.setEnabled(False)
-            self.cancel_btn.setToolTip(self._tr("cancel_button_tooltip", "Click to cancel the ongoing download/extraction process and reset the UI fields (preserving URL and Directory)."))
+
+    def _run_fetch_only_thread(self, fetch_args):
+        """
+        Runs in a background thread to ONLY fetch all posts without downloading.
+        """
+        all_posts = []
+        try:
+            post_generator = download_from_api(**fetch_args)
+            for post_batch in post_generator:
+                if self.cancellation_event.is_set():
+                    break
+                all_posts.extend(post_batch)
+        except Exception as e:
+            self.log_signal.emit(f"❌ Error during fetch-only operation: {e}")
+        finally:
+            self.fetch_only_complete_signal.emit(all_posts)
+
+    def _fetch_only_finished(self, fetched_posts):
+        """
+        Called on the main thread when the fetch-only operation is complete.
+        Updates the UI to the 'ready to download' state.
+        """
+        print("\n--- DEBUG: Entering _fetch_only_finished ---\n")
+        self.download_thread = None        
+        self.is_fetching_only = False
+
+        if self.cancellation_event.is_set():
+            self.log_signal.emit("ℹ️ Page fetching was cancelled.")
+            self._update_button_states_and_connections()
+            self.set_ui_enabled(True)
+            return
+
+        self.fetched_posts_for_download = fetched_posts
+        self.is_ready_to_download_fetched = True  # <-- ADD THIS LINE
+        self.log_signal.emit(f"✅ Fetch complete. Found {len(self.fetched_posts_for_download)} posts.")
+        self.progress_label.setText(f"Found {len(self.fetched_posts_for_download)} posts. Ready to download.")
+        
+        self._update_button_states_and_connections()
+        self.set_ui_enabled(True)
+
+    def _start_download_of_fetched_posts(self):
+        """
+        Initiates the download of the posts that were previously fetched.
+        """
+        self.is_ready_to_download_fetched = False  # Reset the state flag
+        self.log_signal.emit(f"🚀 Starting download of {len(self.fetched_posts_for_download)} fetched posts...")
+
+        # Manually set the UI to a "downloading" state for reliability
+        self.set_ui_enabled(False)
+        self.download_btn.setText("⬇️ Downloading...")
+        self.download_btn.setEnabled(False)
+        self.pause_btn.setEnabled(True)
+        self.cancel_btn.setEnabled(True)
+        self.cancel_btn.setText("❌ Cancel & Reset UI")
+        try:
+            # Ensure signals are connected to the correct actions for this state
+            self.cancel_btn.clicked.disconnect()
+            self.pause_btn.clicked.disconnect()
+        except TypeError:
+            pass
+        self.cancel_btn.clicked.connect(self.cancel_download_button_action)
+        self.pause_btn.clicked.connect(self._handle_pause_resume_action)
+
+        args_template = self.last_start_download_args
+        args_template['fetch_first'] = False
+
+        num_threads = int(self.thread_count_input.text()) if self.use_multithreading_checkbox.isChecked() else 1
+        self.thread_pool = ThreadPoolExecutor(max_workers=num_threads, thread_name_prefix='PostWorker_')
+
+        self.total_posts_to_process = len(self.fetched_posts_for_download)
+        self.processed_posts_count = 0
+        self.overall_progress_signal.emit(self.total_posts_to_process, 0)
+
+        ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+
+        for post_data in self.fetched_posts_for_download:
+            self._submit_post_to_worker_pool(
+                post_data, args_template, 1, self.worker_to_gui_queue, ppw_expected_keys, {}
+            )
+
+        self.fetched_posts_for_download = []
+        self.is_fetcher_thread_running = False
+        self._check_if_all_work_is_done()
 
     def update_discord_button_visibility(self, text=""):
         if not hasattr(self, 'save_discord_as_pdf_btn'):
@@ -796,6 +910,7 @@ class DownloaderApp (QWidget ):
         self .actual_gui_signals .file_successfully_downloaded_signal .connect (self ._handle_actual_file_downloaded )
         self.actual_gui_signals.worker_finished_signal.connect(self._handle_worker_result)       
         self .actual_gui_signals .file_download_status_signal .connect (lambda status :None )
+        self.fetch_only_complete_signal.connect(self._fetch_only_finished)
 
         if hasattr (self ,'character_input'):
             self .character_input .textChanged .connect (self ._on_character_input_changed_live )
@@ -804,6 +919,7 @@ class DownloaderApp (QWidget ):
         if hasattr (self ,'link_input'):
             self .link_input .textChanged .connect (self ._sync_queue_with_link_input )
             self.link_input.textChanged.connect(self._update_contextual_ui_elements) 
+            self.link_input.textChanged.connect(self._update_button_states_and_connections)
         if hasattr(self, 'discord_scope_toggle_button'):
             self.discord_scope_toggle_button.clicked.connect(self._cycle_discord_scope)
         if hasattr (self ,'cookie_browse_button'):
@@ -1068,15 +1184,11 @@ class DownloaderApp (QWidget ):
         pdf_thread.start()
 
     def _run_discord_pdf_creation_thread(self, api_url, server_id, channel_id, output_filepath):
-        # --- START: NEW THREAD-SAFE LOGGER ---
         def queue_logger(message):
-            # This helper function puts log messages into the thread-safe queue
             self.worker_to_gui_queue.put({'type': 'progress', 'payload': (message,)})
         
-        # This helper function will update the main progress label via the queue
         def queue_progress_label_update(message):
             self.worker_to_gui_queue.put({'type': 'set_progress_label', 'payload': (message,)})
-        # --- END: NEW THREAD-SAFE LOGGER ---
 
         self.set_ui_enabled(False)
         queue_logger("=" * 40)
@@ -1830,7 +1942,6 @@ class DownloaderApp (QWidget ):
     def _is_download_active (self ):
         single_thread_active = False
         if self.download_thread:
-            # Handle both QThread and standard threading.Thread
             if hasattr(self.download_thread, 'isRunning') and self.download_thread.isRunning():
                 single_thread_active = True
             elif hasattr(self.download_thread, 'is_alive') and self.download_thread.is_alive():
@@ -1840,7 +1951,16 @@ class DownloaderApp (QWidget ):
         pool_has_active_tasks =self .thread_pool is not None and any (not f .done ()for f in self .active_futures if f is not None )
         retry_pool_active =hasattr (self ,'retry_thread_pool')and self .retry_thread_pool is not None and hasattr (self ,'active_retry_futures')and any (not f .done ()for f in self .active_retry_futures if f is not None )
         external_dl_thread_active =hasattr (self ,'external_link_download_thread')and self .external_link_download_thread is not None and self .external_link_download_thread .isRunning ()
-        return single_thread_active or fetcher_active or pool_has_active_tasks or retry_pool_active or external_dl_thread_active
+        
+        # --- ADD THIS LINE ---
+        fetching_only_active = hasattr(self, 'is_fetching_only') and self.is_fetching_only
+        print("--- DEBUG: _is_download_active check ---")
+        print(f"  single_thread_active: {single_thread_active} (thread is {self.download_thread})")
+        print(f"  is_fetcher_thread_running: {self.is_fetcher_thread_running}")
+        print(f"  is_fetching_only: {self.is_fetching_only}")
+        result = single_thread_active or fetcher_active or pool_has_active_tasks or retry_pool_active or external_dl_thread_active or fetching_only_active
+        print(f"  ==> Returning: {result}")
+        return result
 
     def handle_external_link_signal (self ,post_title ,link_text ,link_url ,platform ,decryption_key ):
         link_data =(post_title ,link_text ,link_url ,platform ,decryption_key )
@@ -2120,7 +2240,11 @@ class DownloaderApp (QWidget ):
             self.download_extracted_links_button.setVisible(is_only_links)
             self._update_download_extracted_links_button_state()
 
+
         if self.download_btn:
+            if self.is_ready_to_download_fetched:
+                return 
+
             if is_only_links:
                 self.download_btn.setText(self._tr("extract_links_button_text", "🔗 Extract Links"))
             else:
@@ -3009,9 +3133,12 @@ class DownloaderApp (QWidget ):
         self._update_discord_scope_button_text()
     
     def start_download(self, direct_api_url=None, override_output_dir=None, is_restore=False, is_continuation=False, item_type_from_queue=None):
-        # --- NEW: Import clean_folder_name here ---
         from ..utils.file_utils import clean_folder_name
         from ..config.constants import FOLDER_NAME_STOP_WORDS
+
+        if self.is_ready_to_download_fetched:
+            self._start_download_of_fetched_posts()
+            return True
 
         self.finish_lock = threading.Lock() 
         self.is_finishing = False                  
@@ -3139,142 +3266,149 @@ class DownloaderApp (QWidget ):
 
         self.cancellation_message_logged_this_session = False
         
-        # --- MODIFIED: ID names are now generic ---
         service, id1, id2 = extract_post_info(api_url)
 
         if not service or not id1:
             QMessageBox.critical(self, "Input Error", "Invalid or unsupported URL format.")
             return False
 
-                 # --- START: NEW DISCORD LOGIC BRANCH ---
         if service == 'discord':
             server_id, channel_id = id1, id2
             
             def discord_processing_task():
-                def queue_logger(message):
-                    self.worker_to_gui_queue.put({'type': 'progress', 'payload': (message,)})
-                
-                def queue_progress_label_update(message):
-                    self.worker_to_gui_queue.put({'type': 'set_progress_label', 'payload': (message,)})
+                # --- FIX: Wrap the entire task in a try...finally block ---
+                try:
+                    def queue_logger(message):
+                        self.worker_to_gui_queue.put({'type': 'progress', 'payload': (message,)})
+                    
+                    def queue_progress_label_update(message):
+                        self.worker_to_gui_queue.put({'type': 'set_progress_label', 'payload': (message,)})
 
-                cookies = prepare_cookies_for_request(
-                    self.use_cookie_checkbox.isChecked(), self.cookie_text_input.text(),
-                    self.selected_cookie_filepath, self.app_base_dir, queue_logger
-                )
-                
-                # --- SCOPE: MESSAGES (PDF CREATION) ---
-                if self.discord_download_scope == 'messages':
-                    queue_logger("=" * 40)
-                    queue_logger(f"🚀 Starting Discord PDF export for: {api_url}")
-                    
-                    output_dir = self.dir_input.text().strip()
-                    if not output_dir or not os.path.isdir(output_dir):
-                        queue_logger("❌ PDF Save Error: No valid download directory selected in the UI.")
-                        self.worker_to_gui_queue.put({'type': 'set_ui_enabled', 'payload': (True,)})
-                        return
-
-                    default_filename = f"discord_{server_id}_{channel_id or 'server'}.pdf"
-                    output_filepath = os.path.join(output_dir, default_filename)  # We'll save with a default name
-                    
-                    all_messages, channels_to_process = [], []
-                    server_name_for_pdf = server_id
-                    
-                    if channel_id:
-                        channels_to_process.append({'id': channel_id, 'name': channel_id})
-                    else:
-                        channels = fetch_server_channels(server_id, queue_logger, cookies)
-                        if channels:
-                            channels_to_process = channels
-
-                    for i, channel in enumerate(channels_to_process):
-                        queue_progress_label_update(f"Fetching from channel {i+1}/{len(channels_to_process)}: #{channel.get('name', '')}")
-                        message_generator = fetch_channel_messages(channel['id'], queue_logger, self.cancellation_event, self.pause_event, cookies)
-                        for message_batch in message_generator:
-                            all_messages.extend(message_batch)
-                    
-                    queue_progress_label_update(f"Collected {len(all_messages)} total messages. Generating PDF...")
-                    
-                    if getattr(sys, 'frozen', False):
-                        base_path = sys._MEIPASS
-                    else:
-                        base_path = self.app_base_dir
-                    font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
-
-                    success = create_pdf_from_discord_messages(
-                        all_messages, server_name_for_pdf,
-                        channels_to_process[0].get('name', channel_id) if len(channels_to_process) == 1 else "All Channels",
-                        output_filepath, font_path, logger=queue_logger
+                    cookies = prepare_cookies_for_request(
+                        self.use_cookie_checkbox.isChecked(), self.cookie_text_input.text(),
+                        self.selected_cookie_filepath, self.app_base_dir, queue_logger
                     )
                     
-                    if success:
-                        queue_progress_label_update("✅ PDF export complete!")
-                    else:
-                        queue_progress_label_update("❌ PDF export failed.")
-                    self.finished_signal.emit(0, len(all_messages), self.cancellation_event.is_set(), [])
-                    return
+                    # --- SCOPE: MESSAGES (PDF CREATION) ---
+                    if self.discord_download_scope == 'messages':
+                        queue_logger("=" * 40)
+                        queue_logger(f"🚀 Starting Discord PDF export for: {api_url}")
+                        
+                        output_dir = self.dir_input.text().strip()
+                        if not output_dir or not os.path.isdir(output_dir):
+                            queue_logger("❌ PDF Save Error: No valid download directory selected in the UI.")
+                            self.worker_to_gui_queue.put({'type': 'set_ui_enabled', 'payload': (True,)})
+                            return
 
-                # --- SCOPE: FILES (DOWNLOAD) ---
-                elif self.discord_download_scope == 'files':
-                    worker_args = {
-                        'download_root': effective_output_dir_for_run, 'known_names': list(KNOWN_NAMES),
-                        'filter_character_list': self._parse_character_filters(self.character_input.text().strip()),
-                        'emitter': self.worker_to_gui_queue, 'unwanted_keywords': FOLDER_NAME_STOP_WORDS,
-                        'filter_mode': self.get_filter_mode(), 'skip_zip': self.skip_zip_checkbox.isChecked(),
-                        'use_subfolders': self.use_subfolders_checkbox.isChecked(), 'use_post_subfolders': self.use_subfolder_per_post_checkbox.isChecked(),
-                        'target_post_id_from_initial_url': None, 'custom_folder_name': None,
-                        'compress_images': self.compress_images_checkbox.isChecked(), 'download_thumbnails': self.download_thumbnails_checkbox.isChecked(),
-                        'service': service, 'user_id': server_id, 'api_url_input': api_url,
-                        'pause_event': self.pause_event, 'cancellation_event': self.cancellation_event,
-                        'downloaded_files': self.downloaded_files, 'downloaded_file_hashes': self.downloaded_file_hashes,
-                        'downloaded_files_lock': self.downloaded_files_lock, 'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
-                        'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
-                        'skip_words_scope': self.get_skip_words_scope(), 'char_filter_scope': self.get_char_filter_scope(),
-                        'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()],
-                        'scan_content_for_images': self.scan_content_images_checkbox.isChecked(),
-                        'manga_mode_active': False,
-                    }
-                    total_dl, total_skip = 0, 0
-                    
-                    def process_channel_files(channel_id_to_process, output_directory):
-                        nonlocal total_dl, total_skip
-                        message_generator = fetch_channel_messages(channel_id_to_process, queue_logger, self.cancellation_event, self.pause_event, cookies)
-                        for message_batch in message_generator:
-                            if self.cancellation_event.is_set():
-                                break
-                            for message in message_batch:
+                        default_filename = f"discord_{server_id}_{channel_id or 'server'}.pdf"
+                        output_filepath = os.path.join(output_dir, default_filename)  # We'll save with a default name
+                        
+                        all_messages, channels_to_process = [], []
+                        server_name_for_pdf = server_id
+                        
+                        if channel_id:
+                            channels_to_process.append({'id': channel_id, 'name': channel_id})
+                        else:
+                            channels = fetch_server_channels(server_id, queue_logger, cookies)
+                            if channels:
+                                channels_to_process = channels
+
+                        for i, channel in enumerate(channels_to_process):
+                            queue_progress_label_update(f"Fetching from channel {i+1}/{len(channels_to_process)}: #{channel.get('name', '')}")
+                            message_generator = fetch_channel_messages(channel['id'], queue_logger, self.cancellation_event, self.pause_event, cookies)
+                            for message_batch in message_generator:
+                                all_messages.extend(message_batch)
+                        
+                        queue_progress_label_update(f"Collected {len(all_messages)} total messages. Generating PDF...")
+                        
+                        if getattr(sys, 'frozen', False):
+                            base_path = sys._MEIPASS
+                        else:
+                            base_path = self.app_base_dir
+                        font_path = os.path.join(base_path, 'data', 'dejavu-sans', 'DejaVuSans.ttf')
+
+                        success = create_pdf_from_discord_messages(
+                            all_messages, server_name_for_pdf,
+                            channels_to_process[0].get('name', channel_id) if len(channels_to_process) == 1 else "All Channels",
+                            output_filepath, font_path, logger=queue_logger
+                        )
+                        
+                        if success:
+                            queue_progress_label_update("✅ PDF export complete!")
+                        else:
+                            queue_progress_label_update("❌ PDF export failed.")
+                        self.finished_signal.emit(0, len(all_messages), self.cancellation_event.is_set(), [])
+                        return
+
+                    # --- SCOPE: FILES (DOWNLOAD) ---
+                    elif self.discord_download_scope == 'files':
+                        worker_args = {
+                            'download_root': effective_output_dir_for_run, 'known_names': list(KNOWN_NAMES),
+                            'filter_character_list': self._parse_character_filters(self.character_input.text().strip()),
+                            'emitter': self.worker_to_gui_queue, 'unwanted_keywords': FOLDER_NAME_STOP_WORDS,
+                            'filter_mode': self.get_filter_mode(), 'skip_zip': self.skip_zip_checkbox.isChecked(),
+                            'use_subfolders': self.use_subfolders_checkbox.isChecked(), 'use_post_subfolders': self.use_subfolder_per_post_checkbox.isChecked(),
+                            'target_post_id_from_initial_url': None, 'custom_folder_name': None,
+                            'compress_images': self.compress_images_checkbox.isChecked(), 'download_thumbnails': self.download_thumbnails_checkbox.isChecked(),
+                            'service': service, 'user_id': server_id, 'api_url_input': api_url,
+                            'pause_event': self.pause_event, 'cancellation_event': self.cancellation_event,
+                            'downloaded_files': self.downloaded_files, 'downloaded_file_hashes': self.downloaded_file_hashes,
+                            'downloaded_files_lock': self.downloaded_files_lock, 'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
+                            'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
+                            'skip_words_scope': self.get_skip_words_scope(), 'char_filter_scope': self.get_char_filter_scope(),
+                            'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()],
+                            'scan_content_for_images': self.scan_content_images_checkbox.isChecked(),
+                            'manga_mode_active': False,
+                        }
+                        total_dl, total_skip = 0, 0
+                        
+                        def process_channel_files(channel_id_to_process, output_directory):
+                            nonlocal total_dl, total_skip
+                            message_generator = fetch_channel_messages(channel_id_to_process, queue_logger, self.cancellation_event, self.pause_event, cookies)
+                            for message_batch in message_generator:
                                 if self.cancellation_event.is_set():
                                     break
-                                if not message.get('attachments'):
-                                    continue
+                                for message in message_batch:
+                                    if self.cancellation_event.is_set():
+                                        break
+                                    if not message.get('attachments'):
+                                        continue
 
-                                worker_instance_args = worker_args.copy()
-                                worker_instance_args.update({'post_data': message, 'download_root': output_directory, 'override_output_dir': output_directory})
-                                worker = PostProcessorWorker(**worker_instance_args)
-                                dl_count, skip_count, _, _, _, _, _ = worker.process()
-                                total_dl += dl_count
-                                total_skip += skip_count
-                    
-                    if channel_id:
-                        process_channel_files(channel_id, effective_output_dir_for_run)
-                    else:
-                        channels = fetch_server_channels(server_id, queue_logger, cookies)
-                        if channels:
-                            for i, channel in enumerate(channels):
-                                if self.cancellation_event.is_set():
-                                    break
-                                chan_id = channel.get('id')
-                                chan_name = channel.get('name', f"channel_{chan_id}")
-                                queue_logger("=" * 40)
-                                queue_logger(f"Processing Channel {i+1}/{len(channels)}: '{chan_name}'")
-                                channel_dir = os.path.join(effective_output_dir_for_run, clean_folder_name(chan_name))
-                                os.makedirs(channel_dir, exist_ok=True)
-                                process_channel_files(chan_id, channel_dir)
-                    
-                    self.finished_signal.emit(total_dl, total_skip, self.cancellation_event.is_set(), [])
+                                    worker_instance_args = worker_args.copy()
+                                    worker_instance_args.update({'post_data': message, 'download_root': output_directory, 'override_output_dir': output_directory})
+                                    worker = PostProcessorWorker(**worker_instance_args)
+                                    dl_count, skip_count, _, _, _, _, _ = worker.process()
+                                    total_dl += dl_count
+                                    total_skip += skip_count
+                        
+                        if channel_id:
+                            process_channel_files(channel_id, effective_output_dir_for_run)
+                        else:
+                            channels = fetch_server_channels(server_id, queue_logger, cookies)
+                            if channels:
+                                for i, channel in enumerate(channels):
+                                    if self.cancellation_event.is_set():
+                                        break
+                                    chan_id = channel.get('id')
+                                    chan_name = channel.get('name', f"channel_{chan_id}")
+                                    queue_logger("=" * 40)
+                                    queue_logger(f"Processing Channel {i+1}/{len(channels)}: '{chan_name}'")
+                                    channel_dir = os.path.join(effective_output_dir_for_run, clean_folder_name(chan_name))
+                                    os.makedirs(channel_dir, exist_ok=True)
+                                    process_channel_files(chan_id, channel_dir)
+                        
+                        self.finished_signal.emit(total_dl, total_skip, self.cancellation_event.is_set(), [])
+                finally:
+                    # This ensures the flag is reset, allowing the UI to finalize correctly
+                    self.is_fetcher_thread_running = False
 
+            # --- FIX: Set the fetcher running flag to prevent premature finalization ---
+            self.is_fetcher_thread_running = True
+            
             self.set_ui_enabled(False)
             self.download_thread = threading.Thread(target=discord_processing_task, daemon=True)
             self.download_thread.start()
+            self._update_button_states_and_connections()
             return True
 
         user_id, post_id_from_url = id1, id2
@@ -3451,6 +3585,8 @@ class DownloaderApp (QWidget ):
             QMessageBox.warning(self, "Missing Dependency", "Pillow library (for image compression) not found. Compression will be disabled.")
             compress_images = False;
             self.compress_images_checkbox.setChecked(False)
+
+        fetch_first_enabled = self.settings.value(FETCH_FIRST_KEY, False, type=bool)
 
         log_messages = ["=" * 40, f"🚀 Starting {'Link Extraction' if extract_links_only else ('Archive Download' if backend_filter_mode == 'archive' else 'Download')} @ {time.strftime('%Y-%m-%d %H:%M:%S')}", f"    URL: {api_url}"]
 
@@ -3796,9 +3932,37 @@ class DownloaderApp (QWidget ):
             'skip_current_file_flag': None,
             'processed_post_ids': processed_post_ids_for_this_run,
             'start_offset': start_offset_for_restore, 
+            'fetch_first': fetch_first_enabled, 
         }
 
         args_template['override_output_dir'] = override_output_dir
+
+        fetch_first_enabled = self.settings.value(FETCH_FIRST_KEY, False, type=bool)
+        self.last_start_download_args = args_template.copy()
+
+        if fetch_first_enabled and not post_id_from_url:
+            self.log_signal.emit("🚀 Starting Stage 1: Fetching all pages...")
+            self.is_fetching_only = True
+            self.set_ui_enabled(False)
+            self._update_button_states_and_connections()
+            self.progress_label.setText("Progress: Fetching pages...")
+            
+            fetch_thread_args = {
+                'api_url_input': api_url, 'logger': self.log_signal.emit,
+                'start_page': start_page, 'end_page': end_page,
+                'manga_mode': manga_mode, 'cancellation_event': self.cancellation_event,
+                'pause_event': self.pause_event, 'use_cookie': use_cookie_for_this_run,
+                'cookie_text': cookie_text_from_input, 'selected_cookie_file': selected_cookie_file_path_for_backend,
+                'app_base_dir': app_base_dir_for_cookies,
+                'manga_filename_style_for_sort_check': self.manga_filename_style,
+                'processed_post_ids': processed_post_ids_for_this_run,
+                'fetch_all_first': True
+            }
+            
+            self.download_thread = threading.Thread(target=self._run_fetch_only_thread, args=(fetch_thread_args,), daemon=True)
+            self.download_thread.start()
+            return True
+
         try:
             if should_use_multithreading_for_posts:
                 self.log_signal.emit(f"    Initializing multi-threaded {current_mode_log_text.lower()} with {effective_num_post_workers} post workers...")
@@ -3829,6 +3993,7 @@ class DownloaderApp (QWidget ):
                 ]
                 args_template['skip_current_file_flag'] = None
                 single_thread_args = {key: args_template[key] for key in dt_expected_keys if key in args_template}
+                single_thread_args['fetch_first'] = args_template.get('fetch_first', False)
                 self.start_single_threaded_download(**single_thread_args)
         except Exception as e:
             self._update_button_states_and_connections()
@@ -4070,133 +4235,73 @@ class DownloaderApp (QWidget ):
 
     def _fetch_and_queue_posts(self, fetcher_args):
         """
-        Fetches post data and submits tasks to the pool.
-        This version is corrected to handle single-post fetches directly
-        in multi-threaded mode.
+        Fetches post data using the central `download_from_api` generator
+        and submits tasks to the worker pool. This respects the 'Fetch First' setting.
         """
-        global PostProcessorWorker, download_from_api, requests, json, traceback, urlparse
-        api_url_input_for_fetcher = fetcher_args['api_url']
+        global PostProcessorWorker, download_from_api
+        
         worker_args_template = fetcher_args['worker_args_template']
-        processed_post_ids_set = set(fetcher_args.get('processed_post_ids', []))
-        start_page = worker_args_template.get('start_page')
-        end_page = worker_args_template.get('end_page')
-        target_post_id = worker_args_template.get('target_post_id_from_initial_url') # Get the target post ID
         logger_func = lambda msg: self.log_signal.emit(f"[Fetcher] {msg}")
 
         try:
-            service = worker_args_template.get('service')
-            user_id = worker_args_template.get('user_id')
-            cancellation_event = self.cancellation_event
-            pause_event = self.pause_event
-            session_lock = self.session_lock
-            session_file_path = self.session_file_path
-            parsed_api_url = urlparse(api_url_input_for_fetcher)
-            headers = {'User-Agent': 'Mozilla/5.0', 'Referer': f"https://{parsed_api_url.netloc}/"}
-            cookies = prepare_cookies_for_request(
-                worker_args_template.get('use_cookie'),
-                worker_args_template.get('cookie_text'),
-                worker_args_template.get('selected_cookie_file'),
-                worker_args_template.get('app_base_dir'),
-                logger_func
+            # This single call now handles all fetching logic, including 'Fetch First'.
+            post_generator = download_from_api(
+                api_url_input=worker_args_template.get('api_url_input'),
+                logger=logger_func,
+                start_page=worker_args_template.get('start_page'),
+                end_page=worker_args_template.get('end_page'),
+                manga_mode=worker_args_template.get('manga_mode_active'),
+                cancellation_event=self.cancellation_event,
+                pause_event=self.pause_event,
+                use_cookie=worker_args_template.get('use_cookie'),
+                cookie_text=worker_args_template.get('cookie_text'),
+                selected_cookie_file=worker_args_template.get('selected_cookie_file'),
+                app_base_dir=worker_args_template.get('app_base_dir'),
+                manga_filename_style_for_sort_check=worker_args_template.get('manga_filename_style'),
+                processed_post_ids=worker_args_template.get('processed_post_ids', []),
+                fetch_all_first=worker_args_template.get('fetch_first', False)
             )
 
-            if target_post_id:
-                logger_func(f"Mode: Single Post. Attempting direct fetch for post ID: {target_post_id}")
-                post_api_url = f"https://{parsed_api_url.netloc}/api/v1/{service}/user/{user_id}/post/{target_post_id}"
+            ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
+            num_file_dl_threads = worker_args_template.get('num_file_threads_for_worker', 1)
+            emitter = worker_args_template.get('emitter')
+            
+            fetch_first_enabled = worker_args_template.get('fetch_first', False)
+
+            if fetch_first_enabled:
+                # --- FETCH FIRST LOGIC ---
+                # Exhaust the generator to get all posts into one list before processing.
+                logger_func("   Fetch First: All posts have been fetched. Now queuing for download...")
+                all_posts = [post for batch in post_generator for post in batch]
                 
-                try:
-                    response = requests.get(post_api_url, headers=headers, cookies=cookies, timeout=(15, 60))
-                    response.raise_for_status()
-                    single_post_data = response.json()
-                    
-                    if isinstance(single_post_data, list) and single_post_data:
-                        single_post_data = single_post_data[0]
-                    
-                    if not isinstance(single_post_data, dict):
-                        raise ValueError(f"Expected a dictionary for post data, but got {type(single_post_data)}")
-                    self.total_posts_to_process = 1
-                    self.overall_progress_signal.emit(1, 0)
-                    
-                    ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
-                    self._submit_post_to_worker_pool(
-                        single_post_data,
-                        worker_args_template,
-                        worker_args_template.get('num_file_threads_for_worker', 1),
-                        worker_args_template.get('emitter'),
-                        ppw_expected_keys,
-                        {}
-                    )
-                except (requests.RequestException, json.JSONDecodeError, ValueError) as e:
-                    logger_func(f"❌ Failed to fetch single post directly: {e}. Aborting.")
-                
-                return
-            page_size = 50
-            offset = 0
-            current_page_num = 1
-            if start_page and start_page > 1:
-                offset = (start_page - 1) * page_size
-                current_page_num = start_page
+                self.total_posts_to_process = len(all_posts)
+                self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
-            while not cancellation_event.is_set():
-                while pause_event.is_set():
-                    time.sleep(0.5)
-                    if cancellation_event.is_set(): break
-                if cancellation_event.is_set(): break
+                for post_data in all_posts:
+                    if self.cancellation_event.is_set():
+                        break
+                    self._submit_post_to_worker_pool(post_data, worker_args_template, num_file_dl_threads, emitter, ppw_expected_keys, {})
 
-                if end_page and current_page_num > end_page:
-                    logger_func(f"✅ Reached specified end page ({end_page}) for creator feed. Stopping.")
-                    break
+            else:
+                # --- STANDARD CONCURRENT LOGIC ---
+                # Iterate over the batches of posts as they are yielded by the generator.
+                for posts_batch_from_api in post_generator:
+                    if self.cancellation_event.is_set():
+                        break
 
-                api_url = f"https://{parsed_api_url.netloc}/api/v1/{service}/user/{user_id}?o={offset}"
-                logger_func(f"Fetching post list: {api_url} (Page approx. {offset // page_size + 1})")
+                    processed_post_ids_set = set(worker_args_template.get('processed_post_ids', []))
+                    new_posts_to_process = [
+                        post for post in posts_batch_from_api if post.get('id') not in processed_post_ids_set
+                    ]
 
-                try:
-                    response = requests.get(api_url, headers=headers, cookies=cookies, timeout=20)
-                    response.raise_for_status()
-                    posts_batch_from_api = response.json()
-                except (requests.RequestException, json.JSONDecodeError) as e:
-                    logger_func(f"❌ API Error fetching posts: {e}. Aborting the entire download.")
-                    self.cancellation_event.set()                 
-                    break
-                
-                if not posts_batch_from_api:
-                    logger_func("✅ Reached end of posts (API returned no more content).")
-                    break
-
-                new_posts_to_process = [
-                    post for post in posts_batch_from_api if post.get('id') not in processed_post_ids_set
-                ]
-                
-                num_skipped = len(posts_batch_from_api) - len(new_posts_to_process)
-                if num_skipped > 0:
-                    logger_func(f"   Skipped {num_skipped} already processed post(s) from this page.")
-
-                if new_posts_to_process:
-                    ppw_expected_keys = list(PostProcessorWorker.__init__.__code__.co_varnames)[1:]
-                    num_file_dl_threads = worker_args_template.get('num_file_threads_for_worker', 1)
-                    emitter = worker_args_template.get('emitter')
-
-                    for post_data in new_posts_to_process:
-                        if cancellation_event.is_set():
-                            break
-                        self._submit_post_to_worker_pool(post_data, worker_args_template, num_file_dl_threads, emitter, ppw_expected_keys, {})
-                    
-                    self.total_posts_to_process += len(new_posts_to_process)
-                    self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
-
-                next_offset = offset + page_size
-                with session_lock:
-                    if os.path.exists(session_file_path):
-                        try:
-                            with open(session_file_path, 'r', encoding='utf-8') as f:
-                                session_data = json.load(f)
-                            session_data['download_state']['last_processed_offset'] = next_offset
-                            self._save_session_file(session_data)
-                        except (json.JSONDecodeError, KeyError, OSError) as e:
-                            logger_func(f"⚠️ Could not update session offset: {e}")
-                
-                offset = offset + page_size
-                current_page_num += 1
+                    if new_posts_to_process:
+                        for post_data in new_posts_to_process:
+                            if self.cancellation_event.is_set():
+                                break
+                            self._submit_post_to_worker_pool(post_data, worker_args_template, num_file_dl_threads, emitter, ppw_expected_keys, {})
+                        
+                        self.total_posts_to_process += len(new_posts_to_process)
+                        self.overall_progress_signal.emit(self.total_posts_to_process, self.processed_posts_count)
 
         except Exception as e:
             logger_func(f"❌ Critical error during post fetching: {e}\n{traceback.format_exc(limit=2)}")
@@ -5101,6 +5206,9 @@ class DownloaderApp (QWidget ):
         self.settings.sync()
         self._update_manga_filename_style_button_text()
         self.update_ui_for_manga_mode(self.manga_mode_checkbox.isChecked() if self.manga_mode_checkbox else False)
+        self.is_fetching_only = False
+        self.fetched_posts_for_download = []
+        self.is_ready_to_download_fetched = False 
 
         self.set_ui_enabled(True)
         self.log_signal.emit("✅ Application fully reset. Ready for new download.")

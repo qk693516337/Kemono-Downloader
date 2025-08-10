@@ -1,7 +1,7 @@
 import time
 import traceback
 from urllib.parse import urlparse
-import json # Ensure json is imported
+import json
 import requests
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ..config.constants import (
@@ -120,7 +120,8 @@ def download_from_api(
     selected_cookie_file=None,
     app_base_dir=None,
     manga_filename_style_for_sort_check=None,
-    processed_post_ids=None
+    processed_post_ids=None,
+    fetch_all_first=False  
 ):
     headers = {
         'User-Agent': 'Mozilla/5.0',
@@ -183,6 +184,7 @@ def download_from_api(
         logger("⚠️ Page range (start/end page) is ignored when a specific post URL is provided (searching all pages for the post).")
 
     is_manga_mode_fetch_all_and_sort_oldest_first = manga_mode and (manga_filename_style_for_sort_check != STYLE_DATE_POST_TITLE) and not target_post_id
+    should_fetch_all = fetch_all_first or is_manga_mode_fetch_all_and_sort_oldest_first  
     api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
     page_size = 50
     if is_manga_mode_fetch_all_and_sort_oldest_first:

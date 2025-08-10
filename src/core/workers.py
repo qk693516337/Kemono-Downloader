@@ -1934,7 +1934,8 @@ class DownloadThread(QThread):
                  single_pdf_mode=False,
                  project_root_dir=None,
                  processed_post_ids=None,
-                 start_offset=0):  
+                 start_offset=0,
+                 fetch_first=False): 
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -2000,6 +2001,7 @@ class DownloadThread(QThread):
         self.project_root_dir = project_root_dir
         self.processed_post_ids_set = set(processed_post_ids) if processed_post_ids is not None else set() 
         self.start_offset = start_offset 
+        self.fetch_first = fetch_first
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -2046,7 +2048,8 @@ class DownloadThread(QThread):
                 selected_cookie_file=self.selected_cookie_file,
                 app_base_dir=self.app_base_dir,
                 manga_filename_style_for_sort_check=self.manga_filename_style if self.manga_mode_active else None,
-                processed_post_ids=self.processed_post_ids_set
+                processed_post_ids=self.processed_post_ids_set,
+                fetch_all_first=self.fetch_first 
             )
 
             for posts_batch_data in post_generator:
