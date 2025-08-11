@@ -99,7 +99,7 @@ Built with PyQt5, this tool is designed for users who want deep filtering capabi
 ### Install Dependencies
 
 ```bash
-pip install PyQt5 requests Pillow mega.py fpdf2 python-docx
+pip install PyQt5 requests Pillow mega.py fpdf python-docx
 ```
 
 ### Running the Application
