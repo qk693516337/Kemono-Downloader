@@ -41,9 +41,14 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         try:
             response = requests.get(paginated_url, headers=headers, timeout=(15, 60), cookies=cookies_dict)
             response.raise_for_status()
+            response.encoding = 'utf-8'  
             return response.json()
 
         except requests.exceptions.RequestException as e:
+            if e.response is not None and e.response.status_code == 400:
+                logger(f"   ✅ Reached end of posts (API returned 400 Bad Request for offset {offset}).")
+                return [] 
+
             logger(f"   ⚠️ Retryable network error on page fetch (Attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
                 delay = retry_delay * (2 ** attempt)
@@ -81,9 +86,12 @@ def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logge
                 response_body += chunk
             
             full_post_data = json.loads(response_body)
+
             if isinstance(full_post_data, list) and full_post_data:
-                return full_post_data[0]
-            return full_post_data
+                return full_post_data[0] 
+            if isinstance(full_post_data, dict) and 'post' in full_post_data:
+                return full_post_data['post'] 
+            return full_post_data 
             
     except Exception as e:
         logger(f"      ❌ Failed to fetch full content for post {post_id}: {e}")
@@ -101,6 +109,7 @@ def fetch_post_comments(api_domain, service, user_id, post_id, headers, logger, 
     try:
         response = requests.get(comments_api_url, headers=headers, timeout=(10, 30), cookies=cookies_dict)
         response.raise_for_status()
+        response.encoding = 'utf-8'          
         return response.json()
     except requests.exceptions.RequestException as e:
         raise RuntimeError(f"Error fetching comments for post {post_id}: {e}")
@@ -141,12 +150,9 @@ def download_from_api(
     parsed_input_url_for_domain = urlparse(api_url_input)
     api_domain = parsed_input_url_for_domain.netloc
     
-    # --- START: MODIFIED LOGIC ---
-    # This list is updated to include the new .cr and .st mirrors for validation.
     if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
         logger(f"⚠️ Unrecognized domain '{api_domain}' from input URL. Defaulting to kemono.su for API calls.")
         api_domain = "kemono.su"
-    # --- END: MODIFIED LOGIC ---
         
     cookies_for_api = None
     if use_cookie and app_base_dir:
@@ -160,6 +166,7 @@ def download_from_api(
         try:
             direct_response = requests.get(direct_post_api_url, headers=headers, timeout=(10, 30), cookies=cookies_for_api)
             direct_response.raise_for_status()
+            direct_response.encoding = 'utf-8' 
             direct_post_data = direct_response.json()
             if isinstance(direct_post_data, list) and direct_post_data:
                 direct_post_data = direct_post_data[0]

@@ -37,7 +37,7 @@ try:
 except ImportError:
     Document = None
 from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess 
-from .api_client import download_from_api, fetch_post_comments
+from .api_client import download_from_api, fetch_post_comments, fetch_single_post_data
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
 from ..services.drive_downloader import (
     download_mega_file, download_gdrive_file, download_dropbox_file
@@ -876,6 +876,37 @@ class PostProcessorWorker:
             post_data = self.post  # Reference to the post object
             log_prefix = "Post"
 
+        # --- FIX: FETCH FULL POST DATA IF CONTENT IS MISSING BUT NEEDED ---
+        content_is_needed = (
+            self.show_external_links or
+            self.extract_links_only or
+            self.scan_content_for_images or
+            (self.filter_mode == 'text_only' and self.text_only_scope == 'content')
+        )
+
+        if content_is_needed and self.post.get('content') is None and self.service != 'discord':
+            self.logger(f"   Post {post_id} is missing 'content' field, fetching full data...")
+            parsed_url = urlparse(self.api_url_input)
+            api_domain = parsed_url.netloc
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            cookies = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger, target_domain=api_domain)
+
+            full_post_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
+            
+            if full_post_data:
+                self.logger("   ✅ Full post data fetched successfully.")
+                # Update the worker's post object with the complete data
+                self.post = full_post_data
+                # Re-initialize local variables from the new, complete post data
+                post_title = self.post.get('title', '') or 'untitled_post'
+                post_main_file_info = self.post.get('file')
+                post_attachments = self.post.get('attachments', [])
+                post_content_html = self.post.get('content', '')
+                post_data = self.post
+            else:
+                self.logger(f"   ⚠️ Failed to fetch full content for post {post_id}. Content-dependent features may not work for this post.")
+        # --- END FIX ---
+
         # 2. SHARED PROCESSING LOGIC: The rest of the function now uses the consistent variables from above.
         result_tuple = (0, 0, [], [], [], None, None)
         total_downloaded_this_post = 0
@@ -1286,7 +1317,6 @@ class PostProcessorWorker:
                     parsed_url = urlparse(self.api_url_input)
                     api_domain = parsed_url.netloc
                     cookies = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger, target_domain=api_domain)
-                    from .api_client import fetch_single_post_data
                     full_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
                     if full_data:
                         final_post_data = full_data
