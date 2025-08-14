@@ -185,7 +185,7 @@ def download_from_api(
 
     is_manga_mode_fetch_all_and_sort_oldest_first = manga_mode and (manga_filename_style_for_sort_check != STYLE_DATE_POST_TITLE) and not target_post_id
     should_fetch_all = fetch_all_first or is_manga_mode_fetch_all_and_sort_oldest_first  
-    api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}"
+    api_base_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/posts"
     page_size = 50
     if is_manga_mode_fetch_all_and_sort_oldest_first:
         logger(f"   Manga Mode (Style: {manga_filename_style_for_sort_check if manga_filename_style_for_sort_check else 'Default'} - Oldest First Sort Active): Fetching all posts to sort by date...")
