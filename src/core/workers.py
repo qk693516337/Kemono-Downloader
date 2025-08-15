@@ -37,7 +37,7 @@ try:
 except ImportError:
     Document = None
 from PyQt5 .QtCore import Qt ,QThread ,pyqtSignal ,QMutex ,QMutexLocker ,QObject ,QTimer ,QSettings ,QStandardPaths ,QCoreApplication ,QUrl ,QSize ,QProcess 
-from .api_client import download_from_api, fetch_post_comments
+from .api_client import download_from_api, fetch_post_comments, fetch_single_post_data
 from ..services.multipart_downloader import download_file_in_parts, MULTIPART_DOWNLOADER_AVAILABLE
 from ..services.drive_downloader import (
     download_mega_file, download_gdrive_file, download_dropbox_file
@@ -124,7 +124,8 @@ class PostProcessorWorker:
                  processed_post_ids=None,
                  multipart_scope='both', 
                  multipart_parts_count=4, 
-                 multipart_min_size_mb=100 
+                 multipart_min_size_mb=100,
+                 skip_file_size_mb=None 
                  ):
         self.post = post_data
         self.download_root = download_root
@@ -189,6 +190,7 @@ class PostProcessorWorker:
         self.multipart_scope = multipart_scope 
         self.multipart_parts_count = multipart_parts_count 
         self.multipart_min_size_mb = multipart_min_size_mb 
+        self.skip_file_size_mb = skip_file_size_mb
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found.")
             self.compress_images = False
@@ -276,7 +278,25 @@ class PostProcessorWorker:
         cookies_to_use_for_file = None
         if self.use_cookie:
             cookies_to_use_for_file = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger)
-
+        
+        if self.skip_file_size_mb is not None:
+                api_original_filename_for_size_check = file_info.get('_original_name_for_log', file_info.get('name'))
+                try:
+                        # Use a stream=True HEAD request to get headers without downloading the body
+                        with requests.head(file_url, headers=file_download_headers, timeout=15, cookies=cookies_to_use_for_file, allow_redirects=True) as head_response:
+                                head_response.raise_for_status()
+                                content_length = head_response.headers.get('Content-Length')
+                                if content_length:
+                                        file_size_bytes = int(content_length)
+                                        file_size_mb = file_size_bytes / (1024 * 1024)
+                                        if file_size_mb < self.skip_file_size_mb:
+                                                self.logger(f"   -> Skip File (Size): '{api_original_filename_for_size_check}' is {file_size_mb:.2f} MB, which is smaller than the {self.skip_file_size_mb} MB limit.")
+                                                return 0, 1, api_original_filename_for_size_check, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
+                                else:
+                                        self.logger(f"   ⚠️ Could not determine file size for '{api_original_filename_for_size_check}' to check against size limit. Proceeding with download.")
+                except requests.RequestException as e:
+                        self.logger(f"   ⚠️ Could not fetch file headers to check size for '{api_original_filename_for_size_check}': {e}. Proceeding with download.")
+                
         api_original_filename = file_info.get('_original_name_for_log', file_info.get('name'))
         filename_to_save_in_main_path = ""
         if forced_filename_override:
@@ -488,19 +508,18 @@ class PostProcessorWorker:
                 except requests.RequestException as e:
                     self.logger(f"   ⚠️ Could not verify size of existing file '{filename_to_save_in_main_path}': {e}. Proceeding with download.")
         
+        max_retries = 3
         retry_delay = 5
         downloaded_size_bytes = 0
         calculated_file_hash = None
         downloaded_part_file_path = None
-        total_size_bytes = 0
         download_successful_flag = False
         last_exception_for_retry_later = None
         is_permanent_error = False
         data_to_write_io = None
 
-        response_for_this_attempt = None
         for attempt_num_single_stream in range(max_retries + 1):
-            response_for_this_attempt = None
+            response = None
             if self._check_pause(f"File download attempt for '{api_original_filename}'"): break
             if self.check_cancel() or (skip_event and skip_event.is_set()): break
             try:
@@ -519,12 +538,24 @@ class PostProcessorWorker:
                     new_url = self._find_valid_subdomain(current_url_to_try)
                     if new_url != current_url_to_try:
                         self.logger(f"   Retrying with new URL: {new_url}")
-                        file_url = new_url # Update the main file_url for subsequent retries
+                        file_url = new_url
+                        response.close() # Close the old response
                         response = requests.get(new_url, headers=file_download_headers, timeout=(30, 300), stream=True, cookies=cookies_to_use_for_file)
 
-
                 response.raise_for_status()
+                
+                # --- REVISED AND MOVED SIZE CHECK LOGIC ---
                 total_size_bytes = int(response.headers.get('Content-Length', 0))
+
+                if self.skip_file_size_mb is not None:
+                    if total_size_bytes > 0:
+                        file_size_mb = total_size_bytes / (1024 * 1024)
+                        if file_size_mb < self.skip_file_size_mb:
+                            self.logger(f"   -> Skip File (Size): '{api_original_filename}' is {file_size_mb:.2f} MB, which is smaller than the {self.skip_file_size_mb} MB limit.")
+                            return 0, 1, api_original_filename, False, FILE_DOWNLOAD_STATUS_SKIPPED, None
+                    # If Content-Length is missing, we can't check, so we no longer log a warning here and just proceed.
+                # --- END OF REVISED LOGIC ---
+
                 num_parts_for_file = min(self.multipart_parts_count, MAX_PARTS_FOR_MULTIPART_DOWNLOAD)
            
                 file_is_eligible_by_scope = False
@@ -548,9 +579,7 @@ class PostProcessorWorker:
                 if self._check_pause(f"Multipart decision for '{api_original_filename}'"): break
 
                 if attempt_multipart:
-                    if response_for_this_attempt:
-                        response_for_this_attempt.close()
-                        response_for_this_attempt = None
+                    response.close() # Close the initial connection before starting multipart
                     mp_save_path_for_unique_part_stem_arg = os.path.join(target_folder_path, f"{unique_part_file_stem_on_disk}{temp_file_ext_for_unique_part}")
                     mp_success, mp_bytes, mp_hash, mp_file_handle = download_file_in_parts(
                         file_url, mp_save_path_for_unique_part_stem_arg, total_size_bytes, num_parts_for_file, file_download_headers, api_original_filename,
@@ -576,7 +605,6 @@ class PostProcessorWorker:
                     current_attempt_downloaded_bytes = 0
                     md5_hasher = hashlib.md5()
                     last_progress_time = time.time()
-                    single_stream_exception = None
                     try:
                         with open(current_single_stream_part_path, 'wb') as f_part:
                             for chunk in response.iter_content(chunk_size=1 * 1024 * 1024):
@@ -643,8 +671,8 @@ class PostProcessorWorker:
                 is_permanent_error = True                
                 break
             finally:
-                if response_for_this_attempt:
-                    response_for_this_attempt.close()
+                if response:
+                    response.close()
                 self._emit_signal('file_download_status', False)
 
         final_total_for_progress = total_size_bytes if download_successful_flag and total_size_bytes > 0 else downloaded_size_bytes
@@ -847,6 +875,37 @@ class PostProcessorWorker:
             post_content_html = self.post.get('content', '')
             post_data = self.post  # Reference to the post object
             log_prefix = "Post"
+
+        # --- FIX: FETCH FULL POST DATA IF CONTENT IS MISSING BUT NEEDED ---
+        content_is_needed = (
+            self.show_external_links or
+            self.extract_links_only or
+            self.scan_content_for_images or
+            (self.filter_mode == 'text_only' and self.text_only_scope == 'content')
+        )
+
+        if content_is_needed and self.post.get('content') is None and self.service != 'discord':
+            self.logger(f"   Post {post_id} is missing 'content' field, fetching full data...")
+            parsed_url = urlparse(self.api_url_input)
+            api_domain = parsed_url.netloc
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            cookies = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger, target_domain=api_domain)
+
+            full_post_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
+            
+            if full_post_data:
+                self.logger("   ✅ Full post data fetched successfully.")
+                # Update the worker's post object with the complete data
+                self.post = full_post_data
+                # Re-initialize local variables from the new, complete post data
+                post_title = self.post.get('title', '') or 'untitled_post'
+                post_main_file_info = self.post.get('file')
+                post_attachments = self.post.get('attachments', [])
+                post_content_html = self.post.get('content', '')
+                post_data = self.post
+            else:
+                self.logger(f"   ⚠️ Failed to fetch full content for post {post_id}. Content-dependent features may not work for this post.")
+        # --- END FIX ---
 
         # 2. SHARED PROCESSING LOGIC: The rest of the function now uses the consistent variables from above.
         result_tuple = (0, 0, [], [], [], None, None)
@@ -1258,7 +1317,6 @@ class PostProcessorWorker:
                     parsed_url = urlparse(self.api_url_input)
                     api_domain = parsed_url.netloc
                     cookies = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger, target_domain=api_domain)
-                    from .api_client import fetch_single_post_data
                     full_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
                     if full_data:
                         final_post_data = full_data
@@ -1935,7 +1993,9 @@ class DownloadThread(QThread):
                  project_root_dir=None,
                  processed_post_ids=None,
                  start_offset=0,
-                 fetch_first=False): 
+                 fetch_first=False,
+                 skip_file_size_mb=None
+                 ): 
         super().__init__()
         self.api_url_input = api_url_input
         self.output_dir = output_dir
@@ -2002,6 +2062,7 @@ class DownloadThread(QThread):
         self.processed_post_ids_set = set(processed_post_ids) if processed_post_ids is not None else set() 
         self.start_offset = start_offset 
         self.fetch_first = fetch_first
+        self.skip_file_size_mb = skip_file_size_mb
 
         if self.compress_images and Image is None:
             self.logger("⚠️ Image compression disabled: Pillow library not found (DownloadThread).")
@@ -2122,6 +2183,7 @@ class DownloadThread(QThread):
                         'single_pdf_mode': self.single_pdf_mode,
                         'multipart_parts_count': self.multipart_parts_count, 
                         'multipart_min_size_mb': self.multipart_min_size_mb, 
+                        'skip_file_size_mb': self.skip_file_size_mb, 
                         'project_root_dir': self.project_root_dir,
                     }
 

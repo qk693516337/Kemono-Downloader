@@ -281,7 +281,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.3.1")
+        self.setWindowTitle("Kemono Downloader v6.4.2")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -3354,7 +3354,8 @@ class DownloaderApp (QWidget ):
                             'pause_event': self.pause_event, 'cancellation_event': self.cancellation_event,
                             'downloaded_files': self.downloaded_files, 'downloaded_file_hashes': self.downloaded_file_hashes,
                             'downloaded_files_lock': self.downloaded_files_lock, 'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
-                            'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
+                            'skip_words_list': [part.strip().lower() for part in self.skip_words_input.text().strip().split(',') if part.strip() and not part.strip().startswith('[')],
+                            'skip_file_size_mb': next((int(re.search(r'\[(\d+)\]', part).group(1)) for part in self.skip_words_input.text().strip().split(',') if re.fullmatch(r'\[\d+\]', part.strip())), None),
                             'skip_words_scope': self.get_skip_words_scope(), 'char_filter_scope': self.get_char_filter_scope(),
                             'remove_from_filename_words_list': [word.strip() for word in self.remove_from_filename_input.text().strip().split(',') if word.strip()],
                             'scan_content_for_images': self.scan_content_images_checkbox.isChecked(),
@@ -3523,8 +3524,19 @@ class DownloaderApp (QWidget ):
                     self.thread_count_input.selectAll()
                     return False
 
-        raw_skip_words = self.skip_words_input.text().strip()
-        skip_words_list = [word.strip().lower() for word in raw_skip_words.split(',') if word.strip()]
+        raw_skip_words_text = self.skip_words_input.text().strip()
+        skip_words_parts = [part.strip() for part in raw_skip_words_text.split(',') if part.strip()]
+        skip_words_list = []
+        skip_file_size_mb = None
+        size_pattern = re.compile(r'\[(\d+)\]')
+
+        for part in skip_words_parts:
+            match = size_pattern.fullmatch(part)
+            if match:
+                skip_file_size_mb = int(match.group(1))
+                self.log_signal.emit(f"ℹ️ File size skip rule found: Will skip files smaller than {skip_file_size_mb} MB.")
+            else:
+                skip_words_list.append(part.lower())
 
         raw_remove_filename_words = self.remove_from_filename_input.text().strip() if hasattr(self, 'remove_from_filename_input') else ""
         allow_multipart = self.allow_multipart_download_setting
@@ -3891,6 +3903,7 @@ class DownloaderApp (QWidget ):
             'downloaded_file_hashes': self.downloaded_file_hashes,
             'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
             'skip_words_list': skip_words_list,
+            'skip_file_size_mb': skip_file_size_mb,
             'skip_words_scope': current_skip_words_scope,
             'remove_from_filename_words_list': remove_from_filename_words_list,
             'char_filter_scope': current_char_filter_scope,
@@ -5484,7 +5497,8 @@ class DownloaderApp (QWidget ):
             'downloaded_files_lock': self.downloaded_files_lock,
             'downloaded_file_hashes_lock': self.downloaded_file_hashes_lock,
             'dynamic_character_filter_holder': self.dynamic_character_filter_holder,
-            'skip_words_list': [word.strip().lower() for word in self.skip_words_input.text().strip().split(',') if word.strip()],
+            'skip_words_list': [part.strip().lower() for part in self.skip_words_input.text().strip().split(',') if part.strip() and not part.strip().startswith('[')],
+            'skip_file_size_mb': next((int(re.search(r'\[(\d+)\]', part).group(1)) for part in self.skip_words_input.text().strip().split(',') if re.fullmatch(r'\[\d+\]', part.strip())), None),
             'skip_words_scope': self.get_skip_words_scope(), 
             'show_external_links': self.external_links_checkbox.isChecked(),
             'extract_links_only': self.radio_only_links.isChecked(), 
