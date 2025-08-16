@@ -281,7 +281,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.4.2")
+        self.setWindowTitle("Kemono Downloader v6.4.3")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -688,8 +688,12 @@ class DownloaderApp (QWidget ):
             return
 
         self.fetched_posts_for_download = fetched_posts
-        self.is_ready_to_download_fetched = True  # <-- ADD THIS LINE
+        self.is_ready_to_download_fetched = True
         self.log_signal.emit(f"✅ Fetch complete. Found {len(self.fetched_posts_for_download)} posts.")
+        self.log_signal.emit("=" * 40)
+        self.log_signal.emit("✅ Stage 1 complete. All post data has been fetched.")
+        self.log_signal.emit("   💡 You can now disconnect your VPN (if used) before starting the download.")
+        self.log_signal.emit("   Press the 'Start Download' button to begin Stage 2: Downloading files.")
         self.progress_label.setText(f"Found {len(self.fetched_posts_for_download)} posts. Ready to download.")
         
         self._update_button_states_and_connections()
@@ -700,7 +704,9 @@ class DownloaderApp (QWidget ):
         Initiates the download of the posts that were previously fetched.
         """
         self.is_ready_to_download_fetched = False  # Reset the state flag
-        self.log_signal.emit(f"🚀 Starting download of {len(self.fetched_posts_for_download)} fetched posts...")
+        self.log_signal.emit("=" * 40)
+        self.log_signal.emit(f"🚀 Starting Stage 2: Downloading files for {len(self.fetched_posts_for_download)} fetched posts.")
+        self.log_signal.emit("   💡 If you disconnected your VPN, downloads will now use your regular connection.")
 
         # Manually set the UI to a "downloading" state for reliability
         self.set_ui_enabled(False)
@@ -3954,7 +3960,9 @@ class DownloaderApp (QWidget ):
         self.last_start_download_args = args_template.copy()
 
         if fetch_first_enabled and not post_id_from_url:
-            self.log_signal.emit("🚀 Starting Stage 1: Fetching all pages...")
+            self.log_signal.emit("=" * 40)
+            self.log_signal.emit("🚀 'Fetch First' mode is active. Starting Stage 1: Fetching all post data.")
+            self.log_signal.emit("   💡 If you are using a VPN for this stage, ensure it is connected now.")
             self.is_fetching_only = True
             self.set_ui_enabled(False)
             self._update_button_states_and_connections()

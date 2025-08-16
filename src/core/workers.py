@@ -270,7 +270,7 @@ class PostProcessorWorker:
             return 0, 1, "", False, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
         file_download_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
             'Referer': post_page_url
         }
 
