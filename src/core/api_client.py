@@ -3,6 +3,7 @@ import traceback
 from urllib.parse import urlparse
 import json
 import requests
+import cloudscraper 
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ..config.constants import (
     STYLE_DATE_POST_TITLE
@@ -80,26 +81,26 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
 
 def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logger, cookies_dict=None):
     """
-    --- NEW FUNCTION ---
-    Fetches the full data, including the 'content' field, for a single post.
+    --- MODIFIED FUNCTION ---
+    Fetches the full data, including the 'content' field, for a single post using cloudscraper.
     """
     post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}"
     logger(f"      Fetching full content for post ID {post_id}...")
-    try:
-        with requests.get(post_api_url, headers=headers, timeout=(15, 300), cookies=cookies_dict, stream=True) as response:
-            response.raise_for_status()
-            response_body = b""
-            for chunk in response.iter_content(chunk_size=8192):
-                response_body += chunk
-            
-            full_post_data = json.loads(response_body)
 
-            if isinstance(full_post_data, list) and full_post_data:
-                return full_post_data[0] 
-            if isinstance(full_post_data, dict) and 'post' in full_post_data:
-                return full_post_data['post'] 
-            return full_post_data 
-            
+    scraper = cloudscraper.create_scraper()
+
+    try:
+        response = scraper.get(post_api_url, headers=headers, timeout=(15, 300), cookies=cookies_dict)
+        response.raise_for_status()
+
+        full_post_data = response.json()
+
+        if isinstance(full_post_data, list) and full_post_data:
+            return full_post_data[0] 
+        if isinstance(full_post_data, dict) and 'post' in full_post_data:
+            return full_post_data['post'] 
+        return full_post_data 
+
     except Exception as e:
         logger(f"      ❌ Failed to fetch full content for post {post_id}: {e}")
         return None
@@ -138,8 +139,7 @@ def download_from_api(
     manga_filename_style_for_sort_check=None,
     processed_post_ids=None,
     fetch_all_first=False  
-):
-    # FIX: Define api_domain FIRST, before it is used in the headers
+    ):
     parsed_input_url_for_domain = urlparse(api_url_input)
     api_domain = parsed_input_url_for_domain.netloc
 
