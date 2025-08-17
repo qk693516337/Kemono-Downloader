@@ -7,7 +7,7 @@ import traceback
 import json
 import re
 from collections import defaultdict
-import requests
+import cloudscraper # MODIFIED: Import cloudscraper
 from PyQt5.QtCore import QCoreApplication, Qt, pyqtSignal, QThread
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
@@ -42,10 +42,9 @@ class FavoritePostsFetcherThread (QThread ):
         self .parent_logger_func (f"[FavPostsFetcherThread] {message }")
 
     def run(self):
-        kemono_su_fav_posts_url = "https://kemono.su/api/v1/account/favorites?type=post"
-        coomer_su_fav_posts_url = "https://coomer.su/api/v1/account/favorites?type=post"
-        kemono_cr_fav_posts_url = "https://kemono.cr/api/v1/account/favorites?type=post"
-        coomer_st_fav_posts_url = "https://coomer.st/api/v1/account/favorites?type=post"
+        # --- FIX: Use cloudscraper and add proper headers ---
+        scraper = cloudscraper.create_scraper()
+        # --- END FIX ---
 
         all_fetched_posts_temp = []
         error_messages_for_summary = []
@@ -56,8 +55,8 @@ class FavoritePostsFetcherThread (QThread ):
         self.progress_bar_update.emit(0, 0)
 
         api_sources = [
-            {"name": "Kemono.cr", "url": kemono_cr_fav_posts_url, "domain": "kemono.cr"},
-            {"name": "Coomer.st", "url": coomer_st_fav_posts_url, "domain": "coomer.st"}
+            {"name": "Kemono.cr", "url": "https://kemono.cr/api/v1/account/favorites?type=post", "domain": "kemono.cr"},
+            {"name": "Coomer.st", "url": "https://coomer.st/api/v1/account/favorites?type=post", "domain": "coomer.st"}
         ]
 
         api_sources_to_try =[]
@@ -81,32 +80,18 @@ class FavoritePostsFetcherThread (QThread ):
             cookies_dict_for_source = None
             if self.cookies_config['use_cookie']:
                 primary_domain = source['domain']
-                fallback_domain = None
-                if primary_domain == "kemono.cr":
-                    fallback_domain = "kemono.su"
-                elif primary_domain == "coomer.st":
-                    fallback_domain = "coomer.su"
+                fallback_domain = "kemono.su" if "kemono" in primary_domain else "coomer.su"
 
-                # First, try the primary domain
                 cookies_dict_for_source = prepare_cookies_for_request(
-                    True,
-                    self.cookies_config['cookie_text'],
-                    self.cookies_config['selected_cookie_file'],
-                    self.cookies_config['app_base_dir'],
-                    self._logger,
-                    target_domain=primary_domain
+                    True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'], self._logger, target_domain=primary_domain
                 )
 
-                # If no cookies found, try the fallback domain
                 if not cookies_dict_for_source and fallback_domain:
-                    self._logger(f"Warning ({source['name']}): No cookies found for '{primary_domain}'. Trying fallback '{fallback_domain}'...")
+                    self._logger(f"Warning ({source['name']}): No cookies for '{primary_domain}'. Trying fallback '{fallback_domain}'...")
                     cookies_dict_for_source = prepare_cookies_for_request(
-                        True,
-                        self.cookies_config['cookie_text'],
-                        self.cookies_config['selected_cookie_file'],
-                        self.cookies_config['app_base_dir'],
-                        self._logger,
-                        target_domain=fallback_domain
+                        True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                        self.cookies_config['app_base_dir'], self._logger, target_domain=fallback_domain
                     )
 
                 if cookies_dict_for_source:
@@ -120,8 +105,18 @@ class FavoritePostsFetcherThread (QThread ):
             QCoreApplication .processEvents ()
 
             try :
-                headers ={'User-Agent':'Mozilla/5.0'}
-                response =requests .get (source ['url'],headers =headers ,cookies =cookies_dict_for_source ,timeout =20 )
+                # --- FIX: Add Referer and Accept headers ---
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Referer': f"https://{source['domain']}/favorites",
+                    'Accept': 'text/css'
+                }
+                # --- END FIX ---
+
+                # --- FIX: Use scraper instead of requests ---
+                response = scraper.get(source['url'], headers=headers, cookies=cookies_dict_for_source, timeout=20)
+                # --- END FIX ---
+
                 response .raise_for_status ()
                 posts_data_from_api =response .json ()
 
@@ -153,33 +148,24 @@ class FavoritePostsFetcherThread (QThread ):
                     fetched_any_successfully =True 
                 self ._logger (f"Fetched {processed_posts_from_source } posts from {source ['name']}.")
 
-            except requests .exceptions .RequestException as e :
+            except Exception as e :
                 err_detail =f"Error fetching favorite posts from {source ['name']}: {e }"
                 self ._logger (err_detail )
                 error_messages_for_summary .append (err_detail )
-                if e .response is not None and e .response .status_code ==401 :
+                if hasattr(e, 'response') and e.response is not None and e.response.status_code == 401:
                     self .finished .emit ([],"KEY_AUTH_FAILED")
                     self ._logger (f"Authorization failed for {source ['name']}, emitting KEY_AUTH_FAILED.")
                     return 
-            except Exception as e :
-                err_detail =f"An unexpected error occurred with {source ['name']}: {e }"
-                self ._logger (err_detail )
-                error_messages_for_summary .append (err_detail )
 
         if self .cancellation_event .is_set ():
             self .finished .emit ([],"KEY_FETCH_CANCELLED_AFTER")
             return 
 
-
         if self .cookies_config ['use_cookie']and not any_cookies_loaded_successfully_for_any_source :
-
             if self .target_domain_preference and not any_cookies_loaded_successfully_for_any_source :
-
                  domain_key_part =self .error_key_map .get (self .target_domain_preference ,self .target_domain_preference .lower ().replace ('.','_'))
                  self .finished .emit ([],f"KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_FOR_DOMAIN_{domain_key_part }")
                  return 
-
-
             self .finished .emit ([],"KEY_COOKIES_REQUIRED_BUT_NOT_FOUND_GENERIC")
             return 
 
