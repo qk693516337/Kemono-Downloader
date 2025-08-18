@@ -3,6 +3,7 @@ import traceback
 from urllib.parse import urlparse
 import json
 import requests
+import cloudscraper 
 from ..utils.network_utils import extract_post_info, prepare_cookies_for_request
 from ..config.constants import (
     STYLE_DATE_POST_TITLE
@@ -12,7 +13,6 @@ from ..config.constants import (
 def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_event=None, pause_event=None, cookies_dict=None):
     """
     Fetches a single page of posts from the API with robust retry logic.
-    NEW: Requests only essential fields to keep the response size small and reliable.
     """
     if cancellation_event and cancellation_event.is_set():
         raise RuntimeError("Fetch operation cancelled by user.")
@@ -33,7 +33,7 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
         if cancellation_event and cancellation_event.is_set():
             raise RuntimeError("Fetch operation cancelled by user during retry loop.")
 
-        log_message = f"   Fetching post list: {api_url_base}?o={offset} (Page approx. {offset // 50 + 1})"
+        log_message = f"   Fetching post list: {paginated_url} (Page approx. {offset // 50 + 1})"
         if attempt > 0:
             log_message += f" (Attempt {attempt + 1}/{max_retries})"
         logger(log_message)
@@ -45,10 +45,19 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
             return response.json()
 
         except requests.exceptions.RequestException as e:
+            # Handle 403 error on the FIRST page as a rate limit/block
+            if e.response is not None and e.response.status_code == 403 and offset == 0:
+                logger("   ❌ Access Denied (403 Forbidden) on the first page.")
+                logger("      This is likely a rate limit or a Cloudflare block.")
+                logger("      💡 SOLUTION: Wait a while, use a VPN, or provide a valid session cookie.")
+                return [] # Stop the process gracefully
+
+            # Handle 400 error as the end of pages
             if e.response is not None and e.response.status_code == 400:
                 logger(f"   ✅ Reached end of posts (API returned 400 Bad Request for offset {offset}).")
-                return [] 
+                return []
 
+            # Handle all other network errors with a retry
             logger(f"   ⚠️ Retryable network error on page fetch (Attempt {attempt + 1}): {e}")
             if attempt < max_retries - 1:
                 delay = retry_delay * (2 ** attempt)
@@ -70,29 +79,28 @@ def fetch_posts_paginated(api_url_base, headers, offset, logger, cancellation_ev
 
     raise RuntimeError(f"Failed to fetch page {paginated_url} after all attempts.")
 
-
 def fetch_single_post_data(api_domain, service, user_id, post_id, headers, logger, cookies_dict=None):
     """
-    --- NEW FUNCTION ---
-    Fetches the full data, including the 'content' field, for a single post.
+    --- MODIFIED FUNCTION ---
+    Fetches the full data, including the 'content' field, for a single post using cloudscraper.
     """
     post_api_url = f"https://{api_domain}/api/v1/{service}/user/{user_id}/post/{post_id}"
     logger(f"      Fetching full content for post ID {post_id}...")
-    try:
-        with requests.get(post_api_url, headers=headers, timeout=(15, 300), cookies=cookies_dict, stream=True) as response:
-            response.raise_for_status()
-            response_body = b""
-            for chunk in response.iter_content(chunk_size=8192):
-                response_body += chunk
-            
-            full_post_data = json.loads(response_body)
 
-            if isinstance(full_post_data, list) and full_post_data:
-                return full_post_data[0] 
-            if isinstance(full_post_data, dict) and 'post' in full_post_data:
-                return full_post_data['post'] 
-            return full_post_data 
-            
+    scraper = cloudscraper.create_scraper()
+
+    try:
+        response = scraper.get(post_api_url, headers=headers, timeout=(15, 300), cookies=cookies_dict)
+        response.raise_for_status()
+
+        full_post_data = response.json()
+
+        if isinstance(full_post_data, list) and full_post_data:
+            return full_post_data[0] 
+        if isinstance(full_post_data, dict) and 'post' in full_post_data:
+            return full_post_data['post'] 
+        return full_post_data 
+
     except Exception as e:
         logger(f"      ❌ Failed to fetch full content for post {post_id}: {e}")
         return None
@@ -131,11 +139,16 @@ def download_from_api(
     manga_filename_style_for_sort_check=None,
     processed_post_ids=None,
     fetch_all_first=False  
-):
+    ):
+    parsed_input_url_for_domain = urlparse(api_url_input)
+    api_domain = parsed_input_url_for_domain.netloc
+
     headers = {
-        'User-Agent': 'Mozilla/5.0',
-        'Accept': 'application/json'
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+        'Referer': f'https://{api_domain}/',
+        'Accept': 'text/css'
     }
+
     if processed_post_ids is None:
         processed_post_ids = set()
     else:
@@ -147,8 +160,7 @@ def download_from_api(
         logger("   Download_from_api cancelled at start.")
         return
 
-    parsed_input_url_for_domain = urlparse(api_url_input)
-    api_domain = parsed_input_url_for_domain.netloc
+    # The code that defined api_domain was moved from here to the top of the function
     
     if not any(d in api_domain.lower() for d in ['kemono.su', 'kemono.party', 'kemono.cr', 'coomer.su', 'coomer.party', 'coomer.st']):
         logger(f"⚠️ Unrecognized domain '{api_domain}' from input URL. Defaulting to kemono.su for API calls.")
@@ -363,3 +375,4 @@ def download_from_api(
         time.sleep(0.6)
     if target_post_id and not processed_target_post_flag and not (cancellation_event and cancellation_event.is_set()):
         logger(f"❌ Target post {target_post_id} could not be found after checking all relevant pages (final check after loop).")
+

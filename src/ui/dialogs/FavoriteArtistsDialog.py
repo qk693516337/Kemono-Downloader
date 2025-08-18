@@ -3,7 +3,7 @@ import html
 import re
 
 # --- Third-Party Library Imports ---
-import requests
+import cloudscraper # MODIFIED: Import cloudscraper
 from PyQt5.QtCore import QCoreApplication, Qt
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget,
@@ -12,7 +12,6 @@ from PyQt5.QtWidgets import (
 
 # --- Local Application Imports ---
 from ...i18n.translator import get_translation
-# Corrected Import: Get the icon from the new assets utility module
 from ..assets import get_app_icon_object 
 from ...utils.network_utils import prepare_cookies_for_request
 from .CookieHelpDialog import CookieHelpDialog
@@ -41,9 +40,9 @@ class FavoriteArtistsDialog (QDialog ):
         service_lower = service_name.lower()
         coomer_primary_services = {'onlyfans', 'fansly', 'manyvids', 'candfans'}
         if service_lower in coomer_primary_services:
-            return "coomer.st"  # Use the new domain
+            return "coomer.st"
         else:
-            return "kemono.cr"   # Use the new domain
+            return "kemono.cr"
 
     def _tr (self ,key ,default_text =""):
         """Helper to get translation based on current app language."""
@@ -126,9 +125,11 @@ class FavoriteArtistsDialog (QDialog ):
         self .artist_list_widget .setVisible (show )
 
     def _fetch_favorite_artists (self ):
+        # --- FIX: Use cloudscraper and add proper headers ---
+        scraper = cloudscraper.create_scraper()
+        # --- END FIX ---
 
         if self.cookies_config['use_cookie']:
-            # --- Kemono Check with Fallback ---
             kemono_cookies = prepare_cookies_for_request(
                 True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
                 self.cookies_config['app_base_dir'], self._logger, target_domain="kemono.cr"
@@ -140,7 +141,6 @@ class FavoriteArtistsDialog (QDialog ):
                     self.cookies_config['app_base_dir'], self._logger, target_domain="kemono.su"
                 )
 
-            # --- Coomer Check with Fallback ---
             coomer_cookies = prepare_cookies_for_request(
                 True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
                 self.cookies_config['app_base_dir'], self._logger, target_domain="coomer.st"
@@ -153,28 +153,21 @@ class FavoriteArtistsDialog (QDialog ):
                 )
 
             if not kemono_cookies and not coomer_cookies:
-                # If cookies are enabled but none could be loaded, show help and stop.
                 self.status_label.setText(self._tr("fav_artists_cookies_required_status", "Error: Cookies enabled but could not be loaded for any source."))
                 self._logger("Error: Cookies enabled but no valid cookies were loaded. Showing help dialog.")
                 cookie_help_dialog = CookieHelpDialog(self.parent_app, self)
                 cookie_help_dialog.exec_()
                 self.download_button.setEnabled(False)
-                return  # Stop further execution
-
-        kemono_fav_url ="https://kemono.su/api/v1/account/favorites?type=artist"
-        coomer_fav_url ="https://coomer.su/api/v1/account/favorites?type=artist"
+                return
 
         self .all_fetched_artists =[]
         fetched_any_successfully =False 
         errors_occurred =[]
         any_cookies_loaded_successfully_for_any_source =False 
 
-        kemono_cr_fav_url = "https://kemono.cr/api/v1/account/favorites?type=artist"
-        coomer_st_fav_url = "https://coomer.st/api/v1/account/favorites?type=artist"
-
         api_sources = [
-            {"name": "Kemono.cr", "url": kemono_cr_fav_url, "domain": "kemono.cr"},
-            {"name": "Coomer.st", "url": coomer_st_fav_url, "domain": "coomer.st"}
+            {"name": "Kemono.cr", "url": "https://kemono.cr/api/v1/account/favorites?type=artist", "domain": "kemono.cr"},
+            {"name": "Coomer.st", "url": "https://coomer.st/api/v1/account/favorites?type=artist", "domain": "coomer.st"}
         ]
 
         for source in api_sources :
@@ -185,41 +178,36 @@ class FavoriteArtistsDialog (QDialog ):
             cookies_dict_for_source = None
             if self.cookies_config['use_cookie']:
                 primary_domain = source['domain']
-                fallback_domain = None
-                if primary_domain == "kemono.cr":
-                    fallback_domain = "kemono.su"
-                elif primary_domain == "coomer.st":
-                    fallback_domain = "coomer.su"
+                fallback_domain = "kemono.su" if "kemono" in primary_domain else "coomer.su"
 
-                # First, try the primary domain
                 cookies_dict_for_source = prepare_cookies_for_request(
-                    True,
-                    self.cookies_config['cookie_text'],
-                    self.cookies_config['selected_cookie_file'],
-                    self.cookies_config['app_base_dir'],
-                    self._logger,
-                    target_domain=primary_domain
+                    True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                    self.cookies_config['app_base_dir'], self._logger, target_domain=primary_domain
                 )
-
-                # If no cookies found, try the fallback domain
-                if not cookies_dict_for_source and fallback_domain:
-                    self._logger(f"Warning ({source['name']}): No cookies found for '{primary_domain}'. Trying fallback '{fallback_domain}'...")
+                if not cookies_dict_for_source:
+                    self._logger(f"Warning ({source['name']}): No cookies for '{primary_domain}'. Trying fallback '{fallback_domain}'...")
                     cookies_dict_for_source = prepare_cookies_for_request(
-                        True,
-                        self.cookies_config['cookie_text'],
-                        self.cookies_config['selected_cookie_file'],
-                        self.cookies_config['app_base_dir'],
-                        self._logger,
-                        target_domain=fallback_domain
+                        True, self.cookies_config['cookie_text'], self.cookies_config['selected_cookie_file'],
+                        self.cookies_config['app_base_dir'], self._logger, target_domain=fallback_domain
                     )
                 
                 if cookies_dict_for_source:
                     any_cookies_loaded_successfully_for_any_source = True
                 else:
-                    self._logger(f"Warning ({source['name']}): Cookies enabled but could not be loaded for this source (including fallbacks). Fetch might fail.")
+                    self._logger(f"Warning ({source['name']}): Cookies enabled but not loaded for this source. Fetch may fail.")
             try :
-                headers ={'User-Agent':'Mozilla/5.0'}
-                response =requests .get (source ['url'],headers =headers ,cookies =cookies_dict_for_source ,timeout =20 )
+                # --- FIX: Add Referer and Accept headers ---
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Referer': f"https://{source['domain']}/favorites",
+                    'Accept': 'text/css'
+                }
+                # --- END FIX ---
+                
+                # --- FIX: Use scraper instead of requests ---
+                response = scraper.get(source['url'], headers=headers, cookies=cookies_dict_for_source, timeout=20)
+                # --- END FIX ---
+
                 response .raise_for_status ()
                 artists_data_from_api =response .json ()
 
@@ -254,15 +242,10 @@ class FavoriteArtistsDialog (QDialog ):
                     fetched_any_successfully =True 
                 self ._logger (f"Fetched {processed_artists_from_source } artists from {source ['name']}.")
 
-            except requests .exceptions .RequestException as e :
+            except Exception as e :
                 error_msg =f"Error fetching favorites from {source ['name']}: {e }"
                 self ._logger (error_msg )
                 errors_occurred .append (error_msg )
-            except Exception as e :
-                error_msg =f"An unexpected error occurred with {source ['name']}: {e }"
-                self ._logger (error_msg )
-                errors_occurred .append (error_msg )
-
 
         if self .cookies_config ['use_cookie']and not any_cookies_loaded_successfully_for_any_source :
             self .status_label .setText (self ._tr ("fav_artists_cookies_required_status","Error: Cookies enabled but could not be loaded for any source."))
@@ -288,7 +271,7 @@ class FavoriteArtistsDialog (QDialog ):
             self ._show_content_elements (True )
             self .download_button .setEnabled (True )
         elif not fetched_any_successfully and not errors_occurred :
-             self .status_label .setText (self ._tr ("fav_artists_none_found_status","No favorite artists found on Kemono.su or Coomer.su."))
+             self .status_label .setText (self ._tr ("fav_artists_none_found_status","No favorite artists found on Kemono or Coomer."))
              self ._show_content_elements (False )
              self .download_button .setEnabled (False )
         else :
@@ -344,4 +327,4 @@ class FavoriteArtistsDialog (QDialog ):
         self .accept ()
 
     def get_selected_artists (self ):
-        return self .selected_artists_data     
+        return self .selected_artists_data

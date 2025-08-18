@@ -1,63 +1,70 @@
 import time
-import requests
+import cloudscraper
 import json
-from urllib.parse import urlparse
 
-def fetch_server_channels(server_id, logger, cookies=None, cancellation_event=None, pause_event=None):
+def fetch_server_channels(server_id, logger=print, cookies_dict=None):
     """
-    Fetches the list of channels for a given Discord server ID from the Kemono API.
-    UPDATED to be pausable and cancellable.
+    Fetches all channels for a given Discord server ID from the API.
+    Uses cloudscraper to bypass Cloudflare.
     """
-    domains_to_try = ["kemono.cr", "kemono.su"]
-    for domain in domains_to_try:
-        if cancellation_event and cancellation_event.is_set():
-            logger("   Channel fetching cancelled by user.")
-            return None
-        while pause_event and pause_event.is_set():
-            if cancellation_event and cancellation_event.is_set(): break
-            time.sleep(0.5)
+    api_url = f"https://kemono.cr/api/v1/discord/server/{server_id}"
+    logger(f"   Fetching channels for server: {api_url}")
 
-        lookup_url = f"https://{domain}/api/v1/discord/channel/lookup/{server_id}"
-        logger(f"   Attempting to fetch channel list from: {lookup_url}")
-        try:
-            response = requests.get(lookup_url, cookies=cookies, timeout=15)
-            response.raise_for_status()
-            channels = response.json()
-            if isinstance(channels, list):
-                logger(f"   ✅ Found {len(channels)} channels for server {server_id}.")
-                return channels
-        except (requests.exceptions.RequestException, json.JSONDecodeError):
-            # This is a silent failure, we'll just try the next domain
-            pass
-            
-    logger(f"   ❌ Failed to fetch channel list for server {server_id} from all available domains.")
-    return None
+    scraper = cloudscraper.create_scraper()
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': f'https://kemono.cr/discord/server/{server_id}',
+        'Accept': 'text/css'
+    }
 
-def fetch_channel_messages(channel_id, logger, cancellation_event, pause_event, cookies=None):
+    try:
+        response = scraper.get(api_url, headers=headers, cookies=cookies_dict, timeout=30)
+        response.raise_for_status()
+        channels = response.json()
+        if isinstance(channels, list):
+            logger(f"   ✅ Found {len(channels)} channels for server {server_id}.")
+            return channels
+        return None
+    except Exception as e:
+        logger(f"   ❌ Error fetching server channels for {server_id}: {e}")
+        return None
+
+def fetch_channel_messages(channel_id, logger=print, cancellation_event=None, pause_event=None, cookies_dict=None):
     """
-    Fetches all messages from a Discord channel by looping through API pages (pagination).
-    Uses a page size of 150 and handles the specific offset logic.
+    A generator that fetches all messages for a specific Discord channel, handling pagination.
+    Uses cloudscraper and proper headers to bypass server protection.
     """
-    offset = 0
-    page_size = 150 # Corrected page size based on your findings
-    api_base_url = f"https://kemono.cr/api/v1/discord/channel/{channel_id}"
+    scraper = cloudscraper.create_scraper()
+    base_url = f"https://kemono.cr/api/v1/discord/channel/{channel_id}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': f'https://kemono.cr/discord/channel/{channel_id}',
+        'Accept': 'text/css'
+    }
     
-    while not (cancellation_event and cancellation_event.is_set()):
-        if pause_event and pause_event.is_set():
-            logger("   Message fetching paused...")
-            while pause_event.is_set():
-                if cancellation_event and cancellation_event.is_set(): break
-                time.sleep(0.5)
-            logger("   Message fetching resumed.")
+    offset = 0
+    # --- FIX: Corrected the page size for Discord API pagination ---
+    page_size = 150 
+    # --- END FIX ---
 
+    while True:
         if cancellation_event and cancellation_event.is_set():
+            logger("   Discord message fetching cancelled.")
             break
-            
-        paginated_url = f"{api_base_url}?o={offset}"
+        if pause_event and pause_event.is_set():
+            logger("   Discord message fetching paused...")
+            while pause_event.is_set():
+                if cancellation_event and cancellation_event.is_set():
+                    break
+                time.sleep(0.5)
+            if not (cancellation_event and cancellation_event.is_set()):
+                logger("   Discord message fetching resumed.")
+
+        paginated_url = f"{base_url}?o={offset}"
         logger(f"   Fetching messages from API: page starting at offset {offset}")
 
         try:
-            response = requests.get(paginated_url, cookies=cookies, timeout=20)
+            response = scraper.get(paginated_url, headers=headers, cookies=cookies_dict, timeout=30)
             response.raise_for_status()
             messages_batch = response.json()
 
@@ -73,8 +80,11 @@ def fetch_channel_messages(channel_id, logger, cancellation_event, pause_event, 
                 break
 
             offset += page_size
-            time.sleep(0.5)
+            time.sleep(0.5) # Be respectful to the API
 
-        except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+        except (cloudscraper.exceptions.CloudflareException, json.JSONDecodeError) as e:
             logger(f"   ❌ Error fetching messages at offset {offset}: {e}")
+            break
+        except Exception as e:
+            logger(f"   ❌ An unexpected error occurred while fetching messages: {e}")
             break

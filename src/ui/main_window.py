@@ -10,6 +10,7 @@ import re
 import subprocess
 import datetime
 import requests
+import cloudscraper
 import unicodedata
 from collections import deque, defaultdict
 import threading
@@ -36,6 +37,7 @@ from ..core.workers import PostProcessorSignals
 from ..core.api_client import download_from_api
 from ..core.discord_client import fetch_server_channels, fetch_channel_messages 
 from ..core.manager import DownloadManager
+from ..core.nhentai_client import fetch_nhentai_gallery
 from .assets import get_app_icon_object
 from ..config.constants import *
 from ..utils.file_utils import KNOWN_NAMES, clean_folder_name
@@ -281,7 +283,7 @@ class DownloaderApp (QWidget ):
         self.download_location_label_widget = None
         self.remove_from_filename_label_widget = None
         self.skip_words_label_widget = None
-        self.setWindowTitle("Kemono Downloader v6.4.2")
+        self.setWindowTitle("Kemono Downloader v6.5.0")
         setup_ui(self)
         self._connect_signals()
         self.log_signal.emit("ℹ️ Local API server functionality has been removed.")
@@ -688,8 +690,12 @@ class DownloaderApp (QWidget ):
             return
 
         self.fetched_posts_for_download = fetched_posts
-        self.is_ready_to_download_fetched = True  # <-- ADD THIS LINE
+        self.is_ready_to_download_fetched = True
         self.log_signal.emit(f"✅ Fetch complete. Found {len(self.fetched_posts_for_download)} posts.")
+        self.log_signal.emit("=" * 40)
+        self.log_signal.emit("✅ Stage 1 complete. All post data has been fetched.")
+        self.log_signal.emit("   💡 You can now disconnect your VPN (if used) before starting the download.")
+        self.log_signal.emit("   Press the 'Start Download' button to begin Stage 2: Downloading files.")
         self.progress_label.setText(f"Found {len(self.fetched_posts_for_download)} posts. Ready to download.")
         
         self._update_button_states_and_connections()
@@ -700,7 +706,9 @@ class DownloaderApp (QWidget ):
         Initiates the download of the posts that were previously fetched.
         """
         self.is_ready_to_download_fetched = False  # Reset the state flag
-        self.log_signal.emit(f"🚀 Starting download of {len(self.fetched_posts_for_download)} fetched posts...")
+        self.log_signal.emit("=" * 40)
+        self.log_signal.emit(f"🚀 Starting Stage 2: Downloading files for {len(self.fetched_posts_for_download)} fetched posts.")
+        self.log_signal.emit("   💡 If you disconnected your VPN, downloads will now use your regular connection.")
 
         # Manually set the UI to a "downloading" state for reliability
         self.set_ui_enabled(False)
@@ -2209,12 +2217,21 @@ class DownloaderApp (QWidget ):
         if not button or not checked:
             return
         is_only_links = (button == self.radio_only_links)
-        if hasattr(self, 'use_multithreading_checkbox'):
+
+        if hasattr(self, 'use_multithreading_checkbox') and hasattr(self, 'thread_count_input'):
             if is_only_links:
-                self.use_multithreading_checkbox.setChecked(False)
-                self.use_multithreading_checkbox.setEnabled(False)
+                # When "Only Links" is selected, enable multithreading, set threads to 20, and lock the input.
+                self.use_multithreading_checkbox.setChecked(True)
+                self.thread_count_input.setText("20")
+                self.thread_count_input.setEnabled(False) 
+                self.thread_count_label.setEnabled(False)
+                self.update_multithreading_label("20")
             else:
-                self.use_multithreading_checkbox.setEnabled(True)
+                # When another mode is selected, re-enable the input for user control.
+                is_multithreading_checked = self.use_multithreading_checkbox.isChecked()
+                self.thread_count_input.setEnabled(is_multithreading_checked)
+                self.thread_count_label.setEnabled(is_multithreading_checked)
+
         if button != self.radio_more and checked:
             self.radio_more.setText("More")
             self.more_filter_scope = None
@@ -3201,6 +3218,51 @@ class DownloaderApp (QWidget ):
 
         api_url = direct_api_url if direct_api_url else self.link_input.text().strip()
 
+        # --- NEW: NHENTAI BATCH DOWNLOAD LOGIC ---
+        if 'nhentai.net' in api_url and not re.search(r'/g/(\d+)', api_url):
+            self.log_signal.emit("=" * 40)
+            self.log_signal.emit("🚀 nhentai batch download mode detected.")
+            
+            nhentai_txt_path = os.path.join(self.app_base_dir, "appdata", "nhentai.txt")
+            self.log_signal.emit(f"   Looking for batch file at: {nhentai_txt_path}")
+
+            if not os.path.exists(nhentai_txt_path):
+                QMessageBox.warning(self, "File Not Found", f"To use batch mode, create a file named 'nhentai.txt' in your 'appdata' folder.\n\nPlace one nhentai URL on each line.")
+                self.log_signal.emit(f"   ❌ 'nhentai.txt' not found. Aborting batch download.")
+                return False
+
+            urls_to_download = []
+            try:
+                with open(nhentai_txt_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        # Find all URLs in the line (handles comma separation or just spaces)
+                        found_urls = re.findall(r'https?://nhentai\.net/g/\d+/?', line)
+                        if found_urls:
+                            urls_to_download.extend(found_urls)
+            except Exception as e:
+                QMessageBox.critical(self, "File Error", f"Could not read 'nhentai.txt':\n{e}")
+                self.log_signal.emit(f"   ❌ Error reading 'nhentai.txt': {e}")
+                return False
+
+            if not urls_to_download:
+                QMessageBox.information(self, "Empty File", "No valid nhentai gallery URLs were found in 'nhentai.txt'.")
+                self.log_signal.emit("   'nhentai.txt' was found but contained no valid URLs.")
+                return False
+            
+            self.log_signal.emit(f"   Found {len(urls_to_download)} URLs to process.")
+            self.favorite_download_queue.clear()
+            for url in urls_to_download:
+                self.favorite_download_queue.append({
+                    'url': url,
+                    'name': f"nhentai gallery from batch",
+                    'type': 'post'
+                })
+            
+            if not self.is_processing_favorites_queue:
+                self._process_next_favorite_download()
+            return True
+        # --- END NEW LOGIC ---
+
         main_ui_download_dir = self.dir_input.text().strip()
         extract_links_only = (self.radio_only_links and self.radio_only_links.isChecked())
         effective_output_dir_for_run = ""
@@ -3266,6 +3328,35 @@ class DownloaderApp (QWidget ):
 
         self.cancellation_message_logged_this_session = False
         
+        # --- MODIFIED NHENTAI HANDLING ---
+        nhentai_match = re.search(r'nhentai\.net/g/(\d+)', api_url)
+        if nhentai_match:
+            gallery_id = nhentai_match.group(1)
+            self.log_signal.emit("=" * 40)
+            self.log_signal.emit(f"🚀 Detected nhentai gallery ID: {gallery_id}")
+
+            output_dir = self.dir_input.text().strip()
+            if not output_dir or not os.path.isdir(output_dir):
+                QMessageBox.critical(self, "Input Error", "A valid Download Location is required.")
+                return False
+
+            gallery_data = fetch_nhentai_gallery(gallery_id, self.log_signal.emit)
+
+            if not gallery_data:
+                QMessageBox.critical(self, "Error", f"Could not retrieve gallery data for ID {gallery_id}. It may not exist or the API is unavailable.")
+                return False
+
+            self.set_ui_enabled(False)
+            self.download_thread = NhentaiDownloadThread(gallery_data, output_dir, self)
+            self.download_thread.progress_signal.connect(self.handle_main_log)
+            self.download_thread.finished_signal.connect(
+                lambda dl, skip, cancelled: self.download_finished(dl, skip, cancelled, [])
+            )
+            self.download_thread.start()
+            self._update_button_states_and_connections()
+            return True
+        # --- END MODIFIED HANDLING ---
+
         service, id1, id2 = extract_post_info(api_url)
 
         if not service or not id1:
@@ -3276,7 +3367,6 @@ class DownloaderApp (QWidget ):
             server_id, channel_id = id1, id2
             
             def discord_processing_task():
-                # --- FIX: Wrap the entire task in a try...finally block ---
                 try:
                     def queue_logger(message):
                         self.worker_to_gui_queue.put({'type': 'progress', 'payload': (message,)})
@@ -3289,7 +3379,6 @@ class DownloaderApp (QWidget ):
                         self.selected_cookie_filepath, self.app_base_dir, queue_logger
                     )
                     
-                    # --- SCOPE: MESSAGES (PDF CREATION) ---
                     if self.discord_download_scope == 'messages':
                         queue_logger("=" * 40)
                         queue_logger(f"🚀 Starting Discord PDF export for: {api_url}")
@@ -3301,7 +3390,7 @@ class DownloaderApp (QWidget ):
                             return
 
                         default_filename = f"discord_{server_id}_{channel_id or 'server'}.pdf"
-                        output_filepath = os.path.join(output_dir, default_filename)  # We'll save with a default name
+                        output_filepath = os.path.join(output_dir, default_filename)
                         
                         all_messages, channels_to_process = [], []
                         server_name_for_pdf = server_id
@@ -3340,7 +3429,6 @@ class DownloaderApp (QWidget ):
                         self.finished_signal.emit(0, len(all_messages), self.cancellation_event.is_set(), [])
                         return
 
-                    # --- SCOPE: FILES (DOWNLOAD) ---
                     elif self.discord_download_scope == 'files':
                         worker_args = {
                             'download_root': effective_output_dir_for_run, 'known_names': list(KNOWN_NAMES),
@@ -3400,10 +3488,8 @@ class DownloaderApp (QWidget ):
                         
                         self.finished_signal.emit(total_dl, total_skip, self.cancellation_event.is_set(), [])
                 finally:
-                    # This ensures the flag is reset, allowing the UI to finalize correctly
                     self.is_fetcher_thread_running = False
 
-            # --- FIX: Set the fetcher running flag to prevent premature finalization ---
             self.is_fetcher_thread_running = True
             
             self.set_ui_enabled(False)
@@ -3954,7 +4040,9 @@ class DownloaderApp (QWidget ):
         self.last_start_download_args = args_template.copy()
 
         if fetch_first_enabled and not post_id_from_url:
-            self.log_signal.emit("🚀 Starting Stage 1: Fetching all pages...")
+            self.log_signal.emit("=" * 40)
+            self.log_signal.emit("🚀 'Fetch First' mode is active. Starting Stage 1: Fetching all post data.")
+            self.log_signal.emit("   💡 If you are using a VPN for this stage, ensure it is connected now.")
             self.is_fetching_only = True
             self.set_ui_enabled(False)
             self._update_button_states_and_connections()
@@ -4733,6 +4821,10 @@ class DownloaderApp (QWidget ):
             self.log_signal.emit("    Cancelling active External Link download thread...")
             self.external_link_download_thread.cancel()
 
+        if isinstance(self.download_thread, NhentaiDownloadThread): 
+            self.log_signal.emit("    Signaling nhentai download thread to cancel.")
+            self.download_thread.cancel()
+
     def _get_domain_for_service(self, service_name: str) -> str:
         """Determines the base domain for a given service."""
         if not isinstance(service_name, str):
@@ -4828,6 +4920,7 @@ class DownloaderApp (QWidget ):
             if self.download_thread:
                 if isinstance(self.download_thread, QThread):
                     try:
+                        # Disconnect signals to prevent any lingering connections
                         if hasattr(self.download_thread, 'progress_signal'): self.download_thread.progress_signal.disconnect(self.handle_main_log)
                         if hasattr(self.download_thread, 'add_character_prompt_signal'): self.download_thread.add_character_prompt_signal.disconnect(self.add_character_prompt_signal)
                         if hasattr(self.download_thread, 'finished_signal'): self.download_thread.finished_signal.disconnect(self.download_finished)
@@ -4841,9 +4934,8 @@ class DownloaderApp (QWidget ):
                     except (TypeError, RuntimeError) as e:
                         self.log_signal.emit(f"ℹ️ Note during single-thread signal disconnection: {e}")
 
-                    if not self.download_thread.isRunning():
-                        self.download_thread.deleteLater()
-                        self.download_thread = None
+                    self.download_thread.deleteLater()
+                    self.download_thread = None
                 else:
                     self.download_thread = None
 
@@ -5904,3 +5996,103 @@ class ExternalLinkDownloadThread (QThread ):
 
     def cancel (self ):
         self .is_cancelled =True 
+
+class NhentaiDownloadThread(QThread):
+    progress_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(int, int, bool)
+
+    IMAGE_SERVERS = [
+        "https://i.nhentai.net", "https://i2.nhentai.net", "https://i3.nhentai.net",
+        "https://i5.nhentai.net", "https://i7.nhentai.net"
+    ]
+    
+    EXTENSION_MAP = {'j': 'jpg', 'p': 'png', 'g': 'gif', 'w': 'webp' }
+
+    def __init__(self, gallery_data, output_dir, parent=None):
+        super().__init__(parent)
+        self.gallery_data = gallery_data
+        self.output_dir = output_dir
+        self.is_cancelled = False
+
+    def run(self):
+        title = self.gallery_data.get("title", {}).get("english", f"gallery_{self.gallery_data.get('id')}")
+        gallery_id = self.gallery_data.get("id")
+        media_id = self.gallery_data.get("media_id")
+        pages_info = self.gallery_data.get("pages", [])
+
+        folder_name = clean_folder_name(title)
+        gallery_path = os.path.join(self.output_dir, folder_name)
+
+        try:
+            os.makedirs(gallery_path, exist_ok=True)
+        except OSError as e:
+            self.progress_signal.emit(f"❌ Critical error creating directory: {e}")
+            self.finished_signal.emit(0, len(pages_info), False)
+            return
+
+        self.progress_signal.emit(f"⬇️ Downloading '{title}' to folder '{folder_name}'...")
+
+        # Create a single cloudscraper instance for the entire download
+        scraper = cloudscraper.create_scraper()
+        download_count = 0
+        skip_count = 0
+
+        for i, page_data in enumerate(pages_info):
+            if self.is_cancelled:
+                break
+
+            page_num = i + 1
+            
+            ext_char = page_data.get('t', 'j')
+            extension = self.EXTENSION_MAP.get(ext_char, 'jpg')
+            
+            relative_path = f"/galleries/{media_id}/{page_num}.{extension}"
+            
+            local_filename = f"{page_num:03d}.{extension}"
+            filepath = os.path.join(gallery_path, local_filename)
+
+            if os.path.exists(filepath):
+                self.progress_signal.emit(f"   -> Skip (Exists): {local_filename}")
+                skip_count += 1
+                continue
+
+            download_successful = False
+            for server in self.IMAGE_SERVERS:
+                if self.is_cancelled:
+                    break
+                
+                full_url = f"{server}{relative_path}"
+                try:
+                    self.progress_signal.emit(f"   Downloading page {page_num}/{len(pages_info)} from {server} ...")
+                    
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                        'Referer': f'https://nhentai.net/g/{gallery_id}/'
+                    }
+
+                    # Use the scraper instance to get the image
+                    response = scraper.get(full_url, headers=headers, timeout=60, stream=True)
+                    
+                    if response.status_code == 200:
+                        with open(filepath, 'wb') as f:
+                            for chunk in response.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                        download_count += 1
+                        download_successful = True
+                        break
+                    else:
+                        self.progress_signal.emit(f"      -> {server} returned status {response.status_code}. Trying next server...")
+
+                except Exception as e:
+                    self.progress_signal.emit(f"      -> {server} failed to connect or timed out: {e}. Trying next server...")
+            
+            if not download_successful:
+                self.progress_signal.emit(f"   ❌ Failed to download {local_filename} from all servers.")
+                skip_count += 1
+
+            time.sleep(0.5)
+
+        self.finished_signal.emit(download_count, skip_count, self.is_cancelled)
+
+    def cancel(self):
+        self.is_cancelled = True

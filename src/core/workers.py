@@ -15,6 +15,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed, CancelledError,
 from io import BytesIO
 from urllib .parse import urlparse 
 import requests
+import cloudscraper 
+
 try:
     from PIL import Image
 except ImportError:
@@ -58,18 +60,13 @@ def robust_clean_name(name):
     """A more robust function to remove illegal characters for filenames and folders."""
     if not name:
         return ""
-    # Removes illegal characters for Windows, macOS, and Linux: < > : " / \ | ? *
-    # Also removes control characters (ASCII 0-31) which are invisible but invalid.
-    illegal_chars_pattern = r'[\x00-\x1f<>:"/\\|?*]'
+    illegal_chars_pattern = r'[\x00-\x1f<>:"/\\|?*\']'
     cleaned_name = re.sub(illegal_chars_pattern, '', name)
-    
-    # Remove leading/trailing spaces or periods, which can cause issues.
+
     cleaned_name = cleaned_name.strip(' .')
-    
-    # If the name is empty after cleaning (e.g., it was only illegal chars),
-    # provide a safe fallback name.
+
     if not cleaned_name:
-        return "untitled_folder" # Or "untitled_file" depending on context
+        return "untitled_folder"
     return cleaned_name
 
 class PostProcessorSignals (QObject ):
@@ -270,8 +267,10 @@ class PostProcessorWorker:
             return 0, 1, "", False, FILE_DOWNLOAD_STATUS_SKIPPED, None
 
         file_download_headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-            'Referer': post_page_url
+            'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+            'Referer': post_page_url,
+            'Accept': 'text/css'
+
         }
 
         file_url = file_info.get('url')
@@ -429,8 +428,26 @@ class PostProcessorWorker:
                     self.logger(f"⚠️ Manga mode: Generated filename was empty. Using generic fallback: '{filename_to_save_in_main_path}'.")
                     was_original_name_kept_flag = False
             else:
-                filename_to_save_in_main_path = cleaned_original_api_filename
-                was_original_name_kept_flag = True
+                is_url_like = 'http' in api_original_filename.lower()
+                is_too_long = len(cleaned_original_api_filename) > 100
+
+                if is_url_like or is_too_long:
+                    self.logger(f"   ⚠️ Original filename is a URL or too long. Generating a shorter name.")
+                    name_hash = hashlib.md5(api_original_filename.encode()).hexdigest()[:12]
+                    _, ext = os.path.splitext(cleaned_original_api_filename)
+                    if not ext:
+                        try:
+                            path = urlparse(api_original_filename).path
+                            ext = os.path.splitext(path)[1] or ".file"
+                        except Exception:
+                            ext = ".file"
+
+                    cleaned_post_title = robust_clean_name(post_title.strip() if post_title else "post")[:40]
+                    filename_to_save_in_main_path = f"{cleaned_post_title}_{name_hash}{ext}"
+                    was_original_name_kept_flag = False
+                else:
+                    filename_to_save_in_main_path = cleaned_original_api_filename
+                    was_original_name_kept_flag = True
 
             if self.remove_from_filename_words_list and filename_to_save_in_main_path:
                 base_name_for_removal, ext_for_removal = os.path.splitext(filename_to_save_in_main_path)
@@ -854,9 +871,7 @@ class PostProcessorWorker:
                 return 0, 1, filename_to_save_in_main_path, was_original_name_kept_flag, FILE_DOWNLOAD_STATUS_FAILED_RETRYABLE_LATER, details_for_failure
 
     def process(self):
-        # --- START: REFACTORED PROCESS METHOD ---
 
-        # 1. DATA MAPPING: Map Discord Message or Creator Post fields to a consistent set of variables.
         if self.service == 'discord':
             # For Discord, self.post is a MESSAGE object from the API.
             post_title = self.post.get('content', '') or f"Message {self.post.get('id', 'N/A')}"
@@ -885,19 +900,26 @@ class PostProcessorWorker:
         )
 
         if content_is_needed and self.post.get('content') is None and self.service != 'discord':
+
             self.logger(f"   Post {post_id} is missing 'content' field, fetching full data...")
             parsed_url = urlparse(self.api_url_input)
             api_domain = parsed_url.netloc
-            headers = {'User-Agent': 'Mozilla/5.0'}
+            creator_page_url = f"https://{api_domain}/{self.service}/user/{self.user_id}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'Referer': creator_page_url,
+                'Accept': 'text/css'
+
+                }
+
+        
             cookies = prepare_cookies_for_request(self.use_cookie, self.cookie_text, self.selected_cookie_file, self.app_base_dir, self.logger, target_domain=api_domain)
 
             full_post_data = fetch_single_post_data(api_domain, self.service, self.user_id, post_id, headers, self.logger, cookies_dict=cookies)
             
             if full_post_data:
                 self.logger("   ✅ Full post data fetched successfully.")
-                # Update the worker's post object with the complete data
                 self.post = full_post_data
-                # Re-initialize local variables from the new, complete post data
                 post_title = self.post.get('title', '') or 'untitled_post'
                 post_main_file_info = self.post.get('file')
                 post_attachments = self.post.get('attachments', [])
@@ -905,9 +927,7 @@ class PostProcessorWorker:
                 post_data = self.post
             else:
                 self.logger(f"   ⚠️ Failed to fetch full content for post {post_id}. Content-dependent features may not work for this post.")
-        # --- END FIX ---
 
-        # 2. SHARED PROCESSING LOGIC: The rest of the function now uses the consistent variables from above.
         result_tuple = (0, 0, [], [], [], None, None)
         total_downloaded_this_post = 0
         total_skipped_this_post = 0
@@ -936,7 +956,11 @@ class PostProcessorWorker:
             else:
                 post_page_url = f"https://{parsed_api_url.netloc}/{self.service}/user/{self.user_id}/post/{post_id}"
 
-            headers = {'User-Agent': 'Mozilla/5.0', 'Referer': post_page_url, 'Accept': '*/*'}
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+                'Referer': post_page_url, 
+                'Accept': 'text/css'
+                }
             link_pattern = re.compile(r"""<a\s+.*?href=["'](https?://[^"']+)["'][^>]*>(.*?)</a>""", re.IGNORECASE | re.DOTALL)
             
             effective_unwanted_keywords_for_folder_naming = self.unwanted_keywords.copy()
